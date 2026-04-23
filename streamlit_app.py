@@ -61,16 +61,23 @@ def load_data():
                 found_header = True
                 break
         
-        # تنظيف الأسماء وتعبئة الخلايا المدمجة
+        # تنظيف الأسماء
         df.columns = [str(c).strip() for c in df.columns]
+        
+        # تحويل القيم الوهمية (مثل المسافات أو كلمة nan) إلى قيم فارغة حقيقية لتعمل الدالة ffill
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
+                # تحويل العمود لنصوص، مسح المسافات، استبدال الكلمات الوهمية بقيم فارغة، ثم التعبئة
+                df[col] = df[col].astype(str).str.strip().replace(['nan', 'None', '', 'null'], pd.NA)
                 df[col] = df[col].ffill()
         
         # ربط المواقع بالإحداثيات
         def get_coords(loc):
-            coords = geo_map.get(str(loc).strip(), [33.5138, 36.2765])
+            # تنظيف اسم الموقع قبل البحث عنه في القاموس لضمان المطابقة
+            clean_loc = str(loc).strip()
+            coords = geo_map.get(clean_loc, [33.5138, 36.2765])
             return coords
+
             
         df['coords'] = df['الموقع'].apply(get_coords)
         df['lat'] = df['coords'].apply(lambda x: x[0])
