@@ -51,7 +51,7 @@ sheet_url = "https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GSF
 def load_data():
     try:
         # ضع الرابط الذي حصلت عليه من "النشر على الويب" بين علامتي التنصيص
-        url = "ضع_الرابط_هنا"
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pubhtml"
         
         # القراءة المباشرة من رابط النشر
         df = pd.read_excel(url, engine='openpyxl')
