@@ -85,30 +85,30 @@ df = load_data()
 
 # 5. عرض الواجهة (نفس كودك الأصلي)
 
-   if not df.empty:
-    # الحصول على الأكواد الفريدة
+if not df.empty:
+    # 1. القائمة الجانبية للاختيار بالكود
     unique_codes = df['كود المحافظة'].unique()
-    
-    # قائمة للعرض للمستخدم (اختياري يمكنك عرض الكود فقط لتسهيل المهمة حالياً)
     selected_code = st.sidebar.selectbox("اختر كود المحافظة:", unique_codes)
 
-    # الفلترة باستخدام الكود المختار
+    # 2. الفلترة باستخدام الكود المختار
     city_df = df[df['كود المحافظة'] == selected_code].copy()
-    
-    # تحديث مركز الخريطة بناءً على الكود
-    center = city_centers.get(selected_code, [33.5138, 36.2765])
 
+    # 3. اختيار الفترة الزمنية
     date_cols = [c for c in df.columns if any(m in str(c) for m in ['اذار', 'نيسان', 'ايار', 'حزيران', 'تموز'])]
     selected_period = st.sidebar.selectbox("اختر الفترة:", date_cols)
 
-    city_df = df[df['محافظة'] == selected_city].copy()
+    # 4. تحديد الحالة بناءً على الفترة المختارة
     city_df['الحالة'] = city_df[selected_period].apply(lambda x: 'متاح' if pd.isna(x) or str(x).strip() == "" or str(x).lower() == 'nan' else 'محجوز')
     city_df['is_vacant'] = city_df['الحالة'] == 'متاح'
 
-    st.title(f"📊 إدارة لوحات {selected_city}")
+    # 5. الحصول على اسم المحافظة لعرضه في العنوان (أول اسم موجود في الفلتر)
+    city_name = city_df['محافظة'].iloc[0] if 'محافظة' in city_df.columns else selected_code
+    st.title(f"📊 إدارة لوحات {city_name}")
 
-    center = city_centers.get(selected_city, [33.5138, 36.2765])
+    # 6. بناء الخريطة باستخدام إحداثيات الكود
+    center = city_centers.get(selected_code, [33.5138, 36.2765])
     m = folium.Map(location=center, zoom_start=13, tiles="CartoDB positron")
+
 
     for _, row in city_df.iterrows():
         popup = f"الموقع: {row['الموقع']} | العدد: {row.get('العدد', '1')}"
