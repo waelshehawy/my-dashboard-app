@@ -122,7 +122,7 @@ if not df.empty:
 
     c1, c2 = st.columns([3, 1])
     with c1:
-        st_folium(m, center=center, width='stretch', height=550, key=f"map_{selected_city}")
+        st_folium(m, center=center, width='stretch', height=550, key=f"map_{selected_code}")
 
     with c2:
         st.metric("المواقع المتاحة", (city_df['الحالة'] == 'متاح').sum())
