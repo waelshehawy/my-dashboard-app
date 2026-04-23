@@ -69,20 +69,21 @@ def load_data():
 
         
         # ربط المواقع بالإحداثيات
-   def get_coords(loc):
-    loc_clean = str(loc).strip()
-    # البحث في القاموس
-    coords = geo_map.get(loc_clean)
-    
-    # إذا لم يجد تطابقاً حرفياً، يبحث عن تطابق جزئي
- def get_coords(loc):
-            coords = geo_map.get(str(loc).strip(), [33.5138, 36.2765])
-            return coords
+        def get_coords(loc):
+            # تنظيف النص
+            loc_clean = str(loc).strip()
+            # البحث في القاموس، وإذا لم يجد يعيد إحداثيات دمشق كقائمة
+            return geo_map.get(loc_clean, [33.5138, 36.2765])
             
+        # تطبيق الدالة
         df['coords'] = df['الموقع'].apply(get_coords)
-        df['lat'] = df['coords'].apply(lambda x: x[0])
-        df['lon'] = df['coords'].apply(lambda x: x[1])
+
+        # التأكد من أن كل خلية في coords هي قائمة فعلاً قبل التقسيم
+        df['lat'] = df['coords'].apply(lambda x: x[0] if isinstance(x, list) else 33.5138)
+        df['lon'] = df['coords'].apply(lambda x: x[1] if isinstance(x, list) else 36.2765)
+        
         return df
+
     except Exception as e:
         st.error(f"خطأ في تحميل البيانات: {e}")
         return pd.DataFrame()
