@@ -86,9 +86,12 @@ def load_data():
         # تنظيف الأسماء وتعبئة الخلايا المدمجة
         df.columns = [str(c).strip() for c in df.columns]
                # أضف "كود المحافظة" لعملية التعبئة التلقائية
-        for col in ['نوع اللوحات', 'كود المحافظة', 'الموقع']:
+                # توحيد الحروف الشائعة التي تسبب فشل المطابقة
+        for col in ['الموقع', 'كود المحافظة']:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.strip().replace(['nan', 'None', ''], pd.NA).ffill()
+                df[col] = df[col].astype(str).str.strip()
+                df[col] = df[col].str.replace('أ', 'ا').str.replace('إ', 'ا').str.replace('آ', 'ا')
+
 
         
         # ربط المواقع بالإحداثيات
