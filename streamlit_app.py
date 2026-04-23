@@ -42,24 +42,26 @@ geo_map = {
     'كورنيش جبلة بوظة رومينزا 1': [35.3620, 35.9180], 'جبلة مفرق المشفى 1': [35.3580, 35.9320],
 }
 
-# 4. الربط مع جوجل شيت
-# استبدل المعرف التالي بمعرف ملفك الخاص
-sheet_id = "117fxESUnfxnQ832smGdiTrw2GSFfH_KTJZzN5eYZiow"
-sheet_url = "https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GSFfH_KTJZzN5eYZiow"
+
+
+from streamlit_gsheets import GSheetsConnection
 
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # ضع الرابط الذي حصلت عليه من "النشر على الويب" بين علامتي التنصيص
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pubhtml"
+        # إنشاء اتصال مباشر بجوجل شيت باستخدام رابط المشاركة العادي
+        conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # القراءة المباشرة من رابط النشر
-        df = pd.read_excel(url, engine='openpyxl')
+        # ضع هنا رابط المشاركة العادي (الذي ينتهي بـ edit?usp=sharing)
+        url = "https://google.com"
         
-        # تنظيف وتحضير البيانات
+        # القراءة المباشرة للبيانات
+        df = conn.read(spreadsheet=url)
+        
+        # تنظيف وتحضير البيانات (نفس منطقك السابق)
         df.columns = [str(c).strip() for c in df.columns]
         
-        # البحث عن رأس الجدول
+        # إذا كان هناك صفوف فارغة في البداية
         if 'الموقع' not in df.columns:
             for i in range(min(15, len(df))):
                 if 'الموقع' in df.iloc[i].values:
@@ -67,22 +69,19 @@ def load_data():
                     df = df.iloc[i+1:].reset_index(drop=True)
                     break
 
-        # تعبئة الخلايا المدمجة
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
                 df[col] = df[col].ffill()
         
-        # ربط المواقع بالإحداثيات
         def get_coords(loc):
-            coords = geo_map.get(str(loc).strip(), [33.5138, 36.2765])
-            return coords
+            return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
             
         df['coords'] = df['الموقع'].apply(get_coords)
-        df['lat'] = df['coords'].apply(lambda x: x[0])
-        df['lon'] = df['coords'].apply(lambda x: x[1])
+        df['lat'] = df['coords'].apply(lambda x: x)
+        df['lon'] = df['coords'].apply(lambda x: x)
         return df
     except Exception as e:
-        st.error(f"فشل التحميل من النشر على الويب: {e}")
+        st.error(f"فشل الاتصال المباشر: {e}")
         return pd.DataFrame()
 
 
