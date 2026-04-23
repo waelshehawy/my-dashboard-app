@@ -83,9 +83,7 @@ def load_data():
         df['lat'] = df['coords'].apply(lambda x: x[0])
         df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
-    except Exception as e:
-        st.error(f"خطأ في تحميل البيانات: {e}")
-        return pd.DataFrame()
+
     except Exception as e:
         st.error(f"خطأ في تحميل البيانات: {e}")
         return pd.DataFrame()
