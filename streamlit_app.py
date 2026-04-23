@@ -7,7 +7,7 @@ import plotly.express as px
 # 1. إعداد الواجهة
 st.set_page_config(layout="wide", page_title="Billboard Management System")
 
-# 2. مراكز المحافظات للتحكم بانتقال الخريطة
+# 2. مراكز المحافظات
 city_centers = {
     'دمشق': [33.5138, 36.2765], 
     'حمص': [34.7324, 36.7137],
@@ -16,9 +16,8 @@ city_centers = {
     'جبلة': [35.3609, 35.9256]
 }
 
-# 3. أضف قاموس إحداثيات المناطق الخاص بك هنا
+# 3. إحداثيات المناطق
 geo_map = {
-# دمشق
     'طريق يعفور ذهاب': [33.5100, 36.1200],
     'من ساحة الامويين حتى السفارة الاماراتية': [33.5135, 36.2765],
     'كورنيش الميدان': [33.4912, 36.2970],
@@ -30,36 +29,36 @@ geo_map = {
     'مشروع دمر مقابل الاب تاون': [33.5414, 36.2425],
     'شارع المجتهد إياب': [33.4980, 36.2870],
     'شام سنتر من دوار الكارلتون الى دوار الجوزة': [33.4855, 36.2545],
-    # حمص
     'طريق الشام ذهاب': [34.7042, 36.7095], 'شارع الميدان إياب': [34.7265, 36.7120],
     'شارع الدروبي': [34.7305, 36.7135], 'شارع الحمراء': [34.7220, 36.7050],
     'شارع الحضارة': [34.7150, 36.7110], 'دوار الجامعة': [34.7125, 36.7075],
     'مفرق الحواش طريق طرطوس الرئيسي': [34.7770, 36.3150],
-    # اللاذقية
     'ساحة عدن –كراجات البولمان': [35.5250, 35.8050], 'حديقة المنشية -8اذار': [35.5190, 35.7870],
     'المحكمة –الشيخ ضاهر': [35.5215, 35.7830], 'استراد الثورة فرن عكاشة1': [35.5350, 35.7950],
     'طريق الشاطئ الأزرق مفرق المدينة الرياضية1': [35.5810, 35.7480],
-    # طرطوس
     'شارع المحكمة ذهاب': [34.8950, 35.8820], 'الكورنيش الشرقي ذهاب و إياب': [34.8900, 35.8950],
     'مدخل طرطوس مشفى الوطني 1': [34.8720, 35.8890], 'ساحة المصرف العقاري1': [34.8925, 35.8845],
-    # جبلة
     'كورنيش جبلة بوظة رومينزا 1': [35.3620, 35.9180], 'جبلة مفرق المشفى 1': [35.3580, 35.9320],
 }
 
-# 4. دالة معالجة البيانات من الإكسل
-@st.cache_data
+# 4. الربط مع جوجل شيت
+# استبدل المعرف التالي بمعرف ملفك الخاص
+sheet_id = "ضغ_هنا_معرف_الملف_الخاص_بك"
+sheet_url = f"https://google.com{sheet_id}/export?format=csv"
+
+@st.cache_data(ttl=600) # تحديث كل 10 دقائق
 def load_data():
     try:
-        df = pd.read_excel('ads_data.xls', engine='xlrd')
-        # البحث عن رأس الجدول
-        for i in range(min(15, len(df))):
-            if 'الموقع' in df.iloc[i].values:
-                df.columns = df.iloc[i]; df = df.iloc[i+1:].reset_index(drop=True); break
+        # قراءة البيانات من الرابط
+        df = pd.read_csv(sheet_url)
         
+        # تنظيف أسماء الأعمدة
         df.columns = [str(c).strip() for c in df.columns]
-        # تعبئة الخلايا المدمجة
+        
+        # معالجة الرأس وتعبئة الخلايا المدمجة (ffill)
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
-            if col in df.columns: df[col] = df[col].ffill()
+            if col in df.columns:
+                df[col] = df[col].ffill()
         
         # ربط المواقع بالإحداثيات
         def get_coords(loc):
@@ -70,53 +69,44 @@ def load_data():
         df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
     except Exception as e:
-        st.error(f"Error loading Excel: {e}")
+        st.error(f"خطأ في تحميل البيانات من جوجل: {e}")
         return pd.DataFrame()
 
 df = load_data()
 
+# 5. بناء الواجهة الرسومية (نفس منطق كودك السابق)
 if not df.empty:
-    # --- Sidebar ---
     selected_city = st.sidebar.selectbox("اختر المحافظة:", df['محافظة'].unique())
-    date_cols = [c for c in df.columns if any(m in str(c) for m in ['اذار', 'نيسان', 'ايار', 'حزيران'])]
+    # تحديد أعمدة الشهور المتوفرة في ملفك
+    date_cols = [c for c in df.columns if any(m in str(c) for m in ['اذار', 'نيسان', 'ايار', 'حزيران', 'تموز'])]
     selected_period = st.sidebar.selectbox("اختر الفترة:", date_cols)
 
-    # معالجة بيانات المحافظة المختارة
     city_df = df[df['محافظة'] == selected_city].copy()
-    city_df['الحالة'] = city_df[selected_period].apply(lambda x: 'متاح' if pd.isna(x) else 'محجوز')
-    city_df['is_vacant'] = city_df[selected_period].isna()
+    city_df['الحالة'] = city_df[selected_period].apply(lambda x: 'متاح' if pd.isna(x) or str(x).strip() == "" else 'محجوز')
+    city_df['is_vacant'] = city_df['الحالة'] == 'متاح'
 
     st.title(f"📊 إدارة لوحات {selected_city}")
 
-    # --- بناء الخريطة ---
     center = city_centers.get(selected_city, [33.5138, 36.2765])
-    m = folium.Map(location=center, zoom_start=13, tiles="CartoDB positron")
+    m = folium.Map(location=center, zoom_start=12, tiles="CartoDB positron")
 
-    # إضافة النقاط
     for _, row in city_df.iterrows():
-        popup = f"الموقع: {row['الموقع']} | العدد: {row['العدد']}"
+        popup = f"الموقع: {row['الموقع']} | الحالة: {row['الحالة']}"
         if row['is_vacant']:
-            # وميض أخضر
-            icon = '<div style="background:#00ff00;width:12px;height:12px;border-radius:50%;animation:blink 1s infinite;border:2px solid white;"></div><style>@keyframes blink{50%{opacity:0.2;}}</style>'
-            folium.Marker([row['lat'], row['lon']], icon=folium.DivIcon(html=icon), popup=popup).add_to(m)
+            icon_html = '<div style="background:#00ff00;width:12px;height:12px;border-radius:50%;animation:blink 1s infinite;border:2px solid white;"></div><style>@keyframes blink{50%{opacity:0.2;}}</style>'
+            folium.Marker([row['lat'], row['lon']], icon=folium.DivIcon(html=icon_html), popup=popup).add_to(m)
         else:
-            # نقطة حمراء مع عدد
-            folium.CircleMarker([row['lat'], row['lon']], radius=8, color='red', fill=True, popup=popup).add_to(m)
-            label = f'<div style="background:rgba(255,255,255,0.8);border:1px solid red;padding:1px 4px;font-size:9pt;font-weight:bold;transform:translate(10px,-10px);">{row["العدد"]}</div>'
-            folium.Marker([row['lat'], row['lon']], icon=folium.DivIcon(html=label)).add_to(m)
+            folium.CircleMarker([row['lat'], row['lon']], radius=7, color='red', fill=True, popup=popup).add_to(m)
 
-    # --- عرض الخريطة والإحصائيات ---
     c1, c2 = st.columns([3, 1])
     with c1:
-        # السر في تحديث الخريطة هو الـ key الذي يتغير بتغير المدينة
-        st_folium(m, center=center, width='stretch', height=550, key=f"map_{selected_city}")
+        st_folium(m, center=center, width=800, height=500, key=f"map_{selected_city}")
 
     with c2:
         st.metric("المواقع المتاحة", (city_df['الحالة'] == 'متاح').sum())
         fig = px.pie(city_df, names='الحالة', color='الحالة', color_discrete_map={'متاح':'green', 'محجوز':'red'}, hole=.4)
         st.plotly_chart(fig, use_container_width=True)
 
-    st.dataframe(city_df[['نوع اللوحات', 'الموقع', 'العدد', 'الحالة']], width='stretch')
-
-
-
+    st.dataframe(city_df[['نوع اللوحات', 'الموقع', 'الحالة']], use_container_width=True)
+else:
+    st.warning("يرجى التأكد من رابط جوجل شيت وصحة البيانات.")
