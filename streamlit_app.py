@@ -3,7 +3,8 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
-
+import requests
+import io
 # 1. إعداد الواجهة
 st.set_page_config(layout="wide", page_title="Billboard Management System")
 
@@ -49,38 +50,35 @@ sheet_url = f"https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GS
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # استخدام الرابط المباشر كـ String بسيط لتجنب مشاكل التشفير
+        # الرابط المباشر للملف
         url = "https://google.com"
         
-        # قراءة الملف - محرك openpyxl هو الأفضل للغة العربية
-        df = pd.read_excel(url, engine='openpyxl')
+        # تحميل الملف باستخدام requests لضمان استلامه بشكل صحيح
+        response = requests.get(url)
         
-        # تنظيف أسماء الأعمدة
+        # فتح الملف كـ BytesStream
+        f = io.BytesIO(response.content)
+        df = pd.read_excel(f, engine='openpyxl')
+        
+        # تنظيف وتحضير البيانات (نفس المنطق السابق)
         df.columns = [str(c).strip() for c in df.columns]
-        
-        # البحث عن رأس الجدول (الموقع)
         if 'الموقع' not in df.columns:
             for i in range(min(15, len(df))):
                 if 'الموقع' in df.iloc[i].values:
-                    df.columns = df.iloc[i]
-                    df = df.iloc[i+1:].reset_index(drop=True)
-                    break
+                    df.columns = df.iloc[i]; df = df.iloc[i+1:].reset_index(drop=True); break
 
-        # تعبئة الخلايا المدمجة
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
-            if col in df.columns:
-                df[col] = df[col].ffill()
+            if col in df.columns: df[col] = df[col].ffill()
         
-        # إضافة الإحداثيات
         def get_coords(loc):
             return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
             
         df['coords'] = df['الموقع'].apply(get_coords)
-        df['lat'] = df['coords'].apply(lambda x: x[0])
-        df['lon'] = df['coords'].apply(lambda x: x[1])
+        df['lat'] = df['coords'].apply(lambda x: x[0] if isinstance(x, list) else x)
+        df['lon'] = df['coords'].apply(lambda x: x[1] if isinstance(x, list) else x)
         return df
     except Exception as e:
-        st.error(f"خطأ في تحميل البيانات: {e}")
+        st.error(f"فشل التحميل: {e}")
         return pd.DataFrame()
 
 
