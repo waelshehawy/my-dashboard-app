@@ -44,7 +44,7 @@ geo_map = {
 # 4. الربط مع جوجل شيت
 # استبدل المعرف التالي بمعرف ملفك الخاص
 sheet_id = "ضغ_هنا_معرف_الملف_الخاص_بك"
-sheet_url = f"https://google.com{sheet_id}/export?format=csv"
+sheet_url = f"https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GSFfH_KTJZzN5eYZiow/edit?usp=sharing/export?format=csv"
 
 @st.cache_data(ttl=600) # تحديث كل 10 دقائق
 def load_data():
