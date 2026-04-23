@@ -69,13 +69,27 @@ def load_data():
 
         
         # ربط المواقع بالإحداثيات
-        def get_coords(loc):
-            coords = geo_map.get(str(loc).strip(), [33.5138, 36.2765])
-            return coords
-            
-        df['coords'] = df['الموقع'].apply(get_coords)
-        df['lat'] = df['coords'].apply(lambda x: x[0])
-        df['lon'] = df['coords'].apply(lambda x: x[1])
+   def get_coords(loc):
+    loc_clean = str(loc).strip()
+    # البحث في القاموس
+    coords = geo_map.get(loc_clean)
+    
+    # إذا لم يجد تطابقاً حرفياً، يبحث عن تطابق جزئي
+    if coords is None:
+        for key, value in geo_map.items():
+            if loc_clean in key or key in loc_clean:
+                coords = value
+                break
+    
+    # إذا لم يجد شيئاً أبداً، سيعيد إحداثيات "فارغة" لكي لا يرسم النقطة فوق دمشق بالخطأ
+    return coords 
+
+# تطبيق الدالة وتوزيع النتائج على lat و lon
+df['coords'] = df['الموقع'].apply(get_coords)
+# نحذف الصفوف التي ليس لها إحداثيات لكي لا تسبب أخطاء في الخريطة
+df = df.dropna(subset=['coords'])
+df['lat'] = df['coords'].apply(lambda x: x[0])
+df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
     except Exception as e:
         st.error(f"خطأ في تحميل البيانات: {e}")
