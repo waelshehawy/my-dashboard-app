@@ -53,7 +53,7 @@ def load_data():
         conn = st.connection("gsheets", type=GSheetsConnection)
         
         # ضع هنا رابط المشاركة العادي (الذي ينتهي بـ edit?usp=sharing)
-        url = "https://google.com"
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pubhtml"
         
         # القراءة المباشرة للبيانات
         df = conn.read(spreadsheet=url)
