@@ -3,8 +3,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
-import requests
-import io
+
 # 1. إعداد الواجهة
 st.set_page_config(layout="wide", page_title="Billboard Management System")
 
@@ -42,85 +41,74 @@ geo_map = {
     'كورنيش جبلة بوظة رومينزا 1': [35.3620, 35.9180], 'جبلة مفرق المشفى 1': [35.3580, 35.9320],
 }
 
-
-
-from streamlit_gsheets import GSheetsConnection
-
+# 4. دالة معالجة البيانات السحابية
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pubhtml"
+        # الرابط المباشر لجوجل شيت بصيغة CSV
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pub?output=csv"
         
-        # التعديل هنا: إضافة on_bad_lines='skip' لتجاهل الأسطر التي تسبب الخطأ
-        df = pd.read_csv(url, encoding='utf-8', on_bad_lines='skip')
+        # قراءة البيانات وتجاوز الأسطر المشوهة
+        df = pd.read_csv(url, on_bad_lines='skip')
         
-        # تنظيف وتحضير البيانات
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        # البحث عن رأس الجدول (الموقع)
-        header_found = False
+        # البحث عن رأس الجدول
+        found_header = False
         for i in range(min(20, len(df))):
             if 'الموقع' in df.iloc[i].values:
                 df.columns = df.iloc[i]
                 df = df.iloc[i+1:].reset_index(drop=True)
-                header_found = True
+                found_header = True
                 break
         
-        if not header_found:
-            # محاولة تنظيف الأعمدة إذا لم نجد كلمة "الموقع" مباشرة كعنوان
-            df.columns = [str(c).strip() for c in df.columns]
-
-        # تعبئة الخلايا المدمجة (ffill)
+        # تنظيف الأسماء وتعبئة الخلايا المدمجة
+        df.columns = [str(c).strip() for c in df.columns]
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
                 df[col] = df[col].ffill()
         
         # ربط المواقع بالإحداثيات
         def get_coords(loc):
-            return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
+            coords = geo_map.get(str(loc).strip(), [33.5138, 36.2765])
+            return coords
             
         df['coords'] = df['الموقع'].apply(get_coords)
         df['lat'] = df['coords'].apply(lambda x: x[0])
         df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
     except Exception as e:
-        st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
+        st.error(f"خطأ في تحميل البيانات: {e}")
         return pd.DataFrame()
-
-
-
-
-
 
 df = load_data()
 
-# 5. بناء الواجهة الرسومية (نفس منطق كودك السابق)
+# 5. عرض الواجهة (نفس كودك الأصلي)
 if not df.empty:
     selected_city = st.sidebar.selectbox("اختر المحافظة:", df['محافظة'].unique())
-    # تحديد أعمدة الشهور المتوفرة في ملفك
     date_cols = [c for c in df.columns if any(m in str(c) for m in ['اذار', 'نيسان', 'ايار', 'حزيران', 'تموز'])]
     selected_period = st.sidebar.selectbox("اختر الفترة:", date_cols)
 
     city_df = df[df['محافظة'] == selected_city].copy()
-    city_df['الحالة'] = city_df[selected_period].apply(lambda x: 'متاح' if pd.isna(x) or str(x).strip() == "" else 'محجوز')
+    city_df['الحالة'] = city_df[selected_period].apply(lambda x: 'متاح' if pd.isna(x) or str(x).strip() == "" or str(x).lower() == 'nan' else 'محجوز')
     city_df['is_vacant'] = city_df['الحالة'] == 'متاح'
 
     st.title(f"📊 إدارة لوحات {selected_city}")
 
     center = city_centers.get(selected_city, [33.5138, 36.2765])
-    m = folium.Map(location=center, zoom_start=12, tiles="CartoDB positron")
+    m = folium.Map(location=center, zoom_start=13, tiles="CartoDB positron")
 
     for _, row in city_df.iterrows():
-        popup = f"الموقع: {row['الموقع']} | الحالة: {row['الحالة']}"
+        popup = f"الموقع: {row['الموقع']} | العدد: {row.get('العدد', '1')}"
         if row['is_vacant']:
-            icon_html = '<div style="background:#00ff00;width:12px;height:12px;border-radius:50%;animation:blink 1s infinite;border:2px solid white;"></div><style>@keyframes blink{50%{opacity:0.2;}}</style>'
-            folium.Marker([row['lat'], row['lon']], icon=folium.DivIcon(html=icon_html), popup=popup).add_to(m)
+            icon = '<div style="background:#00ff00;width:12px;height:12px;border-radius:50%;animation:blink 1s infinite;border:2px solid white;"></div><style>@keyframes blink{50%{opacity:0.2;}}</style>'
+            folium.Marker([row['lat'], row['lon']], icon=folium.DivIcon(html=icon), popup=popup).add_to(m)
         else:
-            folium.CircleMarker([row['lat'], row['lon']], radius=7, color='red', fill=True, popup=popup).add_to(m)
+            folium.CircleMarker([row['lat'], row['lon']], radius=8, color='red', fill=True, popup=popup).add_to(m)
+            label = f'<div style="background:rgba(255,255,255,0.8);border:1px solid red;padding:1px 4px;font-size:9pt;font-weight:bold;transform:translate(10px,-10px);">{row.get("العدد", "1")}</div>'
+            folium.Marker([row['lat'], row['lon']], icon=folium.DivIcon(html=label)).add_to(m)
 
     c1, c2 = st.columns([3, 1])
     with c1:
-        st_folium(m, center=center, width=800, height=500, key=f"map_{selected_city}")
+        st_folium(m, center=center, width='stretch', height=550, key=f"map_{selected_city}")
 
     with c2:
         st.metric("المواقع المتاحة", (city_df['الحالة'] == 'متاح').sum())
@@ -128,5 +116,3 @@ if not df.empty:
         st.plotly_chart(fig, use_container_width=True)
 
     st.dataframe(city_df[['نوع اللوحات', 'الموقع', 'الحالة']], use_container_width=True)
-else:
-    st.warning("يرجى التأكد من رابط جوجل شيت وصحة البيانات.")
