@@ -46,21 +46,28 @@ geo_map = {
 sheet_id = "ضغ_هنا_معرف_الملف_الخاص_بك"
 sheet_url = f"https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GSFfH_KTJZzN5eYZiow/edit?usp=sharing/export?format=csv"
 
-@st.cache_data(ttl=600) # تحديث كل 10 دقائق
+@st.cache_data(ttl=600)
 def load_data():
     try:
-        # قراءة البيانات من الرابط
-        df = pd.read_csv(sheet_url)
+        # الرابط المباشر بصيغة إكسل
+        excel_url = f"https://google.com{sheet_id}/export?format=xlsx"
+        df = pd.read_excel(excel_url)
         
-        # تنظيف أسماء الأعمدة
+        # تنظيف وتحضير البيانات
         df.columns = [str(c).strip() for c in df.columns]
         
-        # معالجة الرأس وتعبئة الخلايا المدمجة (ffill)
+        # البحث عن رأس الجدول
+        if 'الموقع' not in df.columns:
+            for i in range(min(15, len(df))):
+                if 'الموقع' in df.iloc[i].values:
+                    df.columns = df.iloc[i]; df = df.iloc[i+1:].reset_index(drop=True); break
+
+        # تعبئة الفراغات (للمواقع المدمجة)
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
                 df[col] = df[col].ffill()
         
-        # ربط المواقع بالإحداثيات
+        # إضافة الإحداثيات
         def get_coords(loc):
             return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
             
@@ -69,8 +76,9 @@ def load_data():
         df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
     except Exception as e:
-        st.error(f"خطأ في تحميل البيانات من جوجل: {e}")
+        st.error(f"خطأ في تحميل البيانات: {e}")
         return pd.DataFrame()
+
 
 df = load_data()
 
