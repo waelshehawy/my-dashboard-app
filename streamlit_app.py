@@ -9,11 +9,11 @@ st.set_page_config(layout="wide", page_title="Billboard Management System")
 
 # 2. مراكز المحافظات
 city_centers = {
-    'دمشق': [33.5138, 36.2765], 
-    'حمص': [34.7324, 36.7137],
-    'اللاذقية': [35.5312, 35.7921], 
-    'طرطوس': [34.8890, 35.8866], 
-    'جبلة': [35.3609, 35.9256]
+    '1': [33.5138, 36.2765],  # كود دمشق
+    '2': [34.7324, 36.7137],  # كود حمص
+    '3': [35.5312, 35.7921],  # كود اللاذقية
+    '4': [34.8890, 35.8866],  # كود طرطوس
+    '5': [35.3609, 35.9256]   # كود جبلة
 }
 
 # 3. إحداثيات المناطق
@@ -62,9 +62,11 @@ def load_data():
         
         # تنظيف الأسماء وتعبئة الخلايا المدمجة
         df.columns = [str(c).strip() for c in df.columns]
-        for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
+               # أضف "كود المحافظة" لعملية التعبئة التلقائية
+        for col in ['نوع اللوحات', 'كود المحافظة', 'الموقع']:
             if col in df.columns:
-                df[col] = df[col].ffill()
+                df[col] = df[col].astype(str).str.strip().replace(['nan', 'None', ''], pd.NA).ffill()
+
         
         # ربط المواقع بالإحداثيات
         def get_coords(loc):
@@ -82,8 +84,20 @@ def load_data():
 df = load_data()
 
 # 5. عرض الواجهة (نفس كودك الأصلي)
-if not df.empty:
-    selected_city = st.sidebar.selectbox("اختر المحافظة:", df['محافظة'].unique())
+
+   if not df.empty:
+    # الحصول على الأكواد الفريدة
+    unique_codes = df['كود المحافظة'].unique()
+    
+    # قائمة للعرض للمستخدم (اختياري يمكنك عرض الكود فقط لتسهيل المهمة حالياً)
+    selected_code = st.sidebar.selectbox("اختر كود المحافظة:", unique_codes)
+
+    # الفلترة باستخدام الكود المختار
+    city_df = df[df['كود المحافظة'] == selected_code].copy()
+    
+    # تحديث مركز الخريطة بناءً على الكود
+    center = city_centers.get(selected_code, [33.5138, 36.2765])
+
     date_cols = [c for c in df.columns if any(m in str(c) for m in ['اذار', 'نيسان', 'ايار', 'حزيران', 'تموز'])]
     selected_period = st.sidebar.selectbox("اختر الفترة:", date_cols)
 
