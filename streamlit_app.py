@@ -44,7 +44,7 @@ geo_map = {
 
 # 4. الربط مع جوجل شيت
 # استبدل المعرف التالي بمعرف ملفك الخاص
-sheet_id = "ضغ_هنا_معرف_الملف_الخاص_بك"
+sheet_id = "117fxESUnfxnQ832smGdiTrw2GSFfH_KTJZzN5eYZiow"
 sheet_url = f"https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GSFfH_KTJZzN5eYZiow/edit?usp=sharing/export?format=csv"
 
 @st.cache_data(ttl=600)
