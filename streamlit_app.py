@@ -92,14 +92,22 @@ def load_data():
 
         
         # ربط المواقع بالإحداثيات
-        def get_coords(loc):
-            # تنظيف النص
-            loc_clean = str(loc).strip()
-            # البحث في القاموس، وإذا لم يجد يعيد إحداثيات دمشق كقائمة
-            return geo_map.get(loc_clean, [33.5138, 36.2765])
+        # ربط المواقع بالإحداثيات مع معالجة ذكية للفشل
+        def get_coords(row):
+            loc_clean = str(row['الموقع']).strip()
+            code = str(row['كود المحافظة']).strip()
             
-        # تطبيق الدالة
-        df['coords'] = df['الموقع'].apply(get_coords)
+            # 1. محاولة إيجاد الموقع الدقيق
+            coords = geo_map.get(loc_clean)
+            if coords:
+                return coords
+            
+            # 2. إذا فشل، ارجع لإحداثيات مركز المحافظة بدلاً من دمشق
+            return city_centers.get(code, [33.5138, 36.2765])
+
+        # تطبيق الدالة على الصف بالكامل وليس فقط عمود الموقع
+        df['coords'] = df.apply(get_coords, axis=1)
+
 
         # التأكد من أن كل خلية في coords هي قائمة فعلاً قبل التقسيم
         df['lat'] = df['coords'].apply(lambda x: x[0] if isinstance(x, list) else 33.5138)
