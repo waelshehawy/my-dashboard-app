@@ -49,20 +49,24 @@ sheet_url = f"https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GS
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # الرابط المباشر بصيغة إكسل
-        excel_url = f"https://google.com{sheet_id}/export?format=xlsx"
-        df = pd.read_excel(excel_url)
+        # استخدام الرابط المباشر كـ String بسيط لتجنب مشاكل التشفير
+        url = "https://google.com"
         
-        # تنظيف وتحضير البيانات
+        # قراءة الملف - محرك openpyxl هو الأفضل للغة العربية
+        df = pd.read_excel(url, engine='openpyxl')
+        
+        # تنظيف أسماء الأعمدة
         df.columns = [str(c).strip() for c in df.columns]
         
-        # البحث عن رأس الجدول
+        # البحث عن رأس الجدول (الموقع)
         if 'الموقع' not in df.columns:
             for i in range(min(15, len(df))):
                 if 'الموقع' in df.iloc[i].values:
-                    df.columns = df.iloc[i]; df = df.iloc[i+1:].reset_index(drop=True); break
+                    df.columns = df.iloc[i]
+                    df = df.iloc[i+1:].reset_index(drop=True)
+                    break
 
-        # تعبئة الفراغات (للمواقع المدمجة)
+        # تعبئة الخلايا المدمجة
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
                 df[col] = df[col].ffill()
@@ -78,6 +82,7 @@ def load_data():
     except Exception as e:
         st.error(f"خطأ في تحميل البيانات: {e}")
         return pd.DataFrame()
+
 
 
 df = load_data()
