@@ -49,19 +49,16 @@ from streamlit_gsheets import GSheetsConnection
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # إنشاء اتصال مباشر بجوجل شيت باستخدام رابط المشاركة العادي
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # ضع هنا رابط المشاركة العادي (الذي ينتهي بـ edit?usp=sharing)
+        # الرابط المباشر بصيغة CSV - هذا الرابط هو الأدق
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pubhtml"
         
-        # القراءة المباشرة للبيانات
-        df = conn.read(spreadsheet=url)
+        # قراءة البيانات مع تحديد الترميز لضمان قراءة اللغة العربية
+        df = pd.read_csv(url, encoding='utf-8')
         
-        # تنظيف وتحضير البيانات (نفس منطقك السابق)
+        # تنظيف أسماء الأعمدة
         df.columns = [str(c).strip() for c in df.columns]
         
-        # إذا كان هناك صفوف فارغة في البداية
+        # البحث عن رأس الجدول (الموقع)
         if 'الموقع' not in df.columns:
             for i in range(min(15, len(df))):
                 if 'الموقع' in df.iloc[i].values:
@@ -69,10 +66,12 @@ def load_data():
                     df = df.iloc[i+1:].reset_index(drop=True)
                     break
 
+        # تعبئة الخلايا المدمجة
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
                 df[col] = df[col].ffill()
         
+        # ربط المواقع بالإحداثيات
         def get_coords(loc):
             return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
             
@@ -81,8 +80,9 @@ def load_data():
         df['lon'] = df['coords'].apply(lambda x: x)
         return df
     except Exception as e:
-        st.error(f"فشل الاتصال المباشر: {e}")
+        st.error(f"حدث خطأ أثناء تحميل البيانات: {e}")
         return pd.DataFrame()
+
 
 
 
