@@ -49,24 +49,28 @@ from streamlit_gsheets import GSheetsConnection
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # الرابط المباشر بصيغة CSV - هذا الرابط هو الأدق
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcXGzXOdLPritndflQQETl-Bdxn59S85YtaqnvXzs64ZDHo4wgYUiWPICiC2DPtZ9a3ID1EpH8psMT/pubhtml"
         
-        # قراءة البيانات مع تحديد الترميز لضمان قراءة اللغة العربية
-        df = pd.read_csv(url, encoding='utf-8')
+        # التعديل هنا: إضافة on_bad_lines='skip' لتجاهل الأسطر التي تسبب الخطأ
+        df = pd.read_csv(url, encoding='utf-8', on_bad_lines='skip')
         
-        # تنظيف أسماء الأعمدة
+        # تنظيف وتحضير البيانات
         df.columns = [str(c).strip() for c in df.columns]
         
         # البحث عن رأس الجدول (الموقع)
-        if 'الموقع' not in df.columns:
-            for i in range(min(15, len(df))):
-                if 'الموقع' in df.iloc[i].values:
-                    df.columns = df.iloc[i]
-                    df = df.iloc[i+1:].reset_index(drop=True)
-                    break
+        header_found = False
+        for i in range(min(20, len(df))):
+            if 'الموقع' in df.iloc[i].values:
+                df.columns = df.iloc[i]
+                df = df.iloc[i+1:].reset_index(drop=True)
+                header_found = True
+                break
+        
+        if not header_found:
+            # محاولة تنظيف الأعمدة إذا لم نجد كلمة "الموقع" مباشرة كعنوان
+            df.columns = [str(c).strip() for c in df.columns]
 
-        # تعبئة الخلايا المدمجة
+        # تعبئة الخلايا المدمجة (ffill)
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
             if col in df.columns:
                 df[col] = df[col].ffill()
@@ -76,12 +80,13 @@ def load_data():
             return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
             
         df['coords'] = df['الموقع'].apply(get_coords)
-        df['lat'] = df['coords'].apply(lambda x: x)
-        df['lon'] = df['coords'].apply(lambda x: x)
+        df['lat'] = df['coords'].apply(lambda x: x[0])
+        df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
     except Exception as e:
-        st.error(f"حدث خطأ أثناء تحميل البيانات: {e}")
+        st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
         return pd.DataFrame()
+
 
 
 
