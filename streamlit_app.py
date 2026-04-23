@@ -50,36 +50,41 @@ sheet_url = "https://docs.google.com/spreadsheets/d/117fxESUnfxnQ832smGdiTrw2GSF
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # الرابط المباشر للملف
-        url = "https://google.com"
+        # ضع الرابط الذي حصلت عليه من "النشر على الويب" بين علامتي التنصيص
+        url = "ضع_الرابط_هنا"
         
-        # تحميل الملف باستخدام requests لضمان استلامه بشكل صحيح
-        response = requests.get(url)
+        # القراءة المباشرة من رابط النشر
+        df = pd.read_excel(url, engine='openpyxl')
         
-        # فتح الملف كـ BytesStream
-        f = io.BytesIO(response.content)
-        df = pd.read_excel(f, engine='openpyxl')
-        
-        # تنظيف وتحضير البيانات (نفس المنطق السابق)
+        # تنظيف وتحضير البيانات
         df.columns = [str(c).strip() for c in df.columns]
+        
+        # البحث عن رأس الجدول
         if 'الموقع' not in df.columns:
             for i in range(min(15, len(df))):
                 if 'الموقع' in df.iloc[i].values:
-                    df.columns = df.iloc[i]; df = df.iloc[i+1:].reset_index(drop=True); break
+                    df.columns = df.iloc[i]
+                    df = df.iloc[i+1:].reset_index(drop=True)
+                    break
 
+        # تعبئة الخلايا المدمجة
         for col in ['نوع اللوحات', 'محافظة', 'الموقع']:
-            if col in df.columns: df[col] = df[col].ffill()
+            if col in df.columns:
+                df[col] = df[col].ffill()
         
+        # ربط المواقع بالإحداثيات
         def get_coords(loc):
-            return geo_map.get(str(loc).strip(), [33.5138, 36.2765])
+            coords = geo_map.get(str(loc).strip(), [33.5138, 36.2765])
+            return coords
             
         df['coords'] = df['الموقع'].apply(get_coords)
-        df['lat'] = df['coords'].apply(lambda x: x[0] if isinstance(x, list) else x)
-        df['lon'] = df['coords'].apply(lambda x: x[1] if isinstance(x, list) else x)
+        df['lat'] = df['coords'].apply(lambda x: x[0])
+        df['lon'] = df['coords'].apply(lambda x: x[1])
         return df
     except Exception as e:
-        st.error(f"فشل التحميل: {e}")
+        st.error(f"فشل التحميل من النشر على الويب: {e}")
         return pd.DataFrame()
+
 
 
 
