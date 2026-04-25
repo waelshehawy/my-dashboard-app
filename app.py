@@ -2,65 +2,62 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 
-st.set_page_config(page_title="نظام لوحات الإنارة", layout="wide")
-
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-st.title("📊 نظام إدارة إعلانات أعمدة الإنارة")
+st.set_page_config(page_title="نظام الإعلانات المتكامل", layout="wide")
 
-menu = ["🏠 عرض الإشغال (حجوزات1)", "➕ إضافة حجز جديد"]
+st.title("🏛️ إدارة حجوزات اللوحات الإعلانية")
+
+menu = ["🏠 عرض الإشغال العام", "➕ تسجيل حجز جديد"]
 choice = st.sidebar.selectbox("القائمة", menu)
 
-if choice == "🏠 عرض الإشغال (حجوزات1)":
-    st.subheader("📋 تفاصيل الحجوزات واللوحات")
+if choice == "🏠 عرض الإشغال العام":
     query = """
-    SELECT 
-        T1.[اسم العمود], T1.[المحافظة], T1.[الحجم],
-        T2.[اسم الزبون], T2.[فترة الحجز], T2.[العام], T2.[رسوم مؤسسة]
+    SELECT T1.[اسم العمود], T1.[المحافظة], T1.[الحجم],
+           T2.[اسم الزبون], T2.[فترة الحجز], T2.[العام]
     FROM [اعمدة انارة] T1
     LEFT JOIN [حجوزات1] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
     """
-    try:
-        df = pd.read_sql(query, get_connection())
-        search = st.text_input("🔍 ابحث عن زبون أو محافظة...")
-        if search:
-            df = df[df.astype(str).apply(lambda x: x.str.contains(search, case=False)).any(axis=1)]
-        st.dataframe(df, use_container_width=True)
-    except Exception as e:
-        st.error(f"خطأ في عرض البيانات: {e}")
+    df = pd.read_sql(query, get_connection())
+    st.dataframe(df, use_container_width=True)
 
-elif choice == "➕ إضافة حجز جديد":
-    st.subheader("📝 نموذج إدخال حجز جديد")
+elif choice == "➕ تسجيل حجز جديد":
+    st.subheader("📝 إضافة حجز جديد من القوائم الثابتة")
     
-    # جلب البيانات خارج الـ Form لتجنب الأخطاء
-    poles_df = pd.read_sql("SELECT [رقم اللوحة], [اسم العمود] FROM [اعمدة انارة]", get_connection())
+    conn = get_connection()
+    # 1. جلب البيانات للقوائم المنسدلة
+    poles_df = pd.read_sql("SELECT [رقم اللوحة], [اسم العمود] FROM [اعمدة انارة]", conn)
+    periods_df = pd.read_sql("SELECT [namee] FROM [الفترة]", conn)
+    cities_df = pd.read_sql("SELECT [المحافظة] FROM [المحافظات]", conn)
     
-    # بداية النموذج
-    with st.form(key="my_new_form"):
-        selected_pole = st.selectbox("اختر العمود", poles_df['اسم العمود'].tolist())
-        customer = st.text_input("اسم الزبون")
-        period = st.text_input("فترة الحجز")
-        year = st.text_input("العام", value="2024")
-        fees = st.number_input("رسوم مؤسسة", min_value=0)
+    with st.form(key="advanced_form"):
+        col1, col2 = st.columns(2)
         
-        # الزر يجب أن يكون بداخل الـ with حصراً
-        submit_button = st.form_submit_button(label="حفظ الحجز الآن")
+        with col1:
+            selected_pole = st.selectbox("اختر اللوحة/العمود", poles_df['اسم العمود'].tolist())
+            customer = st.text_input("اسم الزبون")
+            # اختيار الفترة من الجدول الثابت
+            period = st.selectbox("فترة الحجز (من جدول الفترة)", periods_df['namee'].tolist())
+        
+        with col2:
+            # اختيار المحافظة من الجدول الثابت
+            city = st.selectbox("المحافظة", cities_df['المحافظة'].tolist())
+            year = st.text_input("العام", value="2024")
+            fees = st.number_input("رسوم مؤسسة", min_value=0)
 
-    # معالجة البيانات بعد الضغط على الزر (خارج الـ form)
+        submit_button = st.form_submit_button(label="حفظ البيانات بالربط الكامل")
+
     if submit_button:
         try:
-            # طريقة آمنة لجلب رقم اللوحة
-            p_id_row = poles_df[poles_df['اسم العمود'] == selected_pole]['رقم اللوحة'].values
-            if len(p_id_row) > 0:
-                p_id = int(p_id_row[0])
-                
-                conn = get_connection()
-                sql = "INSERT INTO [حجوزات1] ([رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام], [رسوم مؤسسة]) VALUES (?, ?, ?, ?, ?)"
-                conn.execute(sql, (p_id, customer, period, year, fees))
-                conn.commit()
-                st.success(f"✅ تم بنجاح تسجيل حجز {customer}")
-            else:
-                st.error("تعذر العثور على رقم اللوحة المحددة")
+            p_id = int(poles_df[poles_df['اسم العمود'] == selected_pole]['رقم اللوحة'].values[0])
+            
+            sql = """
+            INSERT INTO [حجوزات1] ([رقم اللوحة], [اسم الزبون], [فترة الحجز], [المحافظة], [العام], [رسوم مؤسسة]) 
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
+            conn.execute(sql, (p_id, customer, period, city, year, fees))
+            conn.commit()
+            st.success(f"✅ تم الحجز للزبون {customer} في محافظة {city} بنجاح!")
         except Exception as e:
-            st.error(f"حدث خطأ أثناء الحفظ: {e}")
+            st.error(f"حدث خطأ: {e}")
