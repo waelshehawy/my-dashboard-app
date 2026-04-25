@@ -12,7 +12,7 @@ try:
     
     # 1. عرض معاينة سريعة لجدول الحجوزات لنعرف أسماء الأعمدة بدقة
     st.sidebar.subheader("فحص الأعمدة")
-    cols_hjezz = pd.read_sql("SELECT * FROM [الحجوزات] LIMIT 1", conn).columns.tolist()
+    cols_hjezz = pd.read_sql("SELECT * FROM [حجوزات1] LIMIT 1", conn).columns.tolist()
     st.sidebar.write("أعمدة جدول الحجوزات الحالية:", cols_hjezz)
 
     # 2. الاستعلام (سنستخدم الأسماء التي زودتني بها سابقاً ونضعها بين أقواس مربعة)
@@ -24,7 +24,7 @@ try:
         T2.[اسم الزبون],
         T1.[الحجم]
     FROM [اعمدة انارة] T1
-    LEFT JOIN [الحجوزات] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
+    LEFT JOIN [حجوزات1] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
     """
     
     df = pd.read_sql(query, conn)
