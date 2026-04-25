@@ -3,33 +3,34 @@ import sqlite3
 import pandas as pd
 
 def get_connection():
-    # تأكد أن اسم الملف هنا يطابق تماماً الاسم المرفوع على GitHub
     return sqlite3.connect('billboards_data.db')
 
-st.title("🔍 فحص اتطابق الجداول")
+st.title("📊 نظام إدارة إعلانات الإنارة")
 
-# 1. جلب الأسماء الحقيقية للجداول من السيرفر
 try:
     conn = get_connection()
-    real_tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", conn)['name'].tolist()
-    st.write("الجداول الموجودة فعلياً في الملف المرفوع:", real_tables)
     
-    # 2. البحث عن الجدولين حتى لو اختلف الاسم (مثلاً وجود مسافات)
-    table_poles = next((t for t in real_tables if "اعمدة" in t), None)
-    table_booking = next((t for t in real_tables if "الحجوزات" in t), None)
+    # 1. عرض معاينة سريعة لجدول الحجوزات لنعرف أسماء الأعمدة بدقة
+    st.sidebar.subheader("فحص الأعمدة")
+    cols_hjezz = pd.read_sql("SELECT * FROM [الحجوزات] LIMIT 1", conn).columns.tolist()
+    st.sidebar.write("أعمدة جدول الحجوزات الحالية:", cols_hjezz)
 
-    if table_poles and table_booking:
-        query = f"""
-        SELECT 
-            T1.[اسم العمود], T1.[المحافظة], T1.[الحجم],
-            T2.[اسم الزبون], T2.[تاريخ الحجز إلى]
-        FROM [{table_poles}] T1
-        LEFT JOIN [{table_booking}] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
-        """
-        df = pd.read_sql(query, conn)
-        st.success(f"تم الربط بنجاح بين جدول {table_poles} و {table_booking}")
-        st.dataframe(df)
-    else:
-        st.error("لم نجد الجداول المطلوبة. يرجى التأكد من رفع ملف billboards_data.db الصحيح.")
+    # 2. الاستعلام (سنستخدم الأسماء التي زودتني بها سابقاً ونضعها بين أقواس مربعة)
+    # ملاحظة: إذا فشل 'تاريخ الحجز إلى'، سنعرض فقط اسم الزبون واللوحة حالياً
+    query = """
+    SELECT 
+        T1.[اسم العمود], 
+        T1.[المحافظة], 
+        T2.[اسم الزبون],
+        T1.[الحجم]
+    FROM [اعمدة انارة] T1
+    LEFT JOIN [الحجوزات] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
+    """
+    
+    df = pd.read_sql(query, conn)
+    st.success("تم جلب البيانات بنجاح!")
+    st.dataframe(df, use_container_width=True)
+
 except Exception as e:
-    st.error(f"خطأ تقني: {e}")
+    st.error(f"خطأ في جلب البيانات: {e}")
+    st.info("تأكد من تطابق أسماء الأعمدة بين الكود وقاعدة البيانات.")
