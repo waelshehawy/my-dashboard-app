@@ -3,49 +3,33 @@ import sqlite3
 import pandas as pd
 
 def get_connection():
+    # تأكد أن اسم الملف هنا يطابق تماماً الاسم المرفوع على GitHub
     return sqlite3.connect('billboards_data.db')
 
-st.set_page_config(page_title="نظام لوحات الإنارة", layout="wide")
+st.title("🔍 فحص اتطابق الجداول")
 
-st.sidebar.title("القائمة الرئيسية")
-choice = st.sidebar.radio("انتقل إلى:", ["🏠 الرئيسية", "📅 إدارة الحجوزات", "⚙️ الإعدادات"])
-
-if choice == "🏠 الرئيسية":
-    st.title("📊 حالة إشغال أعمدة الإنارة")
+# 1. جلب الأسماء الحقيقية للجداول من السيرفر
+try:
+    conn = get_connection()
+    real_tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", conn)['name'].tolist()
+    st.write("الجداول الموجودة فعلياً في الملف المرفوع:", real_tables)
     
-    # الاستعلام المحدث بناءً على الأسماء الحقيقية للجداول
-    query = """
-    SELECT 
-        T1.[اسم العمود], 
-        T1.[المحافظة], 
-        T1.[الحجم],
-        T2.[اسم الزبون], 
-        T2.[تاريخ الحجز إلى]
-    FROM [اعمدة انارة] T1
-    LEFT JOIN [الحجوزات] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
-    """
-    try:
-        df = pd.read_sql(query, get_connection())
-        st.dataframe(df, use_container_width=True)
-    except Exception as e:
-        st.error(f"حدث خطأ في جلب البيانات: {e}")
+    # 2. البحث عن الجدولين حتى لو اختلف الاسم (مثلاً وجود مسافات)
+    table_poles = next((t for t in real_tables if "اعمدة" in t), None)
+    table_booking = next((t for t in real_tables if "الحجوزات" in t), None)
 
-elif choice == "📅 إدارة الحجوزات":
-    st.title("📝 تسجيل حجز جديد")
-    with st.form("booking_form"):
-        # جلب قائمة اللوحات من الجدول الصحيح
-        poles = pd.read_sql("SELECT [رقم اللوحة], [اسم العمود] FROM [اعمدة انارة]", get_connection())
-        selected_pole = st.selectbox("اختر العمود", poles['اسم العمود'])
-        
-        customer = st.text_input("اسم الزبون")
-        date_from = st.date_input("من تاريخ")
-        date_to = st.date_input("إلى تاريخ")
-        
-        if st.form_submit_button("تثبيت الحجز"):
-            st.success(f"تم تسجيل حجز {customer} بنجاح.")
-
-elif choice == "⚙️ الإعدادات":
-    st.title("⚙️ الجداول المتوفرة في النظام")
-    # عرض كافة الجداول للتأكد
-    tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", get_connection())
-    st.write(tables)
+    if table_poles and table_booking:
+        query = f"""
+        SELECT 
+            T1.[اسم العمود], T1.[المحافظة], T1.[الحجم],
+            T2.[اسم الزبون], T2.[تاريخ الحجز إلى]
+        FROM [{table_poles}] T1
+        LEFT JOIN [{table_booking}] T2 ON T1.[رقم اللوحة] = T2.[رقم اللوحة]
+        """
+        df = pd.read_sql(query, conn)
+        st.success(f"تم الربط بنجاح بين جدول {table_poles} و {table_booking}")
+        st.dataframe(df)
+    else:
+        st.error("لم نجد الجداول المطلوبة. يرجى التأكد من رفع ملف billboards_data.db الصحيح.")
+except Exception as e:
+    st.error(f"خطأ تقني: {e}")
