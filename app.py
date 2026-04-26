@@ -7,11 +7,9 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- Page Config ---
 st.set_page_config(page_title="Preview Ads System", layout="wide")
 
 def ar(text):
@@ -40,11 +38,9 @@ def add_float_picture(doc, image_path, width, height):
     anchor.append(inline.graphic)
     inline.getparent().replace(inline, anchor)
 
-# --- Updated Export Logic ---
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
-    section = doc.sections[0]
-    section.right_to_left = True
+    doc.sections[0].right_to_left = True
     
     if os.path.exists('logo.png'):
         add_float_picture(doc, 'logo.png', width=Inches(8.27), height=Inches(11.69))
@@ -54,92 +50,90 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
-    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة من {dates['start']} لغاية {dates['end']} م")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة من {dates['start']} لغاية {dates['end']} م")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    for city, networks in all_selected_data.items():
+    for city_name in all_selected_data:
+        networks_dict = all_selected_data[city_name]
+        
         p_city = doc.add_paragraph()
         p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run_city = p_city.add_run(ar(f"محافظة {city}"))
+        run_city = p_city.add_run(ar(f"محافظة {city_name}"))
         run_city.font.color.rgb = RGBColor(102, 0, 153)
         run_city.font.size = Pt(16)
 
-        for net, df in networks.items():
-            doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        for net_name in networks_dict:
+            df = networks_dict[net_name]
+            doc.add_paragraph(ar(f"شبكات {net_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
             
-            # STRICT FILTERING: Only take the first two columns (Location and Count)
-            # This prevents the "expected 2, got 18" error
-            current_df = df.iloc[:, :2].reset_index(drop=True)
-            num_rows = (len(current_df) + 1) // 2
+            # Use only Location and Count columns
+            work_df = df[['الموقع', 'العدد']].reset_index(drop=True)
+            total_items = len(work_df)
+            rows_needed = (total_items + 1) // 2
             
-            table = doc.add_table(rows=num_rows + 1, cols=4)
+            table = doc.add_table(rows=rows_needed + 1, cols=4)
             table.style = 'Table Grid'
             
-            # Fill headers manually
+            # Set Headers
             table.cell(0, 0).text = ar("العدد")
             table.cell(0, 1).text = ar("الموقع")
             table.cell(0, 2).text = ar("العدد")
             table.cell(0, 3).text = ar("الموقع")
 
-            # Fill data cell by cell based on location in the clean slice
-            for i in range(len(current_df)):
-                row_idx = (i // 2) + 1
-                col_offset = 0 if (i % 2 == 0) else 2
+            # Fill using direct index lookup
+            for i in range(total_items):
+                r_idx = (i // 2) + 1
+                c_off = 0 if (i % 2 == 0) else 2
                 
-                # Column 1 of DF is the location, Column 2 is the count
-                table.cell(row_idx, col_offset).text = str(current_df.iloc[i, 1])
-                table.cell(row_idx, col_offset + 1).text = ar(current_df.iloc[i, 0])
+                # Direct access by position - NO UNPACKING
+                loc_val = work_df.iloc[i, 0] # Column 0: Location
+                cnt_val = work_df.iloc[i, 1] # Column 1: Count
+                
+                table.cell(r_idx, c_off).text = str(cnt_val)
+                table.cell(r_idx, c_off + 1).text = ar(loc_val)
             
-            total = current_df.iloc[:, 1].astype(int).sum()
-            doc.add_paragraph(ar(f"العدد: [{total}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            total_sum = work_df['العدد'].astype(int).sum()
+            doc.add_paragraph(ar(f"العدد: [{total_sum}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
 
-# --- App Logic ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
 
 st.title("🏗️ Preview Quotation Builder")
 
 try:
     conn = sqlite3.connect('billboards_data.db')
-    col_in, col_view = st.columns(2)
+    c1, c2 = st.columns(2)
 
-    with col_in:
-        cust = st.text_input("اسم الزبون", "وائل")
+    with c1:
+        cust = st.text_input("Customer", "Wael")
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
-        sel_city = st.selectbox("اختر المحافظة", cities)
+        city_sel = st.selectbox("City", cities)
+        raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{city_sel}'", conn)
+        locs = st.multiselect(f"Locations in {city_sel}", raw['الموقع'].tolist())
         
-        raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
-        selected_locs = st.multiselect(f"مواقع {sel_city}:", raw_df['الموقع'].tolist())
-        
-        if st.button("➕ إضافة للعرض"):
-            if selected_locs:
-                filtered = raw_df[raw_df['الموقع'].isin(selected_locs)]
-                # Save as clean 2-column dataframes in memory
-                st.session_state.cart[sel_city] = {
-                    net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] 
-                    for net in filtered['الشبكة'].unique()
-                }
-                st.success(f"تمت إضافة {sel_city}")
+        if st.button("➕ Add"):
+            if locs:
+                filt = raw[raw['الموقع'].isin(locs)]
+                st.session_state.cart[city_sel] = {n: filt[filt['الشبكة'] == n][['الموقع', 'العدد']] for n in filt['الشبكة'].unique()}
+                st.success("Added!")
 
-    with col_view:
+    with c2:
         if st.session_state.cart:
-            for c_name, networks in st.session_state.cart.items():
+            for c_name in list(st.session_state.cart.keys()):
                 with st.expander(f"📍 {c_name}", expanded=True):
-                    for n_name, d_frame in networks.items():
-                        st.write(f"🔗 شبكة {n_name}")
-                        st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
+                    for n_name in list(st.session_state.cart[c_name].keys()):
+                        st.write(f"🔗 {n_name}")
+                        st.session_state.cart[c_name][n_name] = st.data_editor(st.session_state.cart[c_name][n_name], key=f"ed_{c_name}_{n_name}")
             
-            if st.button("🗑️ مسح الكل"):
+            if st.button("🗑️ Clear"):
                 st.session_state.cart = {}; st.rerun()
 
-            if st.button("🚀 تصدير الوورد"):
-                dates = {'start': "1 / 5 / 2026", 'end': "28 / 5 / 2026"}
-                file_out = export_final_quotation(cust, st.session_state.cart, dates)
-                st.download_button("📥 تحميل المستند", file_out, f"Preview_{cust}.docx")
-        else:
-            st.info("القائمة فارغة. اختر محافظة ومواقع ثم اضغط 'إضافة'.")
+            if st.button("🚀 Export"):
+                dts = {'start': "1 / 5 / 2026", 'end': "28 / 5 / 2026"}
+                out = export_final_quotation(cust, st.session_state.cart, dts)
+                st.download_button("📥 Download", out, f"Preview_{cust}.docx")
 except Exception as e:
-    st.error(f"خطأ: {e}")
+    st.error(f"Error: {e}")
