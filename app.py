@@ -10,7 +10,7 @@ from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- إعدادات الصفحة ---
+# --- Page Config ---
 st.set_page_config(page_title="Preview Ads System", layout="wide")
 
 def ar(text):
@@ -66,25 +66,25 @@ def export_final_quotation(customer_name, all_selected_data, dates):
             table = doc.add_table(rows=1, cols=4)
             table.style = 'Table Grid'
             
-            # تعبئة الرأس
-            cells = table.rows[0].cells
-            cells[0].text = ar("العدد")
-            cells[1].text = ar("الموقع")
-            cells[2].text = ar("العدد")
-            cells[3].text = ar("الموقع")
+            # Header Cells
+            hdr = table.rows[0].cells
+            hdr[0].text = ar("العدد")
+            hdr[1].text = ar("الموقع")
+            hdr[2].text = ar("العدد")
+            hdr[3].text = ar("الموقع")
 
-            # تحويل البيانات لقائمة لضمان الترتيب [الموقع، العدد]
-            data_list = df[['الموقع', 'العدد']].values.tolist()
+            # Force extraction of only 'الموقع' and 'العدد' to avoid hidden column errors
+            clean_data = df[['الموقع', 'العدد']].values.tolist()
             
-            for i in range(0, len(data_list), 2):
+            for i in range(0, len(clean_data), 2):
                 row_cells = table.add_row().cells
-                # المجموعة الأولى
-                row_cells[0].text = str(data_list[i][1]) # العدد
-                row_cells[1].text = ar(data_list[i][0])  # الموقع
-                # المجموعة الثانية
-                if i + 1 < len(data_list):
-                    row_cells[2].text = str(data_list[i+1][1])
-                    row_cells[3].text = ar(data_list[i+1][0])
+                # Pair 1 (Right side)
+                row_cells[0].text = str(clean_data[i][1]) # Count
+                row_cells[1].text = ar(clean_data[i][0])  # Location
+                # Pair 2 (Left side) - if exists
+                if i + 1 < len(clean_data):
+                    row_cells[2].text = str(clean_data[i+1][1])
+                    row_cells[3].text = ar(clean_data[i+1][0])
             
             total = df['العدد'].astype(int).sum()
             doc.add_paragraph(ar(f"العدد: [{total}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -94,43 +94,52 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     target.seek(0)
     return target
 
+# --- Main App Logic ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
 
-st.title("🏗️ صانع عروض أسعار بريفيو")
+st.title("🏗️ Preview Quotation System")
 
 try:
     conn = sqlite3.connect('billboards_data.db')
     col_in, col_view = st.columns([1, 2])
 
     with col_in:
-        cust = st.text_input("اسم الزبون", "وائل")
+        cust = st.text_input("Customer Name", "Wael")
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
-        sel_city = st.selectbox("اختر المحافظة", cities)
-        raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
-        selected_locs = st.multiselect(f"مواقع {sel_city}:", raw_df['الموقع'].tolist())
+        sel_city = st.selectbox("Select City", cities)
         
-        if st.button("➕ إضافة للعرض"):
+        raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
+        selected_locs = st.multiselect(f"Available in {sel_city}:", raw_df['الموقع'].tolist())
+        
+        if st.button("➕ Add to Quotation"):
             if selected_locs:
                 filtered = raw_df[raw_df['الموقع'].isin(selected_locs)]
-                st.session_state.cart[sel_city] = {net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] for net in filtered['الشبكة'].unique()}
-                st.success(f"تمت إضافة {sel_city}")
+                # Store by city and network
+                st.session_state.cart[sel_city] = {
+                    net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] 
+                    for net in filtered['الشبكة'].unique()
+                }
+                st.success(f"Added {sel_city}")
 
     with col_view:
         if st.session_state.cart:
             for c_name, networks in st.session_state.cart.items():
-                with st.expander(f"📍 {c_name}", expanded=True):
+                with st.expander(f"📍 {c_name} Selection", expanded=True):
                     for n_name, d_frame in networks.items():
-                        st.write(f"🔗 شبكة {n_name}")
+                        st.write(f"🔗 Network: {n_name}")
+                        # User can edit counts or names here
                         st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
             
-            if st.button("🗑️ مسح الكل"):
-                st.session_state.cart = {}; st.rerun()
+            if st.button("🗑️ Clear All"):
+                st.session_state.cart = {}
+                st.rerun()
 
-            if st.button("🚀 تصدير الوورد"):
+            if st.button("🚀 Export Full Quotation (Word)"):
                 dates = {'start': "1 /5 /2026", 'end': "28 /5 /2026"}
                 file_out = export_final_quotation(cust, st.session_state.cart, dates)
-                st.download_button("📥 تحميل الملف", file_out, f"Preview_{cust}.docx")
+                st.download_button("📥 Download Document", file_out, f"Preview_{cust}.docx")
         else:
-            st.info("اختر محافظة ومواقع ثم اضغط 'إضافة'.")
+            st.info("Choose a city and locations, then click 'Add to Quotation'.")
+
 except Exception as e:
-    st.error(f"خطأ: {e}")
+    st.error(f"Error: {e}")
