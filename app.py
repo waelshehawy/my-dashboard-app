@@ -39,7 +39,7 @@ def add_float_picture(doc, image_path, width, height):
     anchor.append(inline.graphic)
     inline.getparent().replace(inline, anchor)
 
-# --- دالة التصدير باستخدام الإحداثيات (أكثر أماناً) ---
+# --- دالة التصدير باستخدام الإحداثيات ---
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
     section = doc.sections
@@ -53,7 +53,7 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
-    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة من {dates['start']} لغاية {dates['end']}م")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة من {dates['start']} لغاية {dates['end']} م")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     for city, networks in all_selected_data.items():
         p_city = doc.add_paragraph()
@@ -65,28 +65,21 @@ def export_final_quotation(customer_name, all_selected_data, dates):
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
             
-            # تنظيف البيانات لضمان وجود عمودين فقط (الموقع والعدد)
             current_df = df[['الموقع', 'العدد']].reset_index(drop=True)
             num_rows = (len(current_df) + 1) // 2
             
-            # إنشاء الجدول (عدد الصفوف + 1 للرأس، و 4 أعمدة)
             table = doc.add_table(rows=num_rows + 1, cols=4)
             table.style = 'Table Grid'
             
-            # 1. تعبئة الرأس يدوياً بالكامل
             table.cell(0, 0).text = ar("العدد")
             table.cell(0, 1).text = ar("الموقع")
             table.cell(0, 2).text = ar("العدد")
             table.cell(0, 3).text = ar("الموقع")
 
-            # 2. تعبئة البيانات باستخدام الإحداثيات (صف، عمود)
             for i in range(len(current_df)):
-                row_idx = (i // 2) + 1 # تحديد أي صف في الوورد
-                col_offset = 0 if (i % 2 == 0) else 2 # تحديد البدء من العمود 0 أو 2
-                
-                # تعبئة الخلية (العدد)
+                row_idx = (i // 2) + 1
+                col_offset = 0 if (i % 2 == 0) else 2
                 table.cell(row_idx, col_offset).text = str(current_df.iloc[i]['العدد'])
-                # تعبئة الخلية (الموقع)
                 table.cell(row_idx, col_offset + 1).text = ar(current_df.iloc[i]['الموقع'])
             
             total = current_df['العدد'].astype(int).sum()
@@ -104,7 +97,8 @@ st.title("🏗️ Preview Quotation System")
 
 try:
     conn = sqlite3.connect('billboards_data.db')
-    col_in, col_view = st.columns()
+    # تصحيح الخطأ هنا: تحديد عدد الأعمدة
+    col_in, col_view = st.columns(2)
 
     with col_in:
         cust = st.text_input("اسم الزبون", "وائل")
@@ -125,7 +119,6 @@ try:
                 with st.expander(f"📍 {c_name}", expanded=True):
                     for n_name, d_frame in networks.items():
                         st.write(f"🔗 شبكة {n_name}")
-                        # حفظ التعديلات في الذاكرة
                         st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
             
             if st.button("🗑️ مسح الكل"):
