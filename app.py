@@ -18,18 +18,68 @@ def ar(text):
     return get_display(reshape(str(text)))
 
 # --- دالة تصدير الوورد الاحترافية (خلفية شفافة + جداول مجمعة) ---
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt
+
+def add_float_picture(doc, image_path, width, height):
+    """تضيف صورة عائمة تتجاهل الهوامش (Behind text)"""
+    header = doc.sections[0].header
+    paragraph = header.paragraphs[0]
+    run = paragraph.add_run()
+    shape = run.add_picture(image_path, width=width, height=height)
+    
+    # تحويل الصورة إلى عنصر عائم (Floating) عبر تعديل الـ XML
+    inline = shape._inline
+    extent = inline.extent
+    doc_pr = inline.docPr
+    
+    # إنشاء هيكل الـ XML للتموضع العائم
+    anchor_xml = f"""
+    <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1" xmlns:wp="http://openxmlformats.org">
+        <wp:simplePos x="0" y="0"/>
+        <wp:positionH relativeFrom="page">
+            <wp:posOffset>0</wp:posOffset>
+        </wp:positionH>
+        <wp:positionV relativeFrom="page">
+            <wp:posOffset>0</wp:posOffset>
+        </wp:positionV>
+        <wp:extent cx="{extent.cx}" cy="{extent.cy}"/>
+        <wp:effectExtent l="0" t="0" r="0" b="0"/>
+        <wp:wrapNone/>
+        <wp:docPr id="{doc_pr.id}" name="{doc_pr.name}"/>
+        <wp:cNvGraphicFramePr>
+            <a:graphicFrameLocks noChangeAspect="1" xmlns:a="http://openxmlformats.org"/>
+        </wp:cNvGraphicFramePr>
+    </wp:anchor>
+    """
+    anchor = OxmlElement(anchor_xml)
+    # نقل بيانات الصورة الأصلية إلى العنصر العائم الجديد
+    anchor.append(inline.graphic)
+    inline.getparent().replace(inline, anchor)
+
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
     section = doc.sections[0]
-    section.right_to_left = True
+    section.page_height = Inches(11.69) # A4 Height
+    section.page_width = Inches(8.27)   # A4 Width
     
-    # 1. إضافة الخلفية (Watermark) في الرأس لتظهر خلف النص
+    # 1. إضافة الصورة كخلفية كاملة تتجاهل الهوامش
     if os.path.exists('logo.png'):
-        header = section.header
-        p = header.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run()
-        run.add_picture('logo.png', width=Inches(7.5)) # حجم يغطي الصفحة
+        # العرض والارتفاع يغطيان الورقة كاملة (A4)
+        add_float_picture(doc, 'logo.png', width=Inches(8.27), height=Inches(11.69))
+
+    # 2. جسم المستند (النص سيظهر الآن فوق الخلفية)
+    # ملاحظة: سنترك مسافة علوية (Margin) للنص يدوياً عبر فقرات فارغة
+    for i in range(4): doc.add_paragraph() 
+    
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
+    
+    # (بقية كود الجول تظل كما هي في النسخة السابقة)
+    # ...
+حجم يغطي الصفحة
 
     # 2. بيانات الزبون
     doc.add_paragraph("\n\n") 
