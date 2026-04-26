@@ -9,7 +9,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- إعدادات الصفحة ---
 st.set_page_config(page_title="Preview Ads - Smart System", layout="wide")
 
 def ar(text):
@@ -19,12 +18,10 @@ def ar(text):
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-# --- دالة التصدير المستقرة ---
 def export_stable_quotation(customer_name, cart_data, dates):
     doc = Document()
     section = doc.sections[0]
     section.right_to_left = True
-    
     if os.path.exists('logo.png'):
         header = section.header
         p = header.paragraphs[0]
@@ -67,20 +64,17 @@ def export_stable_quotation(customer_name, cart_data, dates):
     target.seek(0)
     return target
 
-# --- واجهة التطبيق ---
 if 'cart' not in st.session_state:
     st.session_state.cart = {}
 
-st.title("🏛️ نظام بريفيو الذكي (إدارة الشبكات والإشغال)")
+st.title("🏛️ نظام بريفيو الذكي")
 
 try:
     conn = get_connection()
     c1, c2 = st.columns(2)
 
     with c1:
-        st.subheader("📍 الفلترة واختيار الشبكات")
         cust = st.text_input("اسم الزبون", "وائل")
-        
         col_d1, col_d2 = st.columns(2)
         with col_d1: d_start = st.date_input("من تاريخ", pd.to_datetime("2026-05-01"))
         with col_d2: d_end = st.date_input("إلى تاريخ", pd.to_datetime("2026-05-28"))
@@ -88,8 +82,7 @@ try:
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
         city_sel = st.selectbox("المحافظة", cities)
 
-        # استعلام لجلب المواقع المتاحة فقط (غير محجوزة في هذه الفترة)
-        # نقارن مع جدول حجوزات1
+        # الاستعلام المصحح (بدون همزة على "الى")
         query_available = f"""
         SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] 
         FROM [اعمدة انارة] 
@@ -100,12 +93,10 @@ try:
         )
         """
         available_df = pd.read_sql(query_available, conn)
-        
-        # اختيار بالشبكة
         nets_in_city = available_df['الشبكة'].unique().tolist()
         selected_nets = st.multiselect("اختر الشبكات المتاحة:", nets_in_city)
         
-        if st.button("➕ إضافة الشبكات المختارة للعرض"):
+        if st.button("➕ إضافة للعرض"):
             if selected_nets:
                 city_dict = {}
                 for n in selected_nets:
@@ -114,24 +105,19 @@ try:
                 st.success(f"تمت إضافة شبكات {city_sel}")
 
     with c2:
-        st.subheader("🛒 مراجعة وتعديل العرض")
         if st.session_state.cart:
             for c in list(st.session_state.cart.keys()):
                 with st.expander(f"📍 محافظة {c}", expanded=True):
                     for n in list(st.session_state.cart[c].keys()):
                         st.write(f"🔗 {n}")
-                        # هنا يمكنك حذف أسطر يدوياً من الجدول
                         st.session_state.cart[c][n] = st.data_editor(st.session_state.cart[c][n], key=f"ed_{c}_{n}", num_rows="dynamic")
             
             if st.button("🗑️ مسح الكل"):
                 st.session_state.cart = {}; st.rerun()
 
-            if st.button("🚀 تصدير عرض السعر (Word)"):
+            if st.button("🚀 تصدير الوورد"):
                 dts = {'start': str(d_start), 'end': str(d_end)}
                 final_doc = export_stable_quotation(cust, st.session_state.cart, dts)
-                st.download_button("📥 تحميل الوورد", final_doc, f"Preview_{cust}.docx")
-        else:
-            st.info("لا توجد شبكات مختارة بعد.")
-
+                st.download_button("📥 تحميل الملف", final_doc, f"Preview_{cust}.docx")
 except Exception as e:
     st.error(f"خطأ تقني: {e}")
