@@ -10,35 +10,33 @@ from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
 # --- إعدادات الصفحة ---
-st.set_page_config(page_title="Preview Ads System", layout="wide")
+st.set_page_config(page_title="Preview Ads - Smart System", layout="wide")
 
 def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# --- دالة التصدير (الطريقة المبسطة والمستقرة) ---
+def get_connection():
+    return sqlite3.connect('billboards_data.db')
+
+# --- دالة التصدير المستقرة ---
 def export_stable_quotation(customer_name, cart_data, dates):
     doc = Document()
-    # إعدادات الورقة
     section = doc.sections[0]
     section.right_to_left = True
     
-    # إضافة الخلفية (Watermark) بطريقة كلاسيكية
     if os.path.exists('logo.png'):
         header = section.header
         p = header.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run()
-        run.add_picture('logo.png', width=Inches(7.5))
+        p.add_run().add_picture('logo.png', width=Inches(7.5))
 
-    # نص العرض
     doc.add_paragraph("\n\n")
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
     doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة من {dates['start']} لغاية {dates['end']} م")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    # بناء الجداول (جدول بسيط لكل شبكة)
     for city_name in cart_data:
         p_city = doc.add_paragraph()
         p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -48,27 +46,21 @@ def export_stable_quotation(customer_name, cart_data, dates):
 
         networks = cart_data[city_name]
         for net_name in networks:
-            doc.add_paragraph(ar(f"شبكات {net_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            
+            doc.add_paragraph(ar(f"شبكة: {net_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
             df = networks[net_name]
-            # بناء جدول بعمودين فقط (الأكثر استقراراً)
             table = doc.add_table(rows=1, cols=2)
             table.style = 'Table Grid'
-            
-            # الرأس
-            hdr_cells = table.rows[0].cells
-            hdr_cells[0].text = ar("العدد")
-            hdr_cells[1].text = ar("الموقع")
+            hdr = table.rows[0].cells
+            hdr[0].text = ar("العدد")
+            hdr[1].text = ar("الموقع")
 
-            # إضافة البيانات سطراً بسطر
             for i in range(len(df)):
-                row_cells = table.add_row().cells
-                # نأخذ القيمة من العمود الأول (الموقع) والثاني (العدد) بغض النظر عن الأسماء
-                row_cells[1].text = ar(str(df.iloc[i, 0]))
-                row_cells[0].text = str(df.iloc[i, 1])
+                row = table.add_row().cells
+                row[0].text = str(df.iloc[i, 1])
+                row[1].text = ar(df.iloc[i, 0])
 
             total_sum = pd.to_numeric(df.iloc[:, 1]).sum()
-            doc.add_paragraph(ar(f"العدد الإجمالي: [{int(total_sum)}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            doc.add_paragraph(ar(f"العدد الإجمالي لهذه الشبكة: [{int(total_sum)}]")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     target = io.BytesIO()
     doc.save(target)
@@ -79,49 +71,67 @@ def export_stable_quotation(customer_name, cart_data, dates):
 if 'cart' not in st.session_state:
     st.session_state.cart = {}
 
-st.title("🏗️ صانع عروض أسعار بريفيو")
+st.title("🏛️ نظام بريفيو الذكي (إدارة الشبكات والإشغال)")
 
 try:
-    conn = sqlite3.connect('billboards_data.db')
+    conn = get_connection()
     c1, c2 = st.columns(2)
 
     with c1:
+        st.subheader("📍 الفلترة واختيار الشبكات")
         cust = st.text_input("اسم الزبون", "وائل")
+        
+        col_d1, col_d2 = st.columns(2)
+        with col_d1: d_start = st.date_input("من تاريخ", pd.to_datetime("2026-05-01"))
+        with col_d2: d_end = st.date_input("إلى تاريخ", pd.to_datetime("2026-05-28"))
+        
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
-        city_sel = st.selectbox("اختر المحافظة", cities)
+        city_sel = st.selectbox("المحافظة", cities)
+
+        # استعلام لجلب المواقع المتاحة فقط (غير محجوزة في هذه الفترة)
+        # نقارن مع جدول حجوزات1
+        query_available = f"""
+        SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] 
+        FROM [اعمدة انارة] 
+        WHERE المحافظة = '{city_sel}'
+        AND [رقم اللوحة] NOT IN (
+            SELECT [رقم اللوحة] FROM [حجوزات1]
+            WHERE NOT (([تاريخ الحجز الى] < '{d_start}') OR ([تاريخ الحجز من] > '{d_end}'))
+        )
+        """
+        available_df = pd.read_sql(query_available, conn)
         
-        # جلب البيانات
-        raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{city_sel}'", conn)
-        locs = st.multiselect("اختر المواقع:", raw['الموقع'].tolist())
+        # اختيار بالشبكة
+        nets_in_city = available_df['الشبكة'].unique().tolist()
+        selected_nets = st.multiselect("اختر الشبكات المتاحة:", nets_in_city)
         
-        if st.button("➕ إضافة للعرض"):
-            if locs:
-                filt = raw[raw['الموقع'].isin(locs)]
-                # تخزين البيانات في سلة التسوق
+        if st.button("➕ إضافة الشبكات المختارة للعرض"):
+            if selected_nets:
                 city_dict = {}
-                for n in filt['الشبكة'].unique():
-                    city_dict[n] = filt[filt['الشبكة'] == n][['الموقع', 'العدد']]
+                for n in selected_nets:
+                    city_dict[n] = available_df[available_df['الشبكة'] == n][['الموقع', 'العدد']]
                 st.session_state.cart[city_sel] = city_dict
-                st.success("تمت الإضافة")
+                st.success(f"تمت إضافة شبكات {city_sel}")
 
     with c2:
+        st.subheader("🛒 مراجعة وتعديل العرض")
         if st.session_state.cart:
             for c in list(st.session_state.cart.keys()):
-                with st.expander(f"📍 {c}", expanded=True):
+                with st.expander(f"📍 محافظة {c}", expanded=True):
                     for n in list(st.session_state.cart[c].keys()):
                         st.write(f"🔗 {n}")
-                        st.session_state.cart[c][n] = st.data_editor(st.session_state.cart[c][n], key=f"ed_{c}_{n}")
+                        # هنا يمكنك حذف أسطر يدوياً من الجدول
+                        st.session_state.cart[c][n] = st.data_editor(st.session_state.cart[c][n], key=f"ed_{c}_{n}", num_rows="dynamic")
             
             if st.button("🗑️ مسح الكل"):
-                st.session_state.cart = {}
-                st.rerun()
+                st.session_state.cart = {}; st.rerun()
 
-            if st.button("🚀 تصدير الملف النهائي"):
-                dts = {'start': "1/5/2026", 'end': "28/5/2026"}
+            if st.button("🚀 تصدير عرض السعر (Word)"):
+                dts = {'start': str(d_start), 'end': str(d_end)}
                 final_doc = export_stable_quotation(cust, st.session_state.cart, dts)
-                st.download_button("📥 تحميل الوورد", final_doc, f"Quotation_{cust}.docx")
+                st.download_button("📥 تحميل الوورد", final_doc, f"Preview_{cust}.docx")
         else:
-            st.info("سلة المواقع فارغة")
+            st.info("لا توجد شبكات مختارة بعد.")
 
 except Exception as e:
-    st.error(f"خطأ: {e}")
+    st.error(f"خطأ تقني: {e}")
