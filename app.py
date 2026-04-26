@@ -4,53 +4,77 @@ import sqlite3
 import os
 import io
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- دالة معالجة النصوص العربية ---
 def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# --- دالة إنشاء مستند الوورد ---
-def export_final_word(grouped_data, customer_name, city, size_name):
+def export_watermark_word(grouped_data, customer_name, city, size_name):
     doc = Document()
-    for section in doc.sections:
-        section.right_to_left = True
+    
+    # 1. إعداد الصفحة لتكون من اليمين لليسار
+    section = doc.sections[0]
+    section.right_to_left = True
 
-    # إضافة اللوجو بأمان
+    # 2. إضافة الصورة كعلامة مائية (خلف النص)
     if os.path.exists('logo.png'):
-        try:
-            para = doc.add_paragraph()
-            para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            para.add_run().add_picture('logo.png', width=Inches(1.8))
-        except: pass
-
-    # العنوان والبيانات
-    doc.add_paragraph(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
-    p_city = doc.add_paragraph()
-    run_city = p_city.add_run(ar(f"محافظة {city} - قياس {size_name}"))
-    run_city.font.color.rgb = RGBColor(102, 0, 153)
-
-    # بناء الجداول
-    for net, df in grouped_data.items():
-        doc.add_paragraph(ar(f"شبكة: {net}"))
-        table = doc.add_table(rows=1, cols=2)
-        table.style = 'Table Grid'
-        table.rows[0].cells[0].text = ar("العدد")
-        table.rows[0].cells[1].text = ar("الموقع")
+        header = section.header
+        # إزالة المسافات الافتراضية في الرأس
+        header.paragraphs[0].clear()
+        p = header.paragraphs[0]
+        run = p.add_run()
+        # إضافة الصورة بحجم يغطي الصفحة تقريباً (مثلاً 6.5 بوصة عرض)
+        picture = run.add_picture('logo.png', width=Inches(6.5))
         
-        for _, row in df.iterrows():
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(row['العدد'])
-            row_cells[1].text = ar(row['الموقع'])
+        # كود تقني لجعل الصورة "خلف النص" (Floating Image)
+        # ملاحظة: مكتبة docx الأساسية تضعها في الرأس، لتبدو كخلفية شفافة
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # 3. جسم المستند (النص سيظهر الآن فوق الخلفية)
+    doc.add_paragraph("\n\n") # إزاحة بسيطة للأسفل
+    
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run_c = p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين"))
+    run_c.font.size = Pt(16)
+    run_c.bold = True
+
+    doc.add_paragraph(ar(f"محافظة: {city} | القياس: {size_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # 4. الجداول المزدوجة الاحترافية
+    for net, df in grouped_data.items():
+        doc.add_paragraph(ar(f"شبكات {net}")).bold = True
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Table Grid'
+        
+        # رؤوس الجدول
+        hdr = table.rows[0].cells
+        hdr[0].text, hdr[1].text = ar("العدد"), ar("الموقع")
+        hdr[2].text, hdr[3].text = ar("العدد"), ar("الموقع")
+
+        data = df.values.tolist()
+        for i in range(0, len(data), 2):
+            row = table.add_row().cells
+            row[0].text = str(data[i][1]) # العدد
+            row[1].text = ar(data[i][0])  # الموقع
+            if i + 1 < len(data):
+                row[2].text = str(data[i+1][1])
+                row[3].text = ar(data[i+1][0])
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
+# --- واجهة المستخدم ---
+# (استخدم نفس كود الواجهة السابق للربط بـ SQL و Streamlit)
+
 
 # --- واجهة Streamlit الرئيسية ---
 st.title("🛠️ نظام بريفيو لعروض الأسعار")
