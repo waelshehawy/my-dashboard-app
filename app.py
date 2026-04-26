@@ -135,3 +135,29 @@ try:
 
 except Exception as e:
     st.error(f"خطأ: {e}")
+    if st.button("📝 تثبيت المواقع كعقد رسمي"):
+    if st.session_state.cart:
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            for city, networks in st.session_state.cart.items():
+                for net, df in networks.items():
+                    for i in range(len(df)):
+                        # جلب رقم اللوحة بناءً على الاسم
+                        pole_name = df.iloc[i, 0]
+                        p_id_query = f"SELECT [رقم اللوحة] FROM [اعمدة انارة] WHERE [اسم العمود] = '{pole_name}'"
+                        p_id = cursor.execute(p_id_query).fetchone()[0]
+                        
+                        # إدراج في جدول الحجوزات
+                        insert_sql = """
+                        INSERT INTO [حجوزات1] ([رقم اللوحة], [اسم الزبون], [تاريخ الحجز من], [تاريخ الحجز الى], [رسوم مؤسسة])
+                        VALUES (?, ?, ?, ?, ?)
+                        """
+                        cursor.execute(insert_sql, (p_id, cust, d_start, d_end, df.iloc[i, 3])) # 3 هو عمود السعر
+            
+            conn.commit()
+            st.success(f"✅ تم تثبيت العقد للزبون {cust} وحجز المواقع بنجاح!")
+            st.session_state.cart = {} # تفريغ السلة بعد التثبيت
+        except Exception as e:
+            st.error(f"خطأ أثناء التثبيت: {e}")
+
