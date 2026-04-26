@@ -47,7 +47,7 @@ def add_float_picture(doc, image_path, width, height):
     anchor.append(inline.graphic)
     inline.getparent().replace(inline, anchor)
 
-# --- دالة التصدير الأساسية ---
+# --- دالة التصدير الأساسية المصححة ---
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
     section = doc.sections[0]
@@ -55,11 +55,10 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     section.page_height = Inches(11.69)
     section.page_width = Inches(8.27)
     
-    # إضافة الخلفية
     if os.path.exists('logo.png'):
         add_float_picture(doc, 'logo.png', width=Inches(8.27), height=Inches(11.69))
 
-    # جسم المستند
+    # إزاحة للنص لكي لا يبدأ من أعلى الورقة تماماً
     for _ in range(4): doc.add_paragraph() 
     
     p_cust = doc.add_paragraph()
@@ -76,20 +75,29 @@ def export_final_quotation(customer_name, all_selected_data, dates):
 
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            
+            # إنشاء جدول بـ 4 أعمدة
             table = doc.add_table(rows=1, cols=4)
             table.style = 'Table Grid'
-            hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text = ar("العدد"), ar("الموقع")
-            hdr[2].text, hdr[3].text = ar("العدد"), ar("الموقع")
+            
+            # تعبئة الرؤوس يدوياً لتجنب خطأ الـ Unpack
+            hdr_cells = table.rows[0].cells
+            hdr_cells[0].text = ar("العدد")
+            hdr_cells[1].text = ar("الموقع")
+            hdr_cells[2].text = ar("العدد")
+            hdr_cells[3].text = ar("الموقع")
 
-            data_list = df.values.tolist()
+            # توزيع البيانات
+            data_list = df.values.tolist() # [الموقع, العدد]
             for i in range(0, len(data_list), 2):
-                row = table.add_row().cells
-                row[0].text = str(data_list[i][1]) # العدد
-                row[1].text = ar(data_list[i][0])  # الموقع
+                row_cells = table.add_row().cells
+                # الزوج الأول
+                row_cells[0].text = str(data_list[i][1]) # العدد
+                row_cells[1].text = ar(data_list[i][0])  # الموقع
+                # الزوج الثاني إن وجد
                 if i + 1 < len(data_list):
-                    row[2].text = str(data_list[i+1][1])
-                    row[3].text = ar(data_list[i+1][0])
+                    row_cells[2].text = str(data_list[i+1][1])
+                    row_cells[3].text = ar(data_list[i+1][0])
             
             total = df['العدد'].astype(int).sum()
             doc.add_paragraph(ar(f"العدد: [{total}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -127,8 +135,9 @@ try:
     with col_view:
         if st.session_state.cart:
             for c_name, networks in st.session_state.cart.items():
-                with st.expander(f"📍 {c_name}"):
+                with st.expander(f"📍 {c_name}", expanded=True):
                     for n_name, d_frame in networks.items():
+                        st.write(f"🔗 شبكة {n_name}")
                         st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
             
             if st.button("🗑️ مسح الكل"):
@@ -136,7 +145,9 @@ try:
 
             if st.button("🚀 تصدير الوورد"):
                 dates = {'start': "1 /5 /2026", 'end': "28 /5 /2026"}
-                file = export_final_quotation(cust, st.session_state.cart, dates)
-                st.download_button("📥 تحميل الملف", file, f"Preview_{cust}.docx")
+                file_out = export_final_quotation(cust, st.session_state.cart, dates)
+                st.download_button("📥 تحميل الملف", file_out, f"Preview_{cust}.docx")
+        else:
+            st.info("القائمة فارغة، اختر محافظة ومواقع ثم اضغط 'إضافة'.")
 except Exception as e:
     st.error(f"خطأ: {e}")
