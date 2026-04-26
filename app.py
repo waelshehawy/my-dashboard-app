@@ -8,8 +8,7 @@ from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 import io
 
-# إعداد الصفحة
-st.set_page_config(page_title="صانع عروض بريفيو", layout="wide")
+st.set_page_config(page_title="Preview Quotation System", layout="wide")
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
@@ -18,104 +17,97 @@ def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# دالة تصدير الوورد المتقدمة
-def export_to_word(df, customer_name, city):
+# --- دالة التصدير المتقدمة (جداول متعددة حسب الشبكة) ---
+def export_advanced_word(grouped_data, customer_name, city, size_name):
     doc = Document()
-    # إعداد المستند ليدعم العربي من اليمين لليسار
     for section in doc.sections:
         section.right_to_left = True
 
-    # 1. اللوجو
+    # 1. اللوجو في اليسار
     try:
-        doc.add_picture('logo.png', width=Inches(1.5))
-        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    except:
-        pass
+        doc.add_picture('logo.png', width=Inches(1.2))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.LEFT
+    except: pass
 
-    # 2. العنوان
+    # 2. العنوان والبيانات
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run(ar("عرض سعر إعلاني"))
-    run.font.size = Pt(20)
-    run.font.bold = True
-    run.font.color.rgb = RGBColor(102, 0, 153) # بنفسجي بريفيو
+    run = title.add_run(ar(f"عرض سعر إعلاني - محافظة {city}"))
+    run.font.size, run.font.bold, run.font.color.rgb = Pt(18), True, RGBColor(102, 0, 153)
 
-    # 3. بيانات العميل
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p.add_run(ar(f"السادة: {customer_name} المحترمين")).bold = True
-    p.add_run(f"\n{ar('المحافظة:')} {ar(city)}")
+    p.add_run(f"\n{ar('القياس:')} {ar(size_name)}")
 
-    # 4. بناء الجدول بناءً على ما عدله المستخدم في المتصفح
-    table = doc.add_table(rows=1, cols=len(df.columns))
-    table.style = 'Table Grid'
-    
-    # العناوين
-    hdr_cells = table.rows[0].cells
-    for i, col_name in enumerate(df.columns):
-        hdr_cells[i].text = ar(col_name)
-    
-    # الصفوف
-    for _, row in df.iterrows():
-        row_cells = table.add_row().cells
-        for i, value in enumerate(row):
-            row_cells[i].text = ar(str(value))
-
-    # 5. التذييل
-    doc.add_paragraph("\n")
-    footer = doc.add_paragraph(ar("شكراً لثقتكم بنا - فريق بريفيو"))
-    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # 3. إنشاء جداول منفصلة لكل شبكة
+    for network_name, group_df in grouped_data.items():
+        doc.add_paragraph("\n")
+        doc.add_paragraph(ar(f"شبكة: {network_name}")).bold = True
+        
+        table = doc.add_table(rows=1, cols=len(group_df.columns))
+        table.style = 'Table Grid'
+        
+        # الرؤوس
+        for i, col in enumerate(group_df.columns):
+            table.rows[0].cells[i].text = ar(col)
+        
+        # البيانات
+        for _, row in group_df.iterrows():
+            row_cells = table.add_row().cells
+            for i, val in enumerate(row):
+                row_cells[i].text = ar(str(val))
+        
+        # تذييل الجدول (المجاميع والأسعار)
+        total_poles = group_df['العدد'].astype(int).sum()
+        footer = doc.add_paragraph()
+        footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        footer.add_run(ar(f"مجموع الأعمدة: {total_poles} | "))
+        footer.add_run(ar("أجور الطباعة والتركيب للوجه الواحد: $_____ | "))
+        footer.add_run(ar("أجور العرض لشهر واحد: $_____"))
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
 
-# --- واجهة المستخدم ---
-st.title("🛠️ بناء وتعديل عرض السعر")
+# --- الواجهة ---
+st.title("🏛️ صانع العروض المبوب (حسب الشبكات)")
 
 conn = get_connection()
+# جلب المقاسات والمحافظات
+sizes_df = pd.read_sql("SELECT [الحجم] FROM [اساسي حجم]", conn)
 cities_list = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
 
-col_set, col_edit = st.columns([1, 2])
+col_s, col_e = st.columns([1, 2])
 
-with col_set:
-    st.subheader("1. البيانات الأساسية")
-    cust_name = st.text_input("اسم العميل", "شركة بريفيو")
-    selected_city = st.selectbox("اختر المحافظة", cities_list)
+with col_s:
+    cust_name = st.text_input("اسم العميل")
+    city = st.selectbox("اختر المحافظة", cities_list)
+    size = st.selectbox("اختر مقاس اللوحة", sizes_df['الحجم'].tolist())
     
-    # جلب اللوحات الخاصة بالمحافظة المختارة
-    query = f"SELECT [اسم العمود] as الموقع, [العدد], [الحجم] FROM [اعمدة انارة] WHERE المحافظة = '{selected_city}'"
-    available_poles = pd.read_sql(query, conn)
+    # جلب البيانات مجمعة حسب الشبكة
+    query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{city}' AND [الحجم] = '{size}'"
+    raw_data = pd.read_sql(query, conn)
     
-    selected_items = st.multiselect("اختر المواقع لإضافتها للعرض:", available_poles['الموقع'].tolist())
+    selected_locations = st.multiselect("اختر المواقع:", raw_data['الموقع'].tolist())
 
-with col_edit:
-    st.subheader("2. تخصيص الجدول (تعديل/حذف/إضافة)")
-    
-    # إنشاء الجدول الأولي بناءً على الاختيار
-    display_df = available_poles[available_poles['الموقع'].isin(selected_items)].copy()
-    
-    # إضافة أعمدة فارغة للتعبئة اليدوية
-    if 'السعر' not in display_df.columns:
-        display_df['السعر'] = "0"
-    
-    # محرر الجداول التفاعلي
-    edited_df = st.data_editor(display_df, num_rows="dynamic", use_container_width=True)
+with col_e:
+    if selected_locations:
+        filtered_df = raw_data[raw_data['الموقع'].isin(selected_locations)]
+        
+        # تقسيم البيانات برمجياً لعرضها في المتصفح
+        networks = filtered_df['الشبكة'].unique()
+        final_grouped_data = {}
 
-    st.divider()
-    
-    # زر التجهيز والتحميل
-    if st.button("🚀 إنشاء ملف الوورد النهائي"):
-        if not edited_df.empty:
-            word_output = export_to_word(edited_df, cust_name, selected_city)
-            
-            # ظهور زر التحميل مباشرة بعد التجهيز
-            st.download_button(
-                label="📥 اضغط هنا لتحميل ملف الوورد",
-                data=word_output,
-                file_name=f"Quotation_{cust_name}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        else:
-            st.warning("يرجى اختيار موقع واحد على الأقل.")
+        for net in networks:
+            st.write(f"🔗 **شبكة: {net}**")
+            net_df = filtered_df[filtered_df['الشبكة'] == net][['الموقع', 'العدد']]
+            edited = st.data_editor(net_df, key=f"edit_{net}", num_rows="dynamic")
+            final_grouped_data[net] = edited
+
+        if st.button("🚀 تصدير العرض المبوب (Word)"):
+            doc_file = export_advanced_word(final_grouped_data, cust_name, city, size)
+            st.download_button("📥 تحميل العرض النهائي", doc_file, f"Quotation_{city}.docx")
+    else:
+        st.info("يرجى اختيار المحافظة والمقاس ثم تحديد المواقع للبدء.")
