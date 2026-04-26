@@ -10,7 +10,7 @@ from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- Page Config ---
+# --- إعدادات الصفحة ---
 st.set_page_config(page_title="Preview Ads System", layout="wide")
 
 def ar(text):
@@ -18,9 +18,9 @@ def ar(text):
     return get_display(reshape(str(text)))
 
 def add_float_picture(doc, image_path, width, height):
-    header = doc.sections[0].header
+    header = doc.sections.header
     if not header.paragraphs: header.add_paragraph()
-    run = header.paragraphs[0].add_run()
+    run = header.paragraphs.add_run()
     shape = run.add_picture(image_path, width=width, height=height)
     inline = shape._inline
     extent = inline.extent
@@ -39,15 +39,16 @@ def add_float_picture(doc, image_path, width, height):
     anchor.append(inline.graphic)
     inline.getparent().replace(inline, anchor)
 
+# --- دالة التصدير باستخدام الإحداثيات (أكثر أماناً) ---
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
-    section = doc.sections[0]
+    section = doc.sections
     section.right_to_left = True
     
     if os.path.exists('logo.png'):
         add_float_picture(doc, 'logo.png', width=Inches(8.27), height=Inches(11.69))
 
-    for _ in range(4): doc.add_paragraph() 
+    for _ in range(5): doc.add_paragraph() 
     
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -63,31 +64,32 @@ def export_final_quotation(customer_name, all_selected_data, dates):
 
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            table = doc.add_table(rows=1, cols=4)
+            
+            # تنظيف البيانات لضمان وجود عمودين فقط (الموقع والعدد)
+            current_df = df[['الموقع', 'العدد']].reset_index(drop=True)
+            num_rows = (len(current_df) + 1) // 2
+            
+            # إنشاء الجدول (عدد الصفوف + 1 للرأس، و 4 أعمدة)
+            table = doc.add_table(rows=num_rows + 1, cols=4)
             table.style = 'Table Grid'
             
-            # Header Cells - Assigning one by one
-            hdr = table.rows[0].cells
-            hdr[0].text = ar("العدد")
-            hdr[1].text = ar("الموقع")
-            hdr[2].text = ar("العدد")
-            hdr[3].text = ar("الموقع")
+            # 1. تعبئة الرأس يدوياً بالكامل
+            table.cell(0, 0).text = ar("العدد")
+            table.cell(0, 1).text = ar("الموقع")
+            table.cell(0, 2).text = ar("العدد")
+            table.cell(0, 3).text = ar("الموقع")
 
-            # Clean and Convert data to list
-            clean_list = df[['الموقع', 'العدد']].values.tolist()
+            # 2. تعبئة البيانات باستخدام الإحداثيات (صف، عمود)
+            for i in range(len(current_df)):
+                row_idx = (i // 2) + 1 # تحديد أي صف في الوورد
+                col_offset = 0 if (i % 2 == 0) else 2 # تحديد البدء من العمود 0 أو 2
+                
+                # تعبئة الخلية (العدد)
+                table.cell(row_idx, col_offset).text = str(current_df.iloc[i]['العدد'])
+                # تعبئة الخلية (الموقع)
+                table.cell(row_idx, col_offset + 1).text = ar(current_df.iloc[i]['الموقع'])
             
-            # Fill the table using indices [i][0] and [i][1] to avoid unpacking errors
-            for i in range(0, len(clean_list), 2):
-                row_cells = table.add_row().cells
-                # First Pair
-                row_cells[0].text = str(clean_list[i][1]) # Count
-                row_cells[1].text = ar(clean_list[i][0])  # Location
-                # Second Pair (if exists)
-                if i + 1 < len(clean_list):
-                    row_cells[2].text = str(clean_list[i+1][1])
-                    row_cells[3].text = ar(clean_list[i+1][0])
-            
-            total = df['العدد'].astype(int).sum()
+            total = current_df['العدد'].astype(int).sum()
             doc.add_paragraph(ar(f"العدد: [{total}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     target = io.BytesIO()
@@ -95,44 +97,45 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     target.seek(0)
     return target
 
-# --- Main App ---
+# --- واجهة التطبيق ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
 
 st.title("🏗️ Preview Quotation System")
 
 try:
     conn = sqlite3.connect('billboards_data.db')
-    col_in, col_view = st.columns([1, 2])
+    col_in, col_view = st.columns()
 
     with col_in:
-        cust = st.text_input("Customer Name", "Wael")
+        cust = st.text_input("اسم الزبون", "وائل")
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
-        sel_city = st.selectbox("Select City", cities)
+        sel_city = st.selectbox("اختر المحافظة", cities)
         raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
-        selected_locs = st.multiselect(f"Available in {sel_city}:", raw_df['الموقع'].tolist())
+        selected_locs = st.multiselect(f"مواقع {sel_city}:", raw_df['الموقع'].tolist())
         
-        if st.button("➕ Add to Quotation"):
+        if st.button("➕ إضافة للعرض"):
             if selected_locs:
                 filtered = raw_df[raw_df['الموقع'].isin(selected_locs)]
                 st.session_state.cart[sel_city] = {net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] for net in filtered['الشبكة'].unique()}
-                st.success(f"Added {sel_city}")
+                st.success(f"تمت إضافة {sel_city}")
 
     with col_view:
         if st.session_state.cart:
             for c_name, networks in st.session_state.cart.items():
                 with st.expander(f"📍 {c_name}", expanded=True):
                     for n_name, d_frame in networks.items():
-                        st.write(f"🔗 Network: {n_name}")
+                        st.write(f"🔗 شبكة {n_name}")
+                        # حفظ التعديلات في الذاكرة
                         st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
             
-            if st.button("🗑️ Clear All"):
+            if st.button("🗑️ مسح الكل"):
                 st.session_state.cart = {}; st.rerun()
 
-            if st.button("🚀 Export Full Quotation (Word)"):
+            if st.button("🚀 تصدير الوورد"):
                 dates = {'start': "1 /5 /2026", 'end': "28 /5 /2026"}
                 file_out = export_final_quotation(cust, st.session_state.cart, dates)
-                st.download_button("📥 Download", file_out, f"Preview_{cust}.docx")
+                st.download_button("📥 تحميل الملف", file_out, f"Preview_{cust}.docx")
         else:
-            st.info("Your list is empty.")
+            st.info("القائمة فارغة.")
 except Exception as e:
-    st.error(f"Error: {e}")
+    st.error(f"خطأ: {e}")
