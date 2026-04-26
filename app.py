@@ -27,8 +27,8 @@ def export_final_quotation(customer_name, cart_data, dates):
     if os.path.exists('logo.png'):
         header = section.header
         p = header.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(7.5))
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.add_run().add_picture('logo.png')
 
     doc.add_paragraph("\n\n")
     p_cust = doc.add_paragraph()
