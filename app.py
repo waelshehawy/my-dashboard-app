@@ -7,10 +7,11 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- Page Settings ---
+# --- Page Config ---
 st.set_page_config(page_title="Preview Ads System", layout="wide")
 
 def ar(text):
@@ -18,18 +19,13 @@ def ar(text):
     return get_display(reshape(str(text)))
 
 def add_float_picture(doc, image_path, width, height):
-    # Fix: Access the first section specifically
     header = doc.sections[0].header
-    if not header.paragraphs: 
-        header.add_paragraph()
-    paragraph = header.paragraphs[0]
-    run = paragraph.add_run()
+    if not header.paragraphs: header.add_paragraph()
+    run = header.paragraphs[0].add_run()
     shape = run.add_picture(image_path, width=width, height=height)
-    
     inline = shape._inline
     extent = inline.extent
     doc_pr = inline.docPr
-    
     anchor_xml = f"""
     <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1" xmlns:wp="http://openxmlformats.org">
         <wp:simplePos x="0" y="0"/>
@@ -44,9 +40,10 @@ def add_float_picture(doc, image_path, width, height):
     anchor.append(inline.graphic)
     inline.getparent().replace(inline, anchor)
 
+# --- Updated Export Logic ---
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
-    section = doc.sections[0] # Target first section
+    section = doc.sections[0]
     section.right_to_left = True
     
     if os.path.exists('logo.png'):
@@ -69,26 +66,30 @@ def export_final_quotation(customer_name, all_selected_data, dates):
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
             
-            current_df = df[['الموقع', 'العدد']].reset_index(drop=True)
+            # STRICT FILTERING: Only take the first two columns (Location and Count)
+            # This prevents the "expected 2, got 18" error
+            current_df = df.iloc[:, :2].reset_index(drop=True)
             num_rows = (len(current_df) + 1) // 2
             
             table = doc.add_table(rows=num_rows + 1, cols=4)
             table.style = 'Table Grid'
             
-            # Fill headers manually by coordinates
+            # Fill headers manually
             table.cell(0, 0).text = ar("العدد")
             table.cell(0, 1).text = ar("الموقع")
             table.cell(0, 2).text = ar("العدد")
             table.cell(0, 3).text = ar("الموقع")
 
-            # Fill data using coordinates (row, col)
+            # Fill data cell by cell based on location in the clean slice
             for i in range(len(current_df)):
                 row_idx = (i // 2) + 1
                 col_offset = 0 if (i % 2 == 0) else 2
-                table.cell(row_idx, col_offset).text = str(current_df.iloc[i]['العدد'])
-                table.cell(row_idx, col_offset + 1).text = ar(current_df.iloc[i]['الموقع'])
+                
+                # Column 1 of DF is the location, Column 2 is the count
+                table.cell(row_idx, col_offset).text = str(current_df.iloc[i, 1])
+                table.cell(row_idx, col_offset + 1).text = ar(current_df.iloc[i, 0])
             
-            total = current_df['العدد'].astype(int).sum()
+            total = current_df.iloc[:, 1].astype(int).sum()
             doc.add_paragraph(ar(f"العدد: [{total}] | أجور الطباعة: $ | أجور العرض: $")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     target = io.BytesIO()
@@ -96,7 +97,7 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     target.seek(0)
     return target
 
-# --- Main Interface ---
+# --- App Logic ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
 
 st.title("🏗️ Preview Quotation Builder")
@@ -110,15 +111,17 @@ try:
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
         sel_city = st.selectbox("اختر المحافظة", cities)
         
-        # Fixed selection to include [الشبكة]
         raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
         selected_locs = st.multiselect(f"مواقع {sel_city}:", raw_df['الموقع'].tolist())
         
         if st.button("➕ إضافة للعرض"):
             if selected_locs:
                 filtered = raw_df[raw_df['الموقع'].isin(selected_locs)]
-                # Add to memory cart
-                st.session_state.cart[sel_city] = {net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] for net in filtered['الشبكة'].unique()}
+                # Save as clean 2-column dataframes in memory
+                st.session_state.cart[sel_city] = {
+                    net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] 
+                    for net in filtered['الشبكة'].unique()
+                }
                 st.success(f"تمت إضافة {sel_city}")
 
     with col_view:
@@ -130,11 +133,10 @@ try:
                         st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
             
             if st.button("🗑️ مسح الكل"):
-                st.session_state.cart = {}
-                st.rerun()
+                st.session_state.cart = {}; st.rerun()
 
             if st.button("🚀 تصدير الوورد"):
-                dates = {'start': "1 /5 /2026", 'end': "28 /5 /2026"}
+                dates = {'start': "1 / 5 / 2026", 'end': "28 / 5 / 2026"}
                 file_out = export_final_quotation(cust, st.session_state.cart, dates)
                 st.download_button("📥 تحميل المستند", file_out, f"Preview_{cust}.docx")
         else:
