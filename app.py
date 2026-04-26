@@ -8,7 +8,7 @@ from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 import io
 
-st.set_page_config(page_title="Preview Quotation System", layout="wide")
+st.set_page_config(page_title="Preview Quotation Generator", layout="wide")
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
@@ -17,97 +17,115 @@ def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# --- دالة التصدير المتقدمة (جداول متعددة حسب الشبكة) ---
-def export_advanced_word(grouped_data, customer_name, city, size_name):
+# --- دالة التصدير المتطابقة مع النموذج الصوري ---
+def export_preview_word(grouped_data, customer_name, city, size_name, date_info):
     doc = Document()
     for section in doc.sections:
         section.right_to_left = True
+        section.top_margin = Inches(0.5)
 
-    # 1. اللوجو في اليسار
+    # 1. الشعار في الزاوية اليسرى العليا
     try:
-        doc.add_picture('logo.png', width=Inches(1.2))
+        doc.add_picture('logo.png', width=Inches(1.8))
         doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.LEFT
     except: pass
 
-    # 2. العنوان والبيانات
-    title = doc.add_paragraph()
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run(ar(f"عرض سعر إعلاني - محافظة {city}"))
-    run.font.size, run.font.bold, run.font.color.rgb = Pt(18), True, RGBColor(102, 0, 153)
+    # 2. التاريخ واسم الزبون
+    p_date = doc.add_paragraph()
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.add_run(ar(f"التاريخ: {date_info['current_date']}"))
 
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p.add_run(ar(f"السادة: {customer_name} المحترمين")).bold = True
-    p.add_run(f"\n{ar('القياس:')} {ar(size_name)}")
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_cust.add_run(ar(f"السادة شركة .. {customer_name} .....")).bold = True
+    
+    doc.add_paragraph(ar("تحية طيبة،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني من تاريخ {date_info['start']} لغاية {date_info['end']}م")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    # 3. إنشاء جداول منفصلة لكل شبكة
-    for network_name, group_df in grouped_data.items():
-        doc.add_paragraph("\n")
-        doc.add_paragraph(ar(f"شبكة: {network_name}")).bold = True
+    # 3. بيانات المحافظة والقياس
+    p_city = doc.add_paragraph()
+    p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run_city = p_city.add_run(ar(f"محافظة {city}"))
+    run_city.font.color.rgb = RGBColor(102, 0, 153) # البنفسجي
+    
+    doc.add_paragraph(ar(f"لوحات قياس {size_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # 4. تكرار الجداول حسب الشبكة
+    for network, df in grouped_data.items():
+        doc.add_paragraph(ar(f"شبكات {network}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
         
-        table = doc.add_table(rows=1, cols=len(group_df.columns))
+        # إنشاء الجدول (4 أعمدة كما في الصورة لتقسيم العرض)
+        table = doc.add_table(rows=1, cols=4)
         table.style = 'Table Grid'
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text, hdr_cells[1].text = ar("العدد"), ar("الموقع")
+        hdr_cells[2].text, hdr_cells[3].text = ar("العدد"), ar("الموقع")
         
-        # الرؤوس
-        for i, col in enumerate(group_df.columns):
-            table.rows[0].cells[i].text = ar(col)
-        
-        # البيانات
-        for _, row in group_df.iterrows():
+        # ملء البيانات (توزيع المواقع على عمودين مزدوجين)
+        rows = df.values.tolist()
+        for i in range(0, len(rows), 2):
             row_cells = table.add_row().cells
-            for i, val in enumerate(row):
-                row_cells[i].text = ar(str(val))
-        
-        # تذييل الجدول (المجاميع والأسعار)
-        total_poles = group_df['العدد'].astype(int).sum()
-        footer = doc.add_paragraph()
-        footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        footer.add_run(ar(f"مجموع الأعمدة: {total_poles} | "))
-        footer.add_run(ar("أجور الطباعة والتركيب للوجه الواحد: $_____ | "))
-        footer.add_run(ar("أجور العرض لشهر واحد: $_____"))
+            row_cells[0].text = str(rows[i][1]) # العدد
+            row_cells[1].text = ar(rows[i][0])   # الموقع
+            if i + 1 < len(rows):
+                row_cells[2].text = str(rows[i+1][1])
+                row_cells[3].text = ar(rows[i+1][0])
+
+        # تذييل الجدول المالي
+        total = df['العدد'].astype(int).sum()
+        f_p = doc.add_paragraph()
+        f_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        f_p.add_run(ar(f"العدد: [{total}]  أجور الطباعة والتركيب للوحة الواحدة للوجه الواحد: [$ ]  أجور العرض للوحة الواحدة لشهر واحد: [$ ]"))
+
+    # 5. الشروط النهائية
+    doc.add_paragraph("\n")
+    doc.add_paragraph(ar("- إذا تم اعتماد المدة شهرين يوجد حسم على سعر العرض")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    last_p = doc.add_paragraph(ar("- هذه المواقع المتاحة سارية حتى 48 ساعة من تاريخ إرسالها للشركة"))
+    last_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    last_p.runs[0].bold = True
+
+    # 6. التذييل (معلومات الاتصال) - محاكاة بسيطة
+    doc.add_paragraph("\n" + "_"*50)
+    contact = doc.add_paragraph(ar("Syria - Aleppo - Damascus | Tel: +963 93 94 | info@previewsyria.com"))
+    contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
 
-# --- الواجهة ---
-st.title("🏛️ صانع العروض المبوب (حسب الشبكات)")
+# --- واجهة المستخدم ---
+st.title("🛠️ مولد عروض أسعار بريفيو الاحترافي")
 
 conn = get_connection()
-# جلب المقاسات والمحافظات
-sizes_df = pd.read_sql("SELECT [الحجم] FROM [اساسي حجم]", conn)
-cities_list = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
+sizes = pd.read_sql("SELECT [الحجم] FROM [اساسي حجم]", conn)['الحجم'].tolist()
+cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
 
-col_s, col_e = st.columns([1, 2])
+with st.sidebar:
+    st.header("بيانات العرض")
+    cust = st.text_input("اسم الزبون")
+    sel_city = st.selectbox("المحافظة", cities)
+    sel_size = st.selectbox("القياس", sizes)
+    date_s = st.text_input("تاريخ البدء", "1 /5 /2026")
+    date_e = st.text_input("تاريخ الانتهاء", "28 /5 /2026")
 
-with col_s:
-    cust_name = st.text_input("اسم العميل")
-    city = st.selectbox("اختر المحافظة", cities_list)
-    size = st.selectbox("اختر مقاس اللوحة", sizes_df['الحجم'].tolist())
-    
-    # جلب البيانات مجمعة حسب الشبكة
-    query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{city}' AND [الحجم] = '{size}'"
-    raw_data = pd.read_sql(query, conn)
-    
-    selected_locations = st.multiselect("اختر المواقع:", raw_data['الموقع'].tolist())
+# جلب البيانات
+query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}' AND [الحجم] = '{sel_size}'"
+raw_df = pd.read_sql(query, conn)
 
-with col_e:
-    if selected_locations:
-        filtered_df = raw_data[raw_data['الموقع'].isin(selected_locations)]
-        
-        # تقسيم البيانات برمجياً لعرضها في المتصفح
-        networks = filtered_df['الشبكة'].unique()
-        final_grouped_data = {}
+selected_locs = st.multiselect("اختر المواقع المختارة:", raw_df['الموقع'].tolist())
 
-        for net in networks:
-            st.write(f"🔗 **شبكة: {net}**")
-            net_df = filtered_df[filtered_df['الشبكة'] == net][['الموقع', 'العدد']]
-            edited = st.data_editor(net_df, key=f"edit_{net}", num_rows="dynamic")
-            final_grouped_data[net] = edited
+if selected_locs:
+    filtered = raw_df[raw_df['الموقع'].isin(selected_locs)]
+    networks = filtered['الشبكة'].unique()
+    final_data = {}
 
-        if st.button("🚀 تصدير العرض المبوب (Word)"):
-            doc_file = export_advanced_word(final_grouped_data, cust_name, city, size)
-            st.download_button("📥 تحميل العرض النهائي", doc_file, f"Quotation_{city}.docx")
-    else:
-        st.info("يرجى اختيار المحافظة والمقاس ثم تحديد المواقع للبدء.")
+    for net in networks:
+        st.subheader(f"🔗 شبكة: {net}")
+        net_df = filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']]
+        final_data[net] = st.data_editor(net_df, key=f"ed_{net}", num_rows="dynamic")
+
+    if st.button("🚀 تصدير العرض النهائي (Word)"):
+        dates = {'current_date': "2026/04/26", 'start': date_s, 'end': date_e}
+        file = export_preview_word(final_data, cust, sel_city, sel_size, dates)
+        st.download_button("📥 تحميل مستند العرض", file, f"Quotation_{cust}.docx")
