@@ -128,7 +128,7 @@ try:
                 st.rerun()
 
             if st.button("🚀 تصدير العرض النهائي (Word)"):
-                final_doc = export_final_quotation(cust, st.session_state.cart, {'period': 'شهر واحد', 'year': '2026'})
+                final_doc = export_final_quotation(cust, st.session_state.cart, {'period': 'ابتداءً من', 'year': '2026'})
                 st.download_button("📥 تحميل ملف الوورد", final_doc, f"Quotation_{cust}.docx")
         else:
             st.info("قم باختيار المحافظة والشبكات للبدء")
