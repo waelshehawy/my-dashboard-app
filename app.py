@@ -27,8 +27,8 @@ def export_final_quotation(customer_name, cart_data, dates):
     if os.path.exists('logo.png'):
         header = section.header
         p = header.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(7.5))
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.add_run().add_picture('logo.png', width=Inches(2.5))
 
     doc.add_paragraph("\n\n")
     p_cust = doc.add_paragraph()
@@ -128,7 +128,7 @@ try:
                 st.rerun()
 
             if st.button("🚀 تصدير العرض النهائي (Word)"):
-                final_doc = export_final_quotation(cust, st.session_state.cart, {'period': 'شهر واحد', 'year': '2026'})
+                final_doc = export_final_quotation(cust, st.session_state.cart, {'period': 'من تاريخ', 'year': '2026'})
                 st.download_button("📥 تحميل ملف الوورد", final_doc, f"Quotation_{cust}.docx")
         else:
             st.info("قم باختيار المحافظة والشبكات للبدء")
