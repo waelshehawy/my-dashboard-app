@@ -10,7 +10,7 @@ from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- إعدادات الصفحة ---
+# --- Page Settings ---
 st.set_page_config(page_title="Preview Ads System", layout="wide")
 
 def ar(text):
@@ -18,13 +18,18 @@ def ar(text):
     return get_display(reshape(str(text)))
 
 def add_float_picture(doc, image_path, width, height):
-    header = doc.sections.header
-    if not header.paragraphs: header.add_paragraph()
-    run = header.paragraphs.add_run()
+    # Fix: Access the first section specifically
+    header = doc.sections[0].header
+    if not header.paragraphs: 
+        header.add_paragraph()
+    paragraph = header.paragraphs[0]
+    run = paragraph.add_run()
     shape = run.add_picture(image_path, width=width, height=height)
+    
     inline = shape._inline
     extent = inline.extent
     doc_pr = inline.docPr
+    
     anchor_xml = f"""
     <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1" xmlns:wp="http://openxmlformats.org">
         <wp:simplePos x="0" y="0"/>
@@ -39,10 +44,9 @@ def add_float_picture(doc, image_path, width, height):
     anchor.append(inline.graphic)
     inline.getparent().replace(inline, anchor)
 
-# --- دالة التصدير باستخدام الإحداثيات ---
 def export_final_quotation(customer_name, all_selected_data, dates):
     doc = Document()
-    section = doc.sections
+    section = doc.sections[0] # Target first section
     section.right_to_left = True
     
     if os.path.exists('logo.png'):
@@ -71,11 +75,13 @@ def export_final_quotation(customer_name, all_selected_data, dates):
             table = doc.add_table(rows=num_rows + 1, cols=4)
             table.style = 'Table Grid'
             
+            # Fill headers manually by coordinates
             table.cell(0, 0).text = ar("العدد")
             table.cell(0, 1).text = ar("الموقع")
             table.cell(0, 2).text = ar("العدد")
             table.cell(0, 3).text = ar("الموقع")
 
+            # Fill data using coordinates (row, col)
             for i in range(len(current_df)):
                 row_idx = (i // 2) + 1
                 col_offset = 0 if (i % 2 == 0) else 2
@@ -90,26 +96,28 @@ def export_final_quotation(customer_name, all_selected_data, dates):
     target.seek(0)
     return target
 
-# --- واجهة التطبيق ---
+# --- Main Interface ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
 
-st.title("🏗️ Preview Quotation System")
+st.title("🏗️ Preview Quotation Builder")
 
 try:
     conn = sqlite3.connect('billboards_data.db')
-    # تصحيح الخطأ هنا: تحديد عدد الأعمدة
     col_in, col_view = st.columns(2)
 
     with col_in:
         cust = st.text_input("اسم الزبون", "وائل")
         cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
         sel_city = st.selectbox("اختر المحافظة", cities)
+        
+        # Fixed selection to include [الشبكة]
         raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
         selected_locs = st.multiselect(f"مواقع {sel_city}:", raw_df['الموقع'].tolist())
         
         if st.button("➕ إضافة للعرض"):
             if selected_locs:
                 filtered = raw_df[raw_df['الموقع'].isin(selected_locs)]
+                # Add to memory cart
                 st.session_state.cart[sel_city] = {net: filtered[filtered['الشبكة'] == net][['الموقع', 'العدد']] for net in filtered['الشبكة'].unique()}
                 st.success(f"تمت إضافة {sel_city}")
 
@@ -122,13 +130,14 @@ try:
                         st.session_state.cart[c_name][n_name] = st.data_editor(d_frame, key=f"ed_{c_name}_{n_name}")
             
             if st.button("🗑️ مسح الكل"):
-                st.session_state.cart = {}; st.rerun()
+                st.session_state.cart = {}
+                st.rerun()
 
             if st.button("🚀 تصدير الوورد"):
                 dates = {'start': "1 /5 /2026", 'end': "28 /5 /2026"}
                 file_out = export_final_quotation(cust, st.session_state.cart, dates)
-                st.download_button("📥 تحميل الملف", file_out, f"Preview_{cust}.docx")
+                st.download_button("📥 تحميل المستند", file_out, f"Preview_{cust}.docx")
         else:
-            st.info("القائمة فارغة.")
+            st.info("القائمة فارغة. اختر محافظة ومواقع ثم اضغط 'إضافة'.")
 except Exception as e:
     st.error(f"خطأ: {e}")
