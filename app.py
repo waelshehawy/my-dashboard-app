@@ -32,18 +32,18 @@ def export_final_quotation(customer_name, cart_data, dates):
     # Header
     header = section.header
     header_para = header.paragraphs[0]
-    header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    header_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
     if os.path.exists('logo.png'):
         run_h = header_para.add_run()
-        run_h.add_picture('logo.png', width=Inches(8.27)) # Full width Header
+        run_h.add_picture('logo.png', width=Inches(2.27)) # Full width Header
 
     # Footer
     footer = section.footer
     footer_para = footer.paragraphs[0]
-    footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    footer_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     if os.path.exists('footer.png'):
         run_f = footer_para.add_run()
-        run_f.add_picture('footer.png', width=Inches(8.27)) # Full width Footer
+        run_f.add_picture('footer.png', width=Inches(2.27)) # Full width Footer
 
     # 3. Main Content
     # Add spacing for the header
