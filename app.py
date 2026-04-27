@@ -110,33 +110,59 @@ if check_password():
 
     conn = get_connection()
 
-    if page == "🏠 الداشبورد والخريطة":
-        st.title("📊 حالة المواقع")
-        df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة] FROM [اعمدة انارة]", conn)
+       if page == "🏠 الداشبورد والخريطة":
+        st.title("📊 حالة المواقع والإشغال")
         
-        # إنشاء الخريطة
+        # 1. جلب البيانات الأساسية
+        df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة], [رقم اللوحة] FROM [اعمدة انارة]", conn)
+        df_booked_ids = pd.read_sql("SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1]", conn)['رقم اللوحة'].tolist()
+
+        # 2. تقسيم البيانات إلى متاح ومحجوز
+        df_booked = df_all[df_all['رقم اللوحة'].isin(df_booked_ids)].copy()
+        df_available = df_all[~df_all['رقم اللوحة'].isin(df_booked_ids)].copy()
+
+        # 3. إنشاء الخريطة (تظهر في الأعلى للكل)
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
-        
         for _, row in df_all.iterrows():
             loc = row['اسم العمود']
             if loc in geo_map_data:
-                # نرسل النص الأصلي (بدون ar) لكي لا ينعكس، ونضبط الاتجاه بـ HTML
+                # تلوين المحجوز بالأحمر والمتاح بالبنفسجي
+                marker_color = 'red' if row['رقم اللوحة'] in df_booked_ids else 'purple'
+                
                 popup_content = f"""
-                <div style='direction: rtl; text-align: right; font-family: Tahoma, Arial; font-size: 14px; min-width: 150px;'>
-                    <b style='color: purple;'>الموقع:</b> {loc}<br>
+                <div style='direction: rtl; text-align: right; font-family: Arial; min-width: 150px;'>
+                    <b style='color: {marker_color};'>الموقع:</b> {loc}<br>
                     <b>العدد:</b> {row['العدد']}<br>
-                    <b>الشبكة:</b> {row['الشبكة']}
+                    <b>الحالة:</b> {"محجوز" if marker_color == 'red' else "متاح"}
                 </div>
                 """
                 folium.Marker(
                     geo_map_data[loc], 
                     popup=folium.Popup(popup_content, max_width=300),
-                    tooltip=loc, # يظهر عند تمرير الماوس
-                    icon=folium.Icon(color='purple', icon='info-sign')
+                    icon=folium.Icon(color=marker_color, icon='info-sign')
                 ).add_to(m)
         
-        st_folium(m, width=1200, height=450)
-        st.dataframe(df_all, use_container_width=True)
+        st_folium(m, width=1200, height=400)
+
+        st.divider()
+
+        # 4. إنشاء التابات للجداول
+        tab1, tab2 = st.tabs(["✅ المواقع المتاحة", "🚫 المواقع المحجوزة"])
+
+        with tab1:
+            st.subheader(f"🟢 المواقع المتاحة حالياً ({len(df_available)})")
+            st.dataframe(df_available.drop(columns=['رقم اللوحة']), use_container_width=True)
+
+        with tab2:
+            st.subheader(f"🔴 المواقع المحجوزة ({len(df_booked)})")
+            if not df_booked.empty:
+                # جلب تفاصيل الزبون من جدول الحجوزات لربطها بالجدول
+                df_details = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام] FROM [حجوزات1]", conn)
+                df_booked_final = pd.merge(df_booked, df_details, on='رقم اللوحة', how='left')
+                st.dataframe(df_booked_final.drop(columns=['رقم اللوحة']), use_container_width=True)
+            else:
+                st.info("لا توجد مواقع محجوزة حالياً.")
+
 
 
     elif page == "📄 إنشاء عرض سعر":
