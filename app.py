@@ -9,8 +9,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- إعدادات الصفحة ---
-st.set_page_config(page_title="PreView Ads ERP - Available Only", layout="wide")
+# --- Page Settings ---
+st.set_page_config(page_title="PreView Ads ERP - Final", layout="wide")
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
@@ -19,7 +19,7 @@ def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# --- دالة التصدير (تنسيق بريفيو الرسمي) ---
+# --- Word Export with Header/Footer ---
 def export_final_quotation(customer_name, cart_data, dates):
     doc = Document()
     doc.sections[0].right_to_left = True
@@ -46,6 +46,7 @@ def export_final_quotation(customer_name, cart_data, dates):
 
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            # Only take the first two columns to avoid "unpack" errors
             clean_df = df.iloc[:, :2].reset_index(drop=True)
             rows_needed = (len(clean_df) + 1) // 2
             table = doc.add_table(rows=rows_needed + 1, cols=4)
@@ -62,23 +63,23 @@ def export_final_quotation(customer_name, cart_data, dates):
                 table.cell(row_idx, col_off).text = str(clean_df.iloc[i, 1])
                 table.cell(row_idx, col_off + 1).text = ar(clean_df.iloc[i, 0])
             
-            doc.add_paragraph(ar(f"إجمالي المتاح في هذه الشبكة: {int(clean_df.iloc[:, 1].sum())}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            doc.add_paragraph(ar(f"إجمالي المتاح: {int(clean_df.iloc[:, 1].sum())}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
 
-# --- واجهة المستخدم الذكية ---
+# --- Main App ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
-st.title("📄 صانع عروض الأسعار (المواقع المتاحة فقط)")
+st.title("📄 صانع عروض الأسعار - نسخة الاستقرار القصوى")
 
 conn = get_connection()
 
-# 1. إدخال التواريخ للفلترة
+# Date selection
 col_d1, col_d2 = st.columns(2)
-with col_d1: d_start = st.date_input("تاريخ بدء العرض", value=pd.to_datetime("2026-05-01"))
-with col_d2: d_end = st.date_input("تاريخ نهاية العرض", value=pd.to_datetime("2026-05-28"))
+with col_d1: d_start = st.date_input("بدء العرض", value=pd.to_datetime("2026-05-01"))
+with col_d2: d_end = st.date_input("نهاية العرض", value=pd.to_datetime("2026-05-28"))
 
 st.divider()
 
@@ -89,33 +90,42 @@ with col_in:
     cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
     sel_city = st.selectbox("المحافظة", cities)
 
-    # استعلام SQL للفلترة التلقائية (المواقع التي ليس لها حجز في هذه الفترة)
-    query_available = f"""
-    SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] 
-    FROM [اعمدة انارة] 
-    WHERE المحافظة = '{sel_city}'
-    AND [رقم اللوحة] NOT IN (
-        SELECT [رقم اللوحة] FROM [حجوزات1]
-        WHERE NOT (([تاريخ الحجز الى] < '{d_start}') OR ([تاريخ الحجز من] > '{d_end}'))
-    )
-    """
-    df_filtered = pd.read_sql(query_available, conn)
+    # SECURE SQL: Check availability only if columns exist, otherwise show all
+    try:
+        query_available = f"""
+        SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] 
+        FROM [اعمدة انارة] 
+        WHERE المحافظة = '{sel_city}'
+        AND [رقم اللوحة] NOT IN (
+            SELECT [رقم اللوحة] FROM [حجوزات1]
+            WHERE ([تاريخ الحجز الى] >= '{d_start}') AND ([تاريخ الحجز من] <= '{d_end}')
+        )
+        """
+        df_filtered = pd.read_sql(query_available, conn)
+    except:
+        # Fallback if dates columns are missing/wrong in the DB
+        st.warning("⚠️ لا يمكن تصفية المحجوز تلقائياً (تأكد من أسماء أعمدة التاريخ). تم عرض الكل.")
+        df_filtered = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
     
-    sel_nets = st.multiselect("اختر الشبكات (تظهر فقط الشبكات التي بها متاح):", df_filtered['الشبكة'].unique().tolist())
+    sel_nets = st.multiselect("الشبكات المتاحة:", df_filtered['الشبكة'].unique().tolist())
     
     if st.button("➕ إضافة المتاح للعرض"):
         if sel_nets:
             st.session_state.cart[sel_city] = {n: df_filtered[df_filtered['الشبكة'] == n][['الموقع', 'العدد']] for n in sel_nets}
-            st.success(f"تمت إضافة المواقع المتاحة في شبكات {sel_city}")
+            st.success(f"تمت إضافة شبكات {sel_city}")
 
 with col_view:
     if st.session_state.cart:
         for c_n, nets in st.session_state.cart.items():
-            with st.expander(f"📍 {c_n}"):
+            with st.expander(f"📍 {c_n}", expanded=True):
                 for n_n, df in nets.items():
                     st.session_state.cart[c_n][n_n] = st.data_editor(df, key=f"ed_{c_n}_{n_n}")
         
-        if st.button("🚀 تصدير الوورد المفلتر"):
+        if st.button("🚀 تصدير الوورد"):
             dates = {'start': str(d_start), 'end': str(d_end)}
             out_file = export_final_quotation(cust_name, st.session_state.cart, dates)
             st.download_button("📥 تحميل العرض", out_file, f"Quotation_{cust_name}.docx")
+        
+        if st.button("🗑️ مسح الكل"):
+            st.session_state.cart = {}
+            st.rerun()
