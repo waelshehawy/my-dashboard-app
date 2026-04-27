@@ -20,17 +20,31 @@ st.set_page_config(page_title="PreView ERP - Smart Edition", layout="wide")
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
+
     if not st.session_state.authenticated:
-        st.title("🔒 نظام بريفيو - تسجيل الدخول")
-        pwd = st.text_input("كلمة المرور:", type="password")
+        st.title("🔒 تسجيل الدخول - نظام بريفيو")
+        
+        # إضافة حقل لاسم المستخدم
+        user_input = st.text_input("اسم المستخدم:")
+        password_input = st.text_input("كلمة المرور:", type="password")
+        
+        # قائمة المستخدمين (يمكنك إضافة أي عدد هنا)
+        users = {
+            "admin": "preview2026",
+            "wael": "wael123",
+            "manager": "preview_boss"
+        }
+
         if st.button("دخول"):
-            if pwd == "preview2026":
+            if user_input in users and users[user_input] == password_input:
                 st.session_state.authenticated = True
+                st.session_state.username = user_input # حفظ اسم المستخدم للجلسة
                 st.rerun()
             else:
-                st.error("❌ خطأ في كلمة المرور")
+                st.error("❌ خطأ في اسم المستخدم أو كلمة المرور")
         return False
     return True
+
 
 if check_password():
     def get_connection():
