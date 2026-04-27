@@ -114,26 +114,30 @@ if check_password():
         st.title("📊 حالة المواقع")
         df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة] FROM [اعمدة انارة]", conn)
         
-        # الخريطة مع معالجة النصوص المعكوسة
+        # إنشاء الخريطة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
+        
         for _, row in df_all.iterrows():
             loc = row['اسم العمود']
             if loc in geo_map_data:
-                # حل مشكلة الكتابة المعكوسة في الخريطة
+                # نرسل النص الأصلي (بدون ar) لكي لا ينعكس، ونضبط الاتجاه بـ HTML
                 popup_content = f"""
-                <div style='direction: rtl; text-align: right; font-family: Arial;'>
-                    <b>الموقع:</b> {ar(loc)}<br>
+                <div style='direction: rtl; text-align: right; font-family: Tahoma, Arial; font-size: 14px; min-width: 150px;'>
+                    <b style='color: purple;'>الموقع:</b> {loc}<br>
+                    <b>العدد:</b> {row['العدد']}<br>
                     <b>الشبكة:</b> {row['الشبكة']}
                 </div>
                 """
                 folium.Marker(
                     geo_map_data[loc], 
                     popup=folium.Popup(popup_content, max_width=300),
-                    icon=folium.Icon(color='purple')
+                    tooltip=loc, # يظهر عند تمرير الماوس
+                    icon=folium.Icon(color='purple', icon='info-sign')
                 ).add_to(m)
         
         st_folium(m, width=1200, height=450)
         st.dataframe(df_all, use_container_width=True)
+
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
