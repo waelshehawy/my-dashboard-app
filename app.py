@@ -49,7 +49,7 @@ if check_password():
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run()
         # إضافة الصورة في الرأس تجعلها تظهر خلف النص في كل الصفحات تلقائياً
-        run.add_picture(image_path, width=Inches(8.27)) 
+        run.add_picture(image_path, width=Inches(3.27)) 
 
     def export_final_quotation(customer_name, cart_data, dates):
         doc = Document()
