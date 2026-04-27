@@ -103,22 +103,75 @@ page = st.sidebar.radio("Navigation:", ["📊 Dashboard", "📄 Quotation Builde
 
 conn = get_connection()
 
-if page == "📊 Dashboard":
-    st.title("📊 System Overview")
-    df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة] FROM [اعمدة انارة]", conn)
-    st.plotly_chart(px.pie(df_all, names='المحافظة', values='العدد', hole=0.3), use_container_width=True)
-    st.dataframe(df_all, use_container_width=True)
-
-elif page == "📄 Quotation Builder":
-    st.title("📄 Professional Quotation Builder")
-    col_in, col_view = st.columns(2)
+ elif page == "📊 Dashboard":
+    st.title("📊 داشبورد التوزع الجغرافي والإحصائي")
     
-    with col_in:
-        cust = st.text_input("Customer Name")
-        cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
-        sel_city = st.selectbox("Province", cities)
-        raw_df = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
-        sel_nets = st.multiselect("Select Networks:", raw_df['الشبكة'].unique().tolist())
+    # تعريف الإحداثيات التي زودتني بها
+    geo_map = {
+        'طريق يعفور ذهاب': [33.5100, 36.1200],
+        'من ساحة الامويين حتى السفارة الاماراتية': [33.5135, 36.2765],
+        'كورنيش الميدان': [33.4912, 36.2970],
+        'من المحافظة حتى فكتوريا': [33.5120, 36.2930],
+        'مدخل باب توما حديقة الصوفانية': [33.5150, 36.3130],
+        'شام سنتر من دوار الجوزة الى دوار الكارلتون': [33.4860, 36.2550],
+        'الزاهرة الجديدة مقابل بوظة امية': [33.4835, 36.3015],
+        'طريق يعفور إياب': [33.5105, 36.1210],
+        'مشروع دمر مقابل الاب تاون': [33.5414, 36.2425],
+        'شارع المجتهد إياب': [33.4980, 36.2870],
+        'طريق الشام ذهاب': [34.7042, 36.7095], 
+        'شارع الميدان إياب': [34.7265, 36.7120],
+        'شارع الدروبي': [34.7305, 36.7135], 
+        'شارع الحمراء': [34.7220, 36.7050],
+        'شارع الحضارة': [34.7150, 36.7110], 
+        'دوار الجامعة': [34.7125, 36.7075],
+        'مفرق الحواش طريق طرطوس الرئيسي': [34.7770, 36.3150],
+        'ساحة عدن –كراجات البولمان': [35.5250, 35.8050], 
+        'حديقة المنشية -8اذار': [35.5190, 35.7870],
+        'المحكمة –الشيخ ضاهر': [35.5215, 35.7830],
+        'شارع المحكمة ذهاب': [34.8950, 35.8820], 
+        'مدخل طرطوس مشفى الوطني 1': [34.8720, 35.8890],
+        'كورنيش جبلة بوظة رومينزا 1': [35.3620, 35.9180], 
+        'جبلة مفرق المشفى 1': [35.3580, 35.9320],
+        # ... يمكنك إضافة البقية هنا بنفس النمط
+    }
+
+    df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة] FROM [اعمدة انارة]", conn)
+
+    # إنشاء الخريطة
+    st.subheader("📍 مواقع اللوحات على الخريطة")
+    import folium
+    from streamlit_folium import st_folium
+    
+    # مركز الخريطة (سوريا)
+    m = folium.Map(location=[34.8, 38.5], zoom_start=7, control_scale=True)
+
+    # إضافة النقاط بناءً على قاموس الإحداثيات
+    found_count = 0
+    for index, row in df_all.iterrows():
+        loc_name = row['اسم العمود']
+        if loc_name in geo_map:
+            coords = geo_map[loc_name]
+            folium.Marker(
+                location=coords,
+                popup=f"<b>{loc_name}</b><br>المحافظة: {row['المحافظة']}<br>العدد: {row['العدد']}",
+                tooltip=loc_name,
+                icon=folium.Icon(color='purple', icon='info-sign')
+            ).add_to(m)
+            found_count += 1
+
+    st_folium(m, width=1200, height=500)
+    st.write(f"✅ تم تحديد {found_count} موقعاً بدقة على الخريطة.")
+
+    # الرسوم البيانية الإحصائية
+    st.divider()
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_pie = px.pie(df_all, names='المحافظة', values='العدد', title="نسبة توزع الأعمدة حسب المحافظة")
+        st.plotly_chart(fig_pie, use_container_width=True)
+    with c2:
+        fig_bar = px.bar(df_all, x="المحافظة", y="العدد", color="الشبكة", title="عدد اللوحات في كل محافظة حسب الشبكة")
+        st.plotly_chart(fig_bar, use_container_width=True)
+
         
         if st.button("➕ Add Selection to Cart"):
             if sel_nets:
