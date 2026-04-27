@@ -28,7 +28,7 @@ def export_final_quotation(customer_name, cart_data, dates):
         header = doc.sections[0].header
         p = header.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(8.27))
+        p.add_run().add_picture('logo.png', width=Inches(2.27))
 
     for _ in range(5): doc.add_paragraph() 
     
