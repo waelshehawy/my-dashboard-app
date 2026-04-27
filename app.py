@@ -72,12 +72,12 @@ if check_password():
             header = section.header
             p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.add_run().add_picture('logo.png', width=Inches(8.27))
+            p.add_run().add_picture('logo.png', width=Inches(2.27))
         if os.path.exists('footer.png'):
             footer = section.footer
             pf = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
             pf.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            pf.add_run().add_picture('footer.png', width=Inches(8.27))
+            pf.add_run().add_picture('footer.png', width=Inches(2.27))
 
         doc.add_paragraph("\n\n")
         p_cust = doc.add_paragraph()
