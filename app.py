@@ -103,7 +103,7 @@ page = st.sidebar.radio("Navigation:", ["📊 Dashboard", "📄 Quotation Builde
 
 conn = get_connection()
 
- elif page == "📊 Dashboard":
+if page == "📊 Dashboard":
     st.title("📊 داشبورد التوزع الجغرافي والإحصائي")
     
     # تعريف الإحداثيات التي زودتني بها
