@@ -55,7 +55,7 @@ if check_password():
             header = doc.sections[0].header
             p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.add_run().add_picture('logo.png', width=Inches(8))
+            p.add_run().add_picture('logo.png', width=Inches(3))
         
         doc.add_paragraph("\n\n")
         p_cust = doc.add_paragraph()
