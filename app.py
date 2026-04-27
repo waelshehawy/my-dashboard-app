@@ -32,7 +32,7 @@ def check_password():
         user = st.text_input("اسم المستخدم")
         pwd = st.text_input("كلمة المرور", type="password")
         if st.button("دخول"):
-            if user == "admin" and pwd == "preview2026":
+            if user == "admin" and pwd == "2026":
                 st.session_state.authenticated = True
                 st.rerun()
             else: st.error("❌ بيانات خاطئة")
