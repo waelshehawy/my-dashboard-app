@@ -17,28 +17,10 @@ st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 
 # --- مصفوفة الإحداثيات ---
 geo_map_data = {
-    'طريق يعفور ذهاب': [33.5100, 36.1200],
-    'من ساحة الامويين حتى السفارة الاماراتية': [33.5135, 36.2765],
-    'كورنيش الميدان': [33.4912, 36.2970],
-    'من المحافظة حتى فكتوريا': [33.5120, 36.2930],
-    'مدخل باب توما حديقة الصوفانية': [33.5150, 36.3130],
-    'شام سنتر من دوار الجوزة الى دوار الكارلتون': [33.4860, 36.2550],
-    'الزاهرة الجديدة مقابل بوظة امية': [33.4835, 36.3015],
-    'طريق يعفور إياب': [33.5105, 36.1210],
-    'طريق الشام ذهاب': [34.7042, 36.7095], 
-    'شارع الميدان إياب': [34.7265, 36.7120],
-    'شارع الدروبي': [34.7305, 36.7135], 
-    'شارع الحمراء': [34.7220, 36.7050],
-    'شارع الحضارة': [34.7150, 36.7110], 
-    'دوار الجامعة': [34.7125, 36.7075],
-    'مفرق الحواش طريق طرطوس الرئيسي': [34.7770, 36.3150],
-    'ساحة عدن –كراجات البولمان': [35.5250, 35.8050], 
-    'حديقة المنشية -8اذار': [35.5190, 35.7870],
-    'المحكمة –الشيخ ضاهر': [35.5215, 35.7830], 
-    'شارع المحكمة ذهاب': [34.8950, 35.8820], 
-    'مدخل طرطوس مشفى الوطني 1': [34.8720, 35.8890],
-    'كورنيش جبلة بوظة رومينزا 1': [35.3620, 35.9180], 
-    'جبلة مفرق المشفى 1': [35.3580, 35.9320],
+    'طريق يعفور ذهاب': [33.5100, 36.1200], 'من ساحة الامويين حتى السفارة الاماراتية': [33.5135, 36.2765],
+    'كورنيش الميدان': [33.4912, 36.2970], 'من المحافظة حتى فكتوريا': [33.5120, 36.2930],
+    'شارع الحضارة': [34.7150, 36.7110], 'دوار الجامعة': [34.7125, 36.7075],
+    'شارع الدروبي': [34.7305, 36.7135], 'طريق الشام ذهاب': [34.7042, 36.7095]
 }
 
 # --- نظام الأمان ---
@@ -53,8 +35,7 @@ def check_password():
             if user == "admin" and pwd == "preview2026":
                 st.session_state.authenticated = True
                 st.rerun()
-            else:
-                st.error("❌ بيانات خاطئة")
+            else: st.error("❌ بيانات خاطئة")
         return False
     return True
 
@@ -66,14 +47,15 @@ if check_password():
         if not text: return ""
         return get_display(reshape(str(text)))
 
+    # --- دالة تصدير الوورد ---
     def export_word(customer_name, cart_data):
         doc = Document()
         doc.sections[0].right_to_left = True
         if os.path.exists('logo.png'):
             header = doc.sections[0].header
             p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            p.add_run().add_picture('logo.png', width=Inches(3))
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.add_run().add_picture('logo.png', width=Inches(8))
         
         doc.add_paragraph("\n\n")
         p_cust = doc.add_paragraph()
@@ -85,81 +67,82 @@ if check_password():
             p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             run_city = p_city.add_run(ar(f"محافظة {city}"))
             run_city.font.color.rgb = RGBColor(102, 0, 153)
+            run_city.font.size = Pt(16)
+            
             for net, df in networks.items():
                 doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 table = doc.add_table(rows=1, cols=4); table.style = 'Table Grid'
-                # الرأس
                 hdr = table.rows[0].cells
                 hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = ar("العدد"), ar("الموقع"), ar("العدد"), ar("الموقع")
                 
-                data = df.iloc[:, :2].values.tolist()
-                for i in range(0, len(data), 2):
+                data_list = df.iloc[:, :2].values.tolist()
+                for i in range(0, len(data_list), 2):
                     row = table.add_row().cells
-                    row[0].text, row[1].text = str(data[i][1]), ar(data[i][0])
-                    if i + 1 < len(data):
-                        row[2].text, row[3].text = str(data[i+1][1]), ar(data[i+1][0])
+                    row[0].text, row[1].text = str(data_list[i][1]), ar(data_list[i][0])
+                    if i + 1 < len(data_list):
+                        row[2].text, row[3].text = str(data_list[i+1][1]), ar(data_list[i+1][0])
+                
+                total_n = pd.to_numeric(df.iloc[:, 1]).sum()
+                prnt = df['أجور الطباعة'].iloc[0] if 'أجور الطباعة' in df.columns else 0
+                ads = df['أجور العرض'].iloc[0] if 'أجور العرض' in df.columns else 0
+                f_p = doc.add_paragraph()
+                f_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                f_p.add_run(ar(f"العدد: [{int(total_n)}] | أجور الطباعة: ${prnt} | أجور العرض: ${ads}"))
         
         target = io.BytesIO(); doc.save(target); target.seek(0)
         return target
 
-    # --- القائمة الجانبية ---
+    # --- الواجهة ---
     if 'cart' not in st.session_state: st.session_state.cart = {}
-    page = st.sidebar.radio("انتقل إلى:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
-
+    page = st.sidebar.radio("القائمة:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
     conn = get_connection()
 
     if page == "🏠 الداشبورد والخريطة":
         st.title("📊 حالة المواقع والإشغال")
-        
-        # جلب البيانات
         df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة], [رقم اللوحة] FROM [اعمدة انارة]", conn)
         df_booked_ids = pd.read_sql("SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1]", conn)['رقم اللوحة'].tolist()
 
-        # خريطة ملونة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
         for _, row in df_all.iterrows():
             loc = row['اسم العمود']
             if loc in geo_map_data:
                 color = 'red' if row['رقم اللوحة'] in df_booked_ids else 'purple'
-                status_txt = "محجوز" if color == 'red' else "متاح"
-                popup_content = f"<div style='direction: rtl; text-align: right; font-family: Arial;'><b>الموقع:</b> {loc}<br><b>العدد:</b> {row['العدد']}<br><b>الحالة:</b> {status_txt}</div>"
-                folium.Marker(geo_map_data[loc], popup=folium.Popup(popup_content, max_width=300), icon=folium.Icon(color=color)).add_to(m)
-        
+                popup_content = f"<div style='direction: rtl; text-align: right;'><b>{loc}</b><br>العدد: {row['العدد']}</div>"
+                folium.Marker(geo_map_data[loc], popup=folium.Popup(popup_content, max_width=200), icon=folium.Icon(color=color)).add_to(m)
         st_folium(m, width=1200, height=400)
         
-        # التابات
         tab1, tab2 = st.tabs(["✅ المواقع المتاحة", "🚫 المواقع المحجوزة"])
-        
         with tab1:
-            df_available = df_all[~df_all['رقم اللوحة'].isin(df_booked_ids)]
-            st.dataframe(df_available.drop(columns=['رقم اللوحة']), use_container_width=True)
-            
+            df_av = df_all[~df_all['رقم اللوحة'].isin(df_booked_ids)]
+            st.dataframe(df_av.drop(columns=['رقم اللوحة']), use_container_width=True)
         with tab2:
-            df_booked = df_all[df_all['رقم اللوحة'].isin(df_booked_ids)]
-            if not df_booked.empty:
-                df_details = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
-                df_final = pd.merge(df_booked, df_details, on='رقم اللوحة', how='left')
-                st.dataframe(df_final.drop(columns=['رقم اللوحة']), use_container_width=True)
-            else:
-                st.info("لا يوجد مواقع محجوزة.")
+            df_bk = df_all[df_all['رقم اللوحة'].isin(df_booked_ids)]
+            if not df_bk.empty:
+                df_det = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
+                st.dataframe(pd.merge(df_bk, df_det, on='رقم اللوحة', how='left').drop(columns=['رقم اللوحة']), use_container_width=True)
 
     elif page == "📄 إنشاء عرض سعر":
-        st.title("📄 بناء عرض سعر جديد")
-        col_in, col_view = st.columns(2)
-        with col_in:
+        st.title("📄 بناء عرض سعر")
+        col1, col2 = st.columns(2)
+        with col1:
             cust = st.text_input("اسم الزبون")
-            cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
-            sel_city = st.selectbox("المحافظة", cities)
-            raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
+            city = st.selectbox("المحافظة", pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist())
+            raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{city}'", conn)
             nets = st.multiselect("اختر الشبكات:", raw['الشبكة'].unique().tolist())
             if st.button("➕ إضافة للسلة"):
-                st.session_state.cart[sel_city] = {n: raw[raw['الشبكة'] == n][['الموقع', 'العدد']] for n in nets}
-        
-        with col_view:
+                if city not in st.session_state.cart: st.session_state.cart[city] = {}
+                for n in nets:
+                    df_net = raw[raw['الشبكة'] == n][['الموقع', 'العدد']].copy()
+                    df_net['أجور الطباعة'], df_net['أجور العرض'] = 0, 0
+                    st.session_state.cart[city][n] = df_net
+
+        with col2:
             if st.session_state.cart:
                 for c, nts in list(st.session_state.cart.items()):
                     for n, df in nts.items():
-                        st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
+                        with st.expander(f"📍 {c} - شبكة {n}"):
+                            st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 if st.button("🚀 تصدير Word"):
-                    out = export_word(cust, st.session_state.cart)
-                    st.download_button("📥 تحميل", out, f"Quotation_{cust}.docx")
+                    doc_out = export_word(cust, st.session_state.cart)
+                    st.download_button("📥 تحميل العرض", doc_out, f"Quotation_{cust}.docx")
+                if st.button("🗑️ تفريغ السلة"): st.session_state.cart = {}; st.rerun()
