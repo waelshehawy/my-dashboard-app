@@ -1,7 +1,8 @@
-streamlit
 pandas
-fpdf2
-arabic-reshaper
-python-docx
-python-bidi
+streamlit
+folium
+streamlit-folium
 plotly
+python-docx
+arabic-reshaper
+python-bidi
