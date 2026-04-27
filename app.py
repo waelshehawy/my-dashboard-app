@@ -112,16 +112,39 @@ if check_password():
     conn = get_connection()
 
     if page == "🏠 الداشبورد والخريطة":
+         if page == "🏠 الداشبورد والخريطة":
         st.title("📊 حالة المواقع")
         df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة] FROM [اعمدة انارة]", conn)
         
-        # الخريطة
+        # إنشاء الخريطة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
+        
         for _, row in df_all.iterrows():
-            if row['اسم العمود'] in geo_map_data:
-                folium.Marker(geo_map_data[row['اسم العمود']], popup=ar(row['اسم العمود']), icon=folium.Icon(color='purple')).add_to(m)
+            loc_name = row['اسم العمود']
+            if loc_name in geo_map_data:
+                # تجهيز النص المعالج ليظهر بشكل صحيح (غير معكوس)
+                clean_name = ar(loc_name)
+                clean_city = ar(row['المحافظة'])
+                
+                # صياغة معلومات الـ Popup مع تنسيق HTML بسيط لضمان الاتجاه
+                popup_text = f"""
+                <div style="direction: rtl; text-align: right; font-family: Arial;">
+                    <b>الموقع:</b> {clean_name}<br>
+                    <b>المحافظة:</b> {clean_city}<br>
+                    <b>العدد:</b> {row['العدد']}
+                </div>
+                """
+                
+                folium.Marker(
+                    location=geo_map_data[loc_name],
+                    popup=folium.Popup(popup_text, max_width=300),
+                    tooltip=clean_name, # يظهر عند مرور الماوس
+                    icon=folium.Icon(color='purple', icon='info-sign')
+                ).add_to(m)
+        
         st_folium(m, width=1200, height=450)
         st.dataframe(df_all, use_container_width=True)
+
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر جديد")
