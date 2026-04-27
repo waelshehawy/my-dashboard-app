@@ -4,3 +4,4 @@ fpdf2
 arabic-reshaper
 python-docx
 python-bidi
+plotly
