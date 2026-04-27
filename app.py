@@ -28,7 +28,9 @@ geo_map_data = {
     'طريق الشام ذهاب': [34.7042, 36.7095], 
     'شارع الميدان إياب': [34.7265, 36.7120],
     'شارع الدروبي': [34.7305, 36.7135], 
+    'شارع الحمراء': [34.7220, 36.7050],
     'شارع الحضارة': [34.7150, 36.7110], 
+    'دوار الجامعة': [34.7125, 36.7075],
     'مفرق الحواش طريق طرطوس الرئيسي': [34.7770, 36.3150],
     'ساحة عدن –كراجات البولمان': [35.5250, 35.8050], 
     'حديقة المنشية -8اذار': [35.5190, 35.7870],
@@ -44,7 +46,7 @@ def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if not st.session_state.authenticated:
-        st.title("🔒 تسجيل الدخول")
+        st.title("🔒 تسجيل الدخول - نظام بريفيو")
         user = st.text_input("اسم المستخدم")
         pwd = st.text_input("كلمة المرور", type="password")
         if st.button("دخول"):
@@ -66,10 +68,9 @@ if check_password():
 
     def export_word(customer_name, cart_data):
         doc = Document()
-        section = doc.sections[0]
-        section.right_to_left = True
+        doc.sections[0].right_to_left = True
         if os.path.exists('logo.png'):
-            header = section.header
+            header = doc.sections[0].header
             p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p.add_run().add_picture('logo.png', width=Inches(8))
@@ -87,7 +88,7 @@ if check_password():
             for net, df in networks.items():
                 doc.add_paragraph(ar(f"شبكات {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 table = doc.add_table(rows=1, cols=4); table.style = 'Table Grid'
-                # تعبئة الرأس
+                # الرأس
                 hdr = table.rows[0].cells
                 hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = ar("العدد"), ar("الموقع"), ar("العدد"), ar("الموقع")
                 
@@ -98,83 +99,60 @@ if check_password():
                     if i + 1 < len(data):
                         row[2].text, row[3].text = str(data[i+1][1]), ar(data[i+1][0])
         
-        target = io.BytesIO()
-        doc.save(target)
-        target.seek(0)
+        target = io.BytesIO(); doc.save(target); target.seek(0)
         return target
 
     # --- القائمة الجانبية ---
-    if 'cart' not in st.session_state:
-        st.session_state.cart = {}
-    page = st.sidebar.radio("القائمة:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
+    if 'cart' not in st.session_state: st.session_state.cart = {}
+    page = st.sidebar.radio("انتقل إلى:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
 
     conn = get_connection()
 
-       if page == "🏠 الداشبورد والخريطة":
+    if page == "🏠 الداشبورد والخريطة":
         st.title("📊 حالة المواقع والإشغال")
         
-        # 1. جلب البيانات الأساسية
+        # جلب البيانات
         df_all = pd.read_sql("SELECT [اسم العمود], [المحافظة], [العدد], [الشبكة], [رقم اللوحة] FROM [اعمدة انارة]", conn)
         df_booked_ids = pd.read_sql("SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1]", conn)['رقم اللوحة'].tolist()
 
-        # 2. تقسيم البيانات إلى متاح ومحجوز
-        df_booked = df_all[df_all['رقم اللوحة'].isin(df_booked_ids)].copy()
-        df_available = df_all[~df_all['رقم اللوحة'].isin(df_booked_ids)].copy()
-
-        # 3. إنشاء الخريطة (تظهر في الأعلى للكل)
+        # خريطة ملونة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
         for _, row in df_all.iterrows():
             loc = row['اسم العمود']
             if loc in geo_map_data:
-                # تلوين المحجوز بالأحمر والمتاح بالبنفسجي
-                marker_color = 'red' if row['رقم اللوحة'] in df_booked_ids else 'purple'
-                
-                popup_content = f"""
-                <div style='direction: rtl; text-align: right; font-family: Arial; min-width: 150px;'>
-                    <b style='color: {marker_color};'>الموقع:</b> {loc}<br>
-                    <b>العدد:</b> {row['العدد']}<br>
-                    <b>الحالة:</b> {"محجوز" if marker_color == 'red' else "متاح"}
-                </div>
-                """
-                folium.Marker(
-                    geo_map_data[loc], 
-                    popup=folium.Popup(popup_content, max_width=300),
-                    icon=folium.Icon(color=marker_color, icon='info-sign')
-                ).add_to(m)
+                color = 'red' if row['رقم اللوحة'] in df_booked_ids else 'purple'
+                status_txt = "محجوز" if color == 'red' else "متاح"
+                popup_content = f"<div style='direction: rtl; text-align: right; font-family: Arial;'><b>الموقع:</b> {loc}<br><b>العدد:</b> {row['العدد']}<br><b>الحالة:</b> {status_txt}</div>"
+                folium.Marker(geo_map_data[loc], popup=folium.Popup(popup_content, max_width=300), icon=folium.Icon(color=color)).add_to(m)
         
         st_folium(m, width=1200, height=400)
-
-        st.divider()
-
-        # 4. إنشاء التابات للجداول
+        
+        # التابات
         tab1, tab2 = st.tabs(["✅ المواقع المتاحة", "🚫 المواقع المحجوزة"])
-
+        
         with tab1:
-            st.subheader(f"🟢 المواقع المتاحة حالياً ({len(df_available)})")
+            df_available = df_all[~df_all['رقم اللوحة'].isin(df_booked_ids)]
             st.dataframe(df_available.drop(columns=['رقم اللوحة']), use_container_width=True)
-
+            
         with tab2:
-            st.subheader(f"🔴 المواقع المحجوزة ({len(df_booked)})")
+            df_booked = df_all[df_all['رقم اللوحة'].isin(df_booked_ids)]
             if not df_booked.empty:
-                # جلب تفاصيل الزبون من جدول الحجوزات لربطها بالجدول
-                df_details = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام] FROM [حجوزات1]", conn)
-                df_booked_final = pd.merge(df_booked, df_details, on='رقم اللوحة', how='left')
-                st.dataframe(df_booked_final.drop(columns=['رقم اللوحة']), use_container_width=True)
+                df_details = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
+                df_final = pd.merge(df_booked, df_details, on='رقم اللوحة', how='left')
+                st.dataframe(df_final.drop(columns=['رقم اللوحة']), use_container_width=True)
             else:
-                st.info("لا توجد مواقع محجوزة حالياً.")
-
-
+                st.info("لا يوجد مواقع محجوزة.")
 
     elif page == "📄 إنشاء عرض سعر":
-        st.title("📄 بناء عرض سعر")
+        st.title("📄 بناء عرض سعر جديد")
         col_in, col_view = st.columns(2)
         with col_in:
-            cust_name = st.text_input("اسم الزبون")
+            cust = st.text_input("اسم الزبون")
             cities = pd.read_sql("SELECT المحافظة FROM المحافظات", conn)['المحافظة'].tolist()
             sel_city = st.selectbox("المحافظة", cities)
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة = '{sel_city}'", conn)
-            nets = st.multiselect("الشبكات:", raw['الشبكة'].unique().tolist())
-            if st.button("➕ إضافة"):
+            nets = st.multiselect("اختر الشبكات:", raw['الشبكة'].unique().tolist())
+            if st.button("➕ إضافة للسلة"):
                 st.session_state.cart[sel_city] = {n: raw[raw['الشبكة'] == n][['الموقع', 'العدد']] for n in nets}
         
         with col_view:
@@ -182,6 +160,6 @@ if check_password():
                 for c, nts in list(st.session_state.cart.items()):
                     for n, df in nts.items():
                         st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
-                if st.button("🚀 تصدير"):
-                    final_out = export_word(cust_name, st.session_state.cart)
-                    st.download_button("📥 تحميل ملف الوورد", final_out, f"Quotation_{cust_name}.docx")
+                if st.button("🚀 تصدير Word"):
+                    out = export_word(cust, st.session_state.cart)
+                    st.download_button("📥 تحميل", out, f"Quotation_{cust}.docx")
