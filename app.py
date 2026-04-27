@@ -133,17 +133,20 @@ elif page == "📄 بناء عرض سعر وعقد":
                     out = export_final_quotation(cust, st.session_state.cart, dates)
                     st.download_button("📥 تحميل العرض", out, f"Quotation_{cust}.docx")
             
-            with col_btn_fix := col_b2:
+            with col_b2: # تم تصحيح هذا السطر بإزالة :=
                 if st.button("✅ تثبيت كعقد (حجز)"):
                     cursor = conn.cursor()
                     for city_name, networks in st.session_state.cart.items():
                         for net_name, df_final in networks.items():
                             for i in range(len(df_final)):
                                 pole_n = df_final.iloc[i, 0]
-                                p_id = cursor.execute(f"SELECT [رقم اللوحة] FROM [اعمدة انارة] WHERE [اسم العمود] = '{pole_n}'").fetchone()[0]
-                                cursor.execute("INSERT INTO [حجوزات1] ([رقم اللوحة], [اسم الزبون]) VALUES (?, ?)", (p_id, cust))
+                                p_id_row = cursor.execute(f"SELECT [رقم اللوحة] FROM [اعمدة انارة] WHERE [اسم العمود] = '{pole_n}'").fetchone()
+                                if p_id_row:
+                                    cursor.execute("INSERT INTO [حجوزات1] ([رقم اللوحة], [اسم الزبون]) VALUES (?, ?)", (p_id_row[0], cust))
                     conn.commit()
-                    st.balloons(); st.success("تم تثبيت العقد وحجز المواقع!")
+                    st.balloons()
+                    st.success("تم تثبيت العقد وحجز المواقع!")
+
             
             if st.button("🗑️ تفريغ العربة"):
                 st.session_state.cart = {}; st.rerun()
