@@ -32,7 +32,7 @@ def check_password():
         user = st.text_input("اسم المستخدم")
         pwd = st.text_input("كلمة المرور", type="password")
         if st.button("دخول"):
-            if user == "admin" and pwd == "3900":
+            if user == "admin" and pwd == "preview2026":
                 st.session_state.authenticated = True
                 st.rerun()
             else: st.error("❌ بيانات خاطئة")
@@ -54,8 +54,8 @@ if check_password():
         if os.path.exists('logo.png'):
             header = doc.sections[0].header
             p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            p.add_run().add_picture('logo.png', width=Inches(3))
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.add_run().add_picture('logo.png', width=Inches(8))
         
         doc.add_paragraph("\n\n")
         p_cust = doc.add_paragraph()
