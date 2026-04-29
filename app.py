@@ -45,12 +45,20 @@ def export_word(customer_name, cart_data):
     doc = Document()
     doc.sections[0].right_to_left = True
     
-    # Header Logo
+       # --- Header Logo Replacement ---
     if os.path.exists('logo.png'):
-        header = doc.sections[0].header
-        p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        section = doc.sections[0]
+        header = section.header
+        # Access the first paragraph or create one if header is empty
+        if not header.paragraphs:
+            p = header.add_paragraph()
+        else:
+            p = header.paragraphs[0]
+            
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(6))
+        run = p.add_run()
+        run.add_picture('logo.png', width=Inches(6))
+
     
     doc.add_paragraph("\n")
     p_cust = doc.add_paragraph()
