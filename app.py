@@ -33,7 +33,7 @@ def check_password():
         user = st.text_input("Username")
         pwd = st.text_input("Password", type="password")
         if st.button("Login"):
-            if user == "admin" and pwd == "preview2026":
+            if user == "a" and pwd == "3900":
                 st.session_state.authenticated = True
                 st.rerun()
             else: st.error("❌ Invalid Credentials")
