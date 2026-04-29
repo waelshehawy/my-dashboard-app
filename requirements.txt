@@ -1,8 +1,9 @@
-pandas
 streamlit
+pandas
+plotly
 folium
 streamlit-folium
-plotly
 python-docx
 arabic-reshaper
 python-bidi
+openpyxl
