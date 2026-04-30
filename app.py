@@ -23,16 +23,15 @@ def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# --- وظيفة تصدير الوورد المحسنة ---
+# --- وظيفة تصدير الوورد ---
 def export_word(customer_name, cart_data):
     doc = Document()
     doc.sections[0].right_to_left = True
-    
     if os.path.exists('logo.png'):
         header = doc.sections[0].header
         p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(3))
+        p.add_run().add_picture('logo.png', width=Inches(6))
     
     doc.add_paragraph("\n")
     p_cust = doc.add_paragraph()
@@ -48,8 +47,7 @@ def export_word(customer_name, cart_data):
         
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكة: {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            table = doc.add_table(rows=1, cols=4)
-            table.style = 'Table Grid'
+            table = doc.add_table(rows=1, cols=4); table.style = 'Table Grid'
             hdr = table.rows[0].cells
             hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = ar("العدد"), ar("الموقع"), ar("العدد"), ar("الموقع")
             
@@ -60,31 +58,28 @@ def export_word(customer_name, cart_data):
                 if i + 1 < len(data_list):
                     row[2].text, row[3].text = str(data_list[i+1][1]), ar(data_list[i+1][0])
             
-            # حساب الإجماليات
-            total_n = pd.to_numeric(df.iloc[:, 1]).sum()
-            prnt = df['أجور الطباعة'].iloc[0] if 'أجور الطباعة' in df.columns else 0
-            ads = df['أجور العرض'].iloc[0] if 'أجور العرض' in df.columns else 0
+            # معالجة الأجور لتظهر بشكل صحيح
+            total_n = pd.to_numeric(df.iloc[:, 1], errors='coerce').sum()
+            prnt = pd.to_numeric(df['أجور الطباعة'], errors='coerce').sum() if 'أجور الطباعة' in df.columns else 0
+            ads = pd.to_numeric(df['أجور العرض'], errors='coerce').sum() if 'أجور العرض' in df.columns else 0
             
-            f_p = doc.add_paragraph()
-            f_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            info_line = ar("العدد: ") + f"{int(total_n)}" + " | " + ar("طباعة: ") + f"{prnt}$" + " | " + ar("عرض: ") + f"{ads}$"
+            f_p = doc.add_paragraph(); f_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            info_line = f"{ar('العدد:')} {int(total_n)} | {ar('أجور الطباعة:')} {prnt}$ | {ar('أجور العرض:')} {ads}$"
             f_p.add_run(info_line).bold = True
     
-    target = io.BytesIO()
-    doc.save(target)
-    target.seek(0)
+    target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
 
-# --- نظام الأمان والواجهة ---
+# --- نظام الأمان ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔒 تسجيل الدخول - PreView")
+    st.title("🔒 تسجيل الدخول - نظام بريفيو")
     user = st.text_input("اسم المستخدم")
     pwd = st.text_input("كلمة المرور", type="password")
     if st.button("دخول"):
-        if user == "a" and pwd == "3900":
+        if user == "admin" and pwd == "preview2026":
             st.session_state.authenticated = True
             st.rerun()
         else: st.error("❌ بيانات خاطئة")
@@ -95,79 +90,49 @@ else:
     with st.sidebar:
         if os.path.exists("logo.png"): st.image("logo.png")
         page = st.radio("القائمة:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
-        if st.button("تسجيل الخروج"):
+        if st.button("خروج"):
             st.session_state.authenticated = False
             st.rerun()
 
-       if page == "🏠 الداشبورد والخريطة":
+    if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
-        
-        # 1. جلب البيانات ودمجها
         df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
         df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
         df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
-
-        # 2. تنظيف أسماء المحافظات لضمان عمل الفلتر
+        
+        # تنظيف المحافظة لحل مشكلة اختفاء دمشق
         df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
-        # 3. الفلاتر في الشريط الجانبي
         with st.sidebar:
             st.divider()
-            city_options = ["الكل"] + sorted(df_map['المحافظة'].unique().tolist())
-            city_f = st.selectbox("المحافظة:", city_options)
+            city_f = st.selectbox("المحافظة:", ["الكل"] + sorted(df_map['المحافظة'].unique().tolist()))
             stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
 
-        # 4. تطبيق الفلترة برمجياً
-        if city_f != "الكل":
-            df_map = df_map[df_map['المحافظة'] == city_f]
-            
-        if stat_f == "محجوز":
-            df_map = df_map[df_map['اسم الزبون'].notna()]
-        elif stat_f == "متاح":
-            df_map = df_map[df_map['اسم الزبون'].isna()]
+        if city_f != "الكل": df_map = df_map[df_map['المحافظة'] == city_f]
+        if stat_f == "محجوز": df_map = df_map[df_map['اسم الزبون'].notna()]
+        elif stat_f == "متاح": df_map = df_map[df_map['اسم الزبون'].isna()]
 
-        # 5. بناء الخريطة (تم ضبط المركز على دمشق)
         m = folium.Map(location=[33.51, 36.27], zoom_start=12)
         marker_cluster = MarkerCluster().add_to(m)
-        
         for _, row in df_map.iterrows():
-            # قراءة الإحداثيات (التأكد من الأسماء كما في جدولك)
-            lat = row.get('Latitude')
-            lon = row.get('Longitude')
-            
+            lat, lon = row.get('Latitude'), row.get('Longitude')
             if pd.notnull(lat) and pd.notnull(lon):
-                is_booked = pd.notnull(row['اسم الزبون'])
-                color = 'red' if is_booked else 'purple'
-                
-                # نافذة المعلومات بـ HTML RTL لمنع انعكاس النص
-                pop_html = f"""
-                <div style='direction: rtl; text-align: right; font-family: Tahoma;'>
-                    <b>{row['اسم العمود']}</b><br>
-                    الشبكة: {row['الشبكة']}<br>
-                    الشركة: {row['اسم الزبون'] if is_booked else 'متاح'}<br>
-                    الانتهاء: {row['فترة الحجز'] if is_booked else '-'}
-                </div>
-                """
-                folium.Marker(
-                    [lat, lon], 
-                    popup=folium.Popup(pop_html, max_width=200), 
-                    icon=folium.Icon(color=color)
-                ).add_to(marker_cluster)
+                is_b = pd.notnull(row['اسم الزبون'])
+                pop_html = f"<div style='direction:rtl; text-align:right; font-family:Tahoma;'><b>{row['اسم العمود']}</b><br>الشركة: {row['اسم الزبون'] if is_b else 'متاح'}<br>الانتهاء: {row['فترة الحجز'] if is_b else '-'}</div>"
+                folium.Marker([lat, lon], popup=folium.Popup(pop_html, max_width=200), icon=folium.Icon(color='red' if is_b else 'purple')).add_to(marker_cluster)
         
-        # 6. العرض في المتصفح
         st_folium(m, width="100%", height=500)
         st.dataframe(df_map.drop(columns=['Latitude', 'Longitude']), use_container_width=True)
-
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
         col1, col2 = st.columns(2)
         with col1:
             cust = st.text_input("اسم الزبون")
-            city = st.selectbox("المحافظة", pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist())
+            city = st.selectbox("المحافظة", sorted(pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()))
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{city}'", conn)
             nets = st.multiselect("الشبكات:", raw['الشبكة'].unique().tolist())
-            if st.button("➕ إضافة"):
+            if st.button("➕ إضافة للسلة"):
                 if city not in st.session_state.cart: st.session_state.cart[city] = {}
                 for n in nets:
                     df_net = raw[raw['الشبكة'] == n].copy()
@@ -182,5 +147,6 @@ else:
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 if st.button("🚀 تصدير Word"):
                     doc_out = export_word(cust, st.session_state.cart)
-                    st.download_button("📥 تحميل", doc_out, f"Quotation.docx")
+                    st.download_button("📥 تحميل العرض", doc_out, f"Quotation_{cust}.docx")
+                if st.button("🗑️ تفريغ السلة"): st.session_state.cart = {}; st.rerun()
     conn.close()
