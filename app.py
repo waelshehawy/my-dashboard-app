@@ -118,7 +118,15 @@ else:
         # الخريطة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
         marker_cluster = MarkerCluster().add_to(m)
-        st.write(f"عدد اللوحات التي تملك إحداثيات: {df_map['Latitude'].notnull().sum()}")
+        # استبدل سطر التحقق بهذا السطر المرن
+for _, row in df_map.iterrows():
+    # التحقق من وجود الإحداثيات بغض النظر عن حالة الأحرف
+    lat = row.get('Latitude') or row.get('latitude')
+    lon = row.get('Longitude') or row.get('longitude')
+    
+    if pd.notnull(lat) and pd.notnull(lon):
+        # ... تكملة كود رسم الماركر باستخدام lat و lon
+
         for _, row in df_map.iterrows():
             if pd.notnull(row['Latitude']):
                 is_b = pd.notnull(row['اسم الزبون'])
