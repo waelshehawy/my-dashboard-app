@@ -79,7 +79,7 @@ if not st.session_state.authenticated:
     user = st.text_input("اسم المستخدم")
     pwd = st.text_input("كلمة المرور", type="password")
     if st.button("دخول"):
-        if user == "admin" and pwd == "preview2026":
+        if user == "a" and pwd == "3900":
             st.session_state.authenticated = True
             st.rerun()
         else: st.error("❌ بيانات خاطئة")
