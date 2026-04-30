@@ -32,7 +32,7 @@ def export_word(customer_name, cart_data):
         header = doc.sections[0].header
         p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(6))
+        p.add_run().add_picture('logo.png', width=Inches(3))
     
     doc.add_paragraph("\n")
     p_cust = doc.add_paragraph()
