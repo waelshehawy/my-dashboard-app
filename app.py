@@ -94,47 +94,71 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    if page == "🏠 الداشبورد والخريطة":
+        if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
-        df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
         
-        # 1. كود فحص المحارف (للمعاينة فقط)
-        st.subheader("🔍 فحص بيانات المحافظات")
-        check_cities = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)
-        for city in check_cities['المحافظة'].tolist():
-            st.code(f"الاسم: '{city}' | الطول: {len(str(city))} | المحارف: {list(str(city))}")
+        # 1. جلب البيانات (استخدام copy لمنع مشاكل الذاكرة)
+        df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn).copy()
+        
+        try:
+            df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
+            # دمج البيانات مع الحفاظ على كل صفوف الجدول الأساسي (left join)
+            df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
+        except:
+            df_map = df_all.copy()
+            df_map['اسم الزبون'] = None
+            df_map['فترة الحجز'] = None
 
-        # 2. جلب الحجوزات والدمج
-        df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
-        df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
-
-        # 3. تنظيف شامل لكل المحافظات (إزالة الفراغات والمحارف المخفية)
+        # 2. تنظيف المحافظة (إلزامي لمطابقة الفلتر)
         df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
-        
-        # تنظيف المحافظة لحل مشكلة اختفاء دمشق
-        df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
-
+        # 3. الفلاتر (في الشريط الجانبي)
         with st.sidebar:
             st.divider()
-            city_f = st.selectbox("المحافظة:", ["الكل"] + sorted(df_map['المحافظة'].unique().tolist()))
-            stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
+            # جلب القائمة من البيانات الفعلية لضمان المطابقة
+            city_options = ["الكل"] + sorted(df_map['المحافظة'].unique().tolist())
+            city_f = st.selectbox("اختر المحافظة:", city_options)
+            stat_f = st.radio("حالة اللوحة:", ["الكل", "متاح", "محجوز"])
 
-        if city_f != "الكل": df_map = df_map[df_map['المحافظة'] == city_f]
-        if stat_f == "محجوز": df_map = df_map[df_map['اسم الزبون'].notna()]
-        elif stat_f == "متاح": df_map = df_map[df_map['اسم الزبون'].isna()]
+        # 4. تطبيق الفلترة (بشكل متتابع)
+        filtered_df = df_map.copy()
+        
+        if city_f != "الكل":
+            filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
+        
+        if stat_f == "محجوز":
+            filtered_df = filtered_df[filtered_df['اسم الزبون'].notna()]
+        elif stat_f == "متاح":
+            filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
 
-        m = folium.Map(location=[33.51, 36.27], zoom_start=12)
+        # 5. الخريطة (نستخدم filtered_df هنا)
+        m = folium.Map(location=[34.8, 38.5], zoom_start=7)
         marker_cluster = MarkerCluster().add_to(m)
-        for _, row in df_map.iterrows():
+        
+        for _, row in filtered_df.iterrows():
+            # استخدام الأسماء الدقيقة للأعمدة كما أكدتَ سابقاً
             lat, lon = row.get('Latitude'), row.get('Longitude')
+            
             if pd.notnull(lat) and pd.notnull(lon):
-                is_b = pd.notnull(row['اسم الزبون'])
-                pop_html = f"<div style='direction:rtl; text-align:right; font-family:Tahoma;'><b>{row['اسم العمود']}</b><br>الشركة: {row['اسم الزبون'] if is_b else 'متاح'}<br>الانتهاء: {row['فترة الحجز'] if is_b else '-'}</div>"
-                folium.Marker([lat, lon], popup=folium.Popup(pop_html, max_width=200), icon=folium.Icon(color='red' if is_b else 'purple')).add_to(marker_cluster)
+                is_booked = pd.notnull(row.get('اسم الزبون'))
+                color = 'red' if is_booked else 'purple'
+                
+                pop_html = f"""
+                <div style='direction: rtl; text-align: right; font-family: Tahoma;'>
+                    <b>{row['اسم العمود']}</b><br>
+                    الشركة: {row['اسم الزبون'] if is_booked else 'متاح'}<br>
+                    الانتهاء: {row['فترة الحجز'] if is_booked else '-'}
+                </div>
+                """
+                folium.Marker(
+                    [lat, lon], 
+                    popup=folium.Popup(pop_html, max_width=200), 
+                    icon=folium.Icon(color=color)
+                ).add_to(marker_cluster)
         
         st_folium(m, width="100%", height=500)
-        st.dataframe(df_map.drop(columns=['Latitude', 'Longitude']), use_container_width=True)
+        st.dataframe(filtered_df.drop(columns=['Latitude', 'Longitude'], errors='ignore'), use_container_width=True)
+
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
