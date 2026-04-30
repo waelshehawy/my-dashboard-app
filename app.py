@@ -96,7 +96,7 @@ else:
 
     if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
-                df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
+        df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
         
         # 1. كود فحص المحارف (للمعاينة فقط)
         st.subheader("🔍 فحص بيانات المحافظات")
