@@ -94,10 +94,10 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-            if page == "🏠 الداشبورد والخريطة":
+              if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
         
-        # 1. Fetch and Merge Data
+        # 1. Fetch Data
         df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn).copy()
         try:
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
@@ -107,7 +107,7 @@ else:
             df_map['اسم الزبون'] = None
             df_map['فترة الحجز'] = None
 
-        # 2. Clean Governorate column
+        # 2. Clean Data
         df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
         # 3. Sidebar Filters
@@ -117,7 +117,7 @@ else:
             city_f = st.selectbox("اختر المحافظة:", city_options)
             stat_f = st.radio("حالة اللوحة:", ["الكل", "متاح", "محجوز"])
 
-        # 4. Apply Filters
+        # 4. Apply Logic
         filtered_df = df_map.copy()
         if city_f != "الكل":
             filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
@@ -127,7 +127,7 @@ else:
         elif stat_f == "متاح":
             filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
 
-        # 5. Build Map
+        # 5. Render Map
         m = folium.Map(location=[33.51, 36.27], zoom_start=12)
         marker_cluster = MarkerCluster().add_to(m)
         
@@ -150,9 +150,9 @@ else:
                     icon=folium.Icon(color=color)
                 ).add_to(marker_cluster)
         
-        # 6. Display
         st_folium(m, width="100%", height=500)
         st.dataframe(filtered_df.drop(columns=['Latitude', 'Longitude'], errors='ignore'), use_container_width=True)
+
 
 
 
