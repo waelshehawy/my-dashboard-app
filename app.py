@@ -118,6 +118,7 @@ else:
         # الخريطة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
         marker_cluster = MarkerCluster().add_to(m)
+        st.write(f"عدد اللوحات التي تملك إحداثيات: {df_map['Latitude'].notnull().sum()}")
         for _, row in df_map.iterrows():
             if pd.notnull(row['Latitude']):
                 is_b = pd.notnull(row['اسم الزبون'])
