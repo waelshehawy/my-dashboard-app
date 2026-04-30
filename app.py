@@ -12,7 +12,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
-# --- PAGE CONFIG ---
+# --- إعدادات الصفحة ---
 st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 
 def get_connection():
@@ -22,7 +22,8 @@ def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-def export_word(customer_name, cart_data):
+# --- وظيفة تصدير الوورد المحسنة بالفترة ---
+def export_word(customer_name, cart_data, period_name):
     doc = Document()
     doc.sections[0].right_to_left = True
     if os.path.exists('logo.png'):
@@ -35,6 +36,11 @@ def export_word(customer_name, cart_data):
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
+    
+    # إضافة نص الفترة في العرض
+    p_period = doc.add_paragraph()
+    p_period.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_period.add_run(ar(f"الموضوع: عرض سعر لمواقع إعلانية للفترة: {period_name}")).bold = True
 
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph()
@@ -67,7 +73,7 @@ def export_word(customer_name, cart_data):
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
 
-# --- SECURITY ---
+# --- نظام الأمان ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -76,7 +82,7 @@ if not st.session_state.authenticated:
     user = st.text_input("اسم المستخدم")
     pwd = st.text_input("كلمة المرور", type="password")
     if st.button("دخول"):
-        if user == "a" and pwd == "3900":
+        if user == "admin" and pwd == "preview2026":
             st.session_state.authenticated = True
             st.rerun()
         else: st.error("❌ بيانات خاطئة")
@@ -93,9 +99,11 @@ else:
 
     if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
-        
-        # 1. Fetch data
         df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn).copy()
+        
+        # جلب الفترات من جدول "الفترة"
+        df_periods_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+        
         try:
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
             df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
@@ -103,68 +111,52 @@ else:
             df_map = df_all.copy()
             df_map['اسم الزبون'] = None
 
-        # 2. Critical: Clean Governorate names to fix Damascus filtering
         df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
         with st.sidebar:
             st.divider()
-            # 3. Dynamic filter list
-            city_options = ["الكل"] + sorted(df_map['المحافظة'].unique().tolist())
-            city_f = st.selectbox("اختر المحافظة:", city_options)
+            city_f = st.selectbox("اختر المحافظة:", ["الكل"] + sorted(df_map['المحافظة'].unique().tolist()))
+            period_f = st.selectbox("فلترة حسب فترة الحجز:", ["الكل"] + df_periods_list)
             stat_f = st.radio("حالة اللوحة:", ["الكل", "متاح", "محجوز"])
 
-        # 4. Apply Filters to a NEW dataframe
         filtered_df = df_map.copy()
         if city_f != "الكل":
-            # Clean the selection just in case
-            filtered_df = filtered_df[filtered_df['المحافظة'] == city_f.strip()]
-        
+            filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
+        if period_f != "الكل":
+            filtered_df = filtered_df[filtered_df['فترة الحجز'] == period_f]
         if stat_f == "محجوز":
             filtered_df = filtered_df[filtered_df['اسم الزبون'].notna()]
         elif stat_f == "متاح":
             filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
 
-        # 5. Build Map using ONLY filtered_df
-        # If Damascus is selected, the map center will stay near Damascus
         m = folium.Map(location=[33.51, 36.27], zoom_start=12)
         marker_cluster = MarkerCluster().add_to(m)
-        
-        # KEY FIX: The loop below must use filtered_df, NOT df_all or df_map
         for _, row in filtered_df.iterrows():
             lat, lon = row.get('Latitude'), row.get('Longitude')
             if pd.notnull(lat) and pd.notnull(lon):
                 is_b = pd.notnull(row.get('اسم الزبون'))
-                color = 'red' if is_b else 'purple'
-                
-                # HTML with RTL support
-                pop_html = f"""
-                <div style='direction: rtl; text-align: right; font-family: Tahoma;'>
-                    <b>{row['اسم العمود']}</b><br>
-                    الشبكة: {row['الشبكة']}<br>
-                    الشركة: {row['اسم الزبون'] if is_b else 'متاح'}<br>
-                    الانتهاء: {row['فترة الحجز'] if is_b else '-'}
-                </div>
-                """
-                folium.Marker(
-                    [lat, lon], 
-                    popup=folium.Popup(pop_html, max_width=200), 
-                    icon=folium.Icon(color=color)
-                ).add_to(marker_cluster)
+                pop_html = f"<div style='direction:rtl; text-align:right; font-family:Tahoma;'><b>{row['اسم العمود']}</b><br>الشركة: {row['اسم الزبون'] if is_b else 'متاح'}<br>الفترة: {row['فترة الحجز'] if is_b else '-'}</div>"
+                folium.Marker([lat, lon], popup=folium.Popup(pop_html, max_width=200), icon=folium.Icon(color='red' if is_b else 'purple')).add_to(marker_cluster)
         
-        # 6. Display map and table
         st_folium(m, width="100%", height=500)
         st.dataframe(filtered_df.drop(columns=['Latitude', 'Longitude'], errors='ignore'), use_container_width=True)
 
-
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
+        
+        # جلب الفترات للاختيار داخل العرض
+        df_periods_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+        
         col1, col2 = st.columns(2)
         with col1:
             cust = st.text_input("اسم الزبون")
+            selected_period = st.selectbox("اختر فترة العرض المطلوبة:", df_periods_list)
+            
             city_list = sorted(pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist())
             sel_city = st.selectbox("المحافظة", city_list)
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
             nets = st.multiselect("الشبكات:", raw['الشبكة'].unique().tolist())
+            
             if st.button("➕ إضافة للسلة"):
                 if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                 for n in nets:
@@ -179,7 +171,8 @@ else:
                         with st.expander(f"📍 {c} - {n}"):
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 if st.button("🚀 تصدير Word"):
-                    doc_out = export_word(cust, st.session_state.cart)
+                    # تمرير اسم الفترة للدالة
+                    doc_out = export_word(cust, st.session_state.cart, selected_period)
                     st.download_button("📥 تحميل العرض", doc_out, f"Quotation_{cust}.docx")
                 if st.button("🗑️ تفريغ السلة"): st.session_state.cart = {}; st.rerun()
     conn.close()
