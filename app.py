@@ -106,14 +106,21 @@ else:
         df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
 
         # الفلاتر
-        with st.sidebar:
-            st.divider()
-            city_f = st.selectbox("المحافظة:", ["الكل"] + df_map['المحافظة'].unique().tolist())
-            stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
+  # --- تنظيف أسماء المحافظات لضمان عمل الفلتر ---
+df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
-        if city_f != "الكل": df_map = df_map[df_map['المحافظة'] == city_f]
-        if stat_f == "محجوز": df_map = df_map[df_map['اسم الزبون'].notna()]
-        elif stat_f == "متاح": df_map = df_map[df_map['اسم الزبون'].isna()]
+# الفلاتر الجانبية
+with st.sidebar:
+    st.divider()
+    # جلب المحافظات بدون تكرار وبدون مسافات
+    city_options = ["الكل"] + sorted(df_map['المحافظة'].unique().tolist())
+    city_f = st.selectbox("المحافظة:", city_options)
+    stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
+
+# تطبيق الفلترة
+if city_f != "الكل":
+    df_map = df_map[df_map['المحافظة'] == city_f]
+
 
         # الخريطة
         m = folium.Map(location=[34.8, 38.5], zoom_start=7)
