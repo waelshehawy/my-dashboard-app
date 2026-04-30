@@ -97,6 +97,13 @@ else:
     if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
         df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
+        # كود فحص محارف "دمشق" بدقة
+st.subheader("🔍 فحص بيانات محافظة دمشق")
+check_damascus = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)
+for city in check_damascus['المحافظة'].tolist():
+    # عرض الكلمة مع طولها ورموزها
+    st.code(f"الاسم: '{city}' | الطول: {len(str(city))} | المحارف: {list(str(city))}")
+
         df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
         df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
         
