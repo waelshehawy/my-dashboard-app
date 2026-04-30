@@ -171,7 +171,7 @@ if page == "🏠 الداشبورد والخريطة":
     st.dataframe(df_map.drop(columns=['Latitude', 'Longitude']), use_container_width=True)
 
 
-    elif page == "📄 إنشاء عرض سعر":
+       elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
         col1, col2 = st.columns(2)
         with col1:
@@ -181,7 +181,8 @@ if page == "🏠 الداشبورد والخريطة":
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{city}'", conn)
             nets = st.multiselect("الشبكات:", raw['الشبكة'].unique().tolist())
             if st.button("➕ إضافة"):
-                if city not in st.session_state.cart: st.session_state.cart[city] = {}
+                if city not in st.session_state.cart: 
+                    st.session_state.cart[city] = {}
                 for n in nets:
                     st.session_state.cart[city][n] = raw[raw['الشبكة'] == n].copy()
 
@@ -190,9 +191,15 @@ if page == "🏠 الداشبورد والخريطة":
                 for c, nts in list(st.session_state.cart.items()):
                     for n, df in nts.items():
                         with st.expander(f"📍 {c} - {n}"):
+                            # تأكد أن الـ data_editor يحمل مفتاحاً فريداً
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 
                 if st.button("🚀 تصدير Word"):
                     doc_out = export_word(cust, st.session_state.cart)
+                    st.download_button("📥 تحميل", doc_out, f"Quotation.docx")
+
+    # إغلاق الاتصال يجب أن يكون في نهاية الـ else الكبيرة (نظام الأمان)
+    conn.close() 
+
                     st.download_button("📥 تحميل", doc_out, f"Quotation.docx")
     conn.close()
