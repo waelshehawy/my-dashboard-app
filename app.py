@@ -93,6 +93,8 @@ else:
 
     if page == "🏠 الداشبورد والخريطة":
         st.title("📊 الخريطة التفاعلية للمواقع")
+        
+        # 1. Fetch data
         df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn).copy()
         try:
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
@@ -101,33 +103,58 @@ else:
             df_map = df_all.copy()
             df_map['اسم الزبون'] = None
 
+        # 2. Critical: Clean Governorate names to fix Damascus filtering
         df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
         with st.sidebar:
             st.divider()
+            # 3. Dynamic filter list
             city_options = ["الكل"] + sorted(df_map['المحافظة'].unique().tolist())
             city_f = st.selectbox("اختر المحافظة:", city_options)
             stat_f = st.radio("حالة اللوحة:", ["الكل", "متاح", "محجوز"])
 
+        # 4. Apply Filters to a NEW dataframe
         filtered_df = df_map.copy()
         if city_f != "الكل":
-            filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
+            # Clean the selection just in case
+            filtered_df = filtered_df[filtered_df['المحافظة'] == city_f.strip()]
+        
         if stat_f == "محجوز":
             filtered_df = filtered_df[filtered_df['اسم الزبون'].notna()]
         elif stat_f == "متاح":
             filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
 
+        # 5. Build Map using ONLY filtered_df
+        # If Damascus is selected, the map center will stay near Damascus
         m = folium.Map(location=[33.51, 36.27], zoom_start=12)
         marker_cluster = MarkerCluster().add_to(m)
+        
+        # KEY FIX: The loop below must use filtered_df, NOT df_all or df_map
         for _, row in filtered_df.iterrows():
             lat, lon = row.get('Latitude'), row.get('Longitude')
             if pd.notnull(lat) and pd.notnull(lon):
                 is_b = pd.notnull(row.get('اسم الزبون'))
-                pop_html = f"<div style='direction:rtl; text-align:right; font-family:Tahoma;'><b>{row['اسم العمود']}</b><br>الشركة: {row['اسم الزبون'] if is_b else 'متاح'}<br>الانتهاء: {row['فترة الحجز'] if is_b else '-'}</div>"
-                folium.Marker([lat, lon], popup=folium.Popup(pop_html, max_width=200), icon=folium.Icon(color='red' if is_b else 'purple')).add_to(marker_cluster)
+                color = 'red' if is_b else 'purple'
+                
+                # HTML with RTL support
+                pop_html = f"""
+                <div style='direction: rtl; text-align: right; font-family: Tahoma;'>
+                    <b>{row['اسم العمود']}</b><br>
+                    الشبكة: {row['الشبكة']}<br>
+                    الشركة: {row['اسم الزبون'] if is_b else 'متاح'}<br>
+                    الانتهاء: {row['فترة الحجز'] if is_b else '-'}
+                </div>
+                """
+                folium.Marker(
+                    [lat, lon], 
+                    popup=folium.Popup(pop_html, max_width=200), 
+                    icon=folium.Icon(color=color)
+                ).add_to(marker_cluster)
         
+        # 6. Display map and table
         st_folium(m, width="100%", height=500)
         st.dataframe(filtered_df.drop(columns=['Latitude', 'Longitude'], errors='ignore'), use_container_width=True)
+
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
