@@ -110,7 +110,7 @@ else:
 df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
 # الفلاتر الجانبية
-with st.sidebar:
+  with st.sidebar:
     st.divider()
     # جلب المحافظات بدون تكرار وبدون مسافات
     city_options = ["الكل"] + sorted(df_map['المحافظة'].unique().tolist())
@@ -118,7 +118,7 @@ with st.sidebar:
     stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
 
 # تطبيق الفلترة
-if city_f != "الكل":
+  if city_f != "الكل":
     df_map = df_map[df_map['المحافظة'] == city_f]
 
 
