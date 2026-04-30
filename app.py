@@ -32,7 +32,7 @@ def export_word(customer_name, cart_data):
         header = doc.sections[0].header
         p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(6))
+        p.add_run().add_picture('logo.png', width=Inches(3))
     
     doc.add_paragraph("\n")
     p_cust = doc.add_paragraph()
@@ -84,7 +84,7 @@ if not st.session_state.authenticated:
     user = st.text_input("اسم المستخدم")
     pwd = st.text_input("كلمة المرور", type="password")
     if st.button("دخول"):
-        if user == "admin" and pwd == "preview2026":
+        if user == "a" and pwd == "3900":
             st.session_state.authenticated = True
             st.rerun()
         else: st.error("❌ بيانات خاطئة")
