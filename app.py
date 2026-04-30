@@ -94,24 +94,82 @@ else:
             st.image("logo.png", width=150)
         page = st.radio("القائمة:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
 
-    if page == "🏠 الداشبورد والخريطة":
-        st.title("📊 حالة المواقع والإشغال")
-        df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
-        df_booked_ids = pd.read_sql("SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1]", conn)['رقم اللوحة'].tolist()
+if page == "🏠 الداشبورد والخريطة":
+    st.title("📊 الخريطة التفاعلية للمواقع")
 
-        # الخريطة الديناميكية
-        m = folium.Map(location=[33.51, 36.27], zoom_start=12)
-        for _, row in df_all.iterrows():
-            if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
-                color = 'red' if row['رقم اللوحة'] in df_booked_ids else 'purple'
-                folium.Marker(
-                    [row['Latitude'], row['Longitude']], 
-                    popup=ar(row['اسم العمود']), 
-                    icon=folium.Icon(color=color)
-                ).add_to(m)
-        st_folium(m, width=1200, height=450)
+    # --- الاتصال وجلب البيانات ---
+    conn = get_connection()
+    df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
+    
+    # جلب الحجوزات (تأكد من مطابقة أسماء أعمدة جدول حجوزات1)
+    try:
+        df_booked_info = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
+    except:
+        # في حال لم تكن الجداول مكتملة بعد
+        df_booked_info = pd.DataFrame(columns=['رقم اللوحة', 'اسم الزبون', 'فترة الحجز'])
+
+    # دمج البيانات
+    df_map = pd.merge(df_all, df_booked_info, on='رقم اللوحة', how='left')
+
+    # --- الفلاتر الجانبية ---
+    with st.sidebar:
+        st.subheader("🔍 فلاتر البحث")
         
-        st.dataframe(df_all, use_container_width=True)
+        # 1. فلتر المحافظة (العمود رقم 4)
+        unique_cities = ["الكل"] + df_map['المحافظة'].dropna().unique().tolist()
+        city_filter = st.selectbox("المحافظة:", unique_cities)
+        
+        # 2. فلتر الحالة (بناءً على وجود اسم زبون)
+        status_filter = st.radio("حالة المواقع:", ["الكل", "متاح ✅", "محجوز 🚫"])
+
+    # --- تطبيق الفلاتر برمجياً ---
+    if city_filter != "الكل":
+        df_map = df_map[df_map['المحافظة'] == city_filter]
+    
+    if status_filter == "محجوز 🚫":
+        df_map = df_map[df_map['اسم الزبون'].notna()]
+    elif status_filter == "متاح ✅":
+        df_map = df_map[df_map['اسم الزبون'].isna()]
+
+    # --- بناء الخريطة ---
+    # نقطة المركز (دمشق)
+    m = folium.Map(location=[33.51, 36.27], zoom_start=12)
+    marker_cluster = MarkerCluster().add_to(m)
+
+    for _, row in df_map.iterrows():
+        # التأكد من وجود إحداثيات (العمود 8 و 9)
+        if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
+            is_booked = pd.notnull(row['اسم الزبون'])
+            color = 'red' if is_booked else 'purple'
+            
+            # محتوى النافذة المنبثقة - استخدام HTML RTL لحل مشكلة الانعكاس
+            cust_name = row['اسم الزبون'] if is_booked else "متوفر حالياً"
+            expiry_date = row['فترة الحجز'] if is_booked else "-"
+            
+            popup_html = f"""
+            <div style='direction: rtl; text-align: right; font-family: "Tahoma", sans-serif; min-width: 180px;'>
+                <h5 style='margin:0; color: #660099;'>{row['اسم العمود']}</h5>
+                <hr style='margin: 5px 0;'>
+                <b>الشبكة:</b> {row['الشبكة']}<br>
+                <b>الشركة:</b> {cust_name}<br>
+                <b>تاريخ انتهاء الحجز:</b> {expiry_date}<br>
+                <b>الحالة:</b> {'🚫 محجوز' if is_booked else '✅ متاح'}
+            </div>
+            """
+            
+            folium.Marker(
+                location=[row['Latitude'], row['Longitude']],
+                popup=folium.Popup(popup_html, max_width=300),
+                icon=folium.Icon(color=color, icon='info-sign')
+            ).add_to(marker_cluster)
+
+    # عرض الخريطة
+    st_folium(m, width="100%", height=550)
+    
+    # عرض الجدول التفصيلي أسفل الخريطة
+    st.subheader("📋 تفاصيل البيانات")
+    st.dataframe(df_map.drop(columns=['Latitude', 'Longitude']), use_container_width=True)
+
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر")
