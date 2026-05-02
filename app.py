@@ -62,7 +62,7 @@ def export_word(customer_name, cart_data, period_name):
             doc_pr = inline.docPr
             graphic = inline.graphic
             
-            anchor = OxmlElement('wp:anchor')
+            anchor = OxmlElement('wp:behindtext')
             anchor.set(qn('wp:behindDoc'), '1') # جعلها خلف النص
             anchor.set(qn('wp:locked'), '0')
             anchor.set(qn('wp:layoutInCell'), '1')
