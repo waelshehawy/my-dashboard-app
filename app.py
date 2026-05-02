@@ -13,7 +13,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
-
+from docx.shared import cm
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 
@@ -33,7 +33,7 @@ def set_cell_shading(cell, color):
 
 # --- وظيفة تصدير الوورد الاحترافية (تحديث الصورة المدمجة) ---
 
-from docx.shared import cm
+
 
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
