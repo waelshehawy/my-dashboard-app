@@ -9,6 +9,8 @@ from folium.plugins import MarkerCluster
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
 
@@ -22,63 +24,105 @@ def ar(text):
     if not text: return ""
     return get_display(reshape(str(text)))
 
-# --- وظيفة تصدير الوورد المحسنة بالفترة ---
+# دالة لتلوين خلفية خلايا الجدول (للعناوين)
+def set_cell_shading(cell, color):
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:fill'), color)
+    tcPr.append(shd)
+
+# --- وظيفة تصدير الوورد الاحترافية المطابقة للنموذج ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
-    doc.sections[0].right_to_left = True
+    
+    # إعداد الهوامش والاتجاه
+    section = doc.sections[0]
+    section.right_to_left = True
+    
+    # 1. الهيدر (اللوجو أعلى اليسار كما في النموذج)
+    header = section.header
+    p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    p_header.alignment = WD_ALIGN_PARAGRAPH.LEFT
     if os.path.exists('logo.png'):
-        header = doc.sections[0].header
-        p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.add_run().add_picture('logo.png', width=Inches(6))
-    
-    doc.add_paragraph("\n")
-    p_cust = doc.add_paragraph()
-    p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_cust.add_run(ar(f"السادة شركة .. {customer_name} المحترمين")).bold = True
-    
-    # إضافة نص الفترة في العرض
-    p_period = doc.add_paragraph()
-    p_period.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_period.add_run(ar(f"الموضوع: عرض سعر لمواقع إعلانية للفترة: {period_name}")).bold = True
+        p_header.add_run().add_picture('logo.png', width=Inches(1.5))
 
+    # 2. الفوتر (بيانات الاتصال أسفل اليمين)
+    footer = section.footer
+    p_footer = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    p_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    contact_info = ar("سوريا - دمشق - مزة جبل | هاتف: 9394 (963+) | info@previewsyria.com")
+    run_f = p_footer.add_run(contact_info)
+    run_f.font.size = Pt(9)
+    run_f.font.color.rgb = RGBColor(100, 100, 100)
+
+    # 3. محتوى الخطاب
+    doc.add_paragraph(f"{ar('التاريخ:')} 2026/3/9").alignment = WD_ALIGN_PARAGRAPH.LEFT
+    
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_c = p_cust.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
+    run_c.bold = True
+    run_c.font.size = Pt(16)
+
+    doc.add_paragraph(ar("تحية طيبة،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني للفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # 4. بناء الجداول الملونة لكل محافظة
     for city, networks in cart_data.items():
-        p_city = doc.add_paragraph()
-        p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run_city = p_city.add_run(ar(f"محافظة {city}"))
-        run_city.font.color.rgb = RGBColor(102, 0, 153)
-        run_city.font.size = Pt(16)
+        doc.add_paragraph(ar(f"محافظة {city}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
         
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكة: {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            table = doc.add_table(rows=1, cols=4); table.style = 'Table Grid'
-            hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = ar("العدد"), ar("الموقع"), ar("العدد"), ar("الموقع")
             
-            data_list = df.iloc[:, :2].values.tolist()
-            for i in range(0, len(data_list), 2):
-                row = table.add_row().cells
-                row[0].text, row[1].text = str(data_list[i][1]), ar(data_list[i][0])
-                if i + 1 < len(data_list):
-                    row[2].text, row[3].text = str(data_list[i+1][1]), ar(data_list[i+1][0])
+            # إنشاء جدول 4 أعمدة (العدد | الشبكة | العدد | الشبكة)
+            table = doc.add_table(rows=1, cols=4)
+            table.style = 'Table Grid'
+            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
             
+            # تنسيق رأس الجدول (تظليل أرجواني ونص أبيض)
+            hdr_cells = table.rows[0].cells
+            titles = ["العدد", "الشبكة", "العدد", "الشبكة"]
+            for i, title in enumerate(titles):
+                hdr_cells[i].text = ar(title)
+                set_cell_shading(hdr_cells[i], "660099") # لون أرجواني
+                run = hdr_cells[i].paragraphs[0].runs[0]
+                run.font.color.rgb = RGBColor(255, 255, 255) # نص أبيض
+                run.bold = True
+                hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            # تعبئة البيانات (ثنائية)
+            data = df.iloc[:, :2].values.tolist()
+            for i in range(0, len(data), 2):
+                row_cells = table.add_row().cells
+                row_cells[1].text = ar(data[i][0]) # الموقع/الشبكة
+                row_cells[0].text = str(data[i][1]) # العدد
+                if i + 1 < len(data):
+                    row_cells[3].text = ar(data[i+1][0])
+                    row_cells[2].text = str(data[i+1][1])
+            
+            # تذييل الأسعار لكل جدول
             total_n = pd.to_numeric(df.iloc[:, 1], errors='coerce').sum()
             prnt = pd.to_numeric(df['أجور الطباعة'], errors='coerce').sum() if 'أجور الطباعة' in df.columns else 0
             ads = pd.to_numeric(df['أجور العرض'], errors='coerce').sum() if 'أجور العرض' in df.columns else 0
             
-            f_p = doc.add_paragraph(); f_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            info_line = f"{ar('العدد:')} {int(total_n)} | {ar('أجور الطباعة:')} {prnt}$ | {ar('أجور العرض:')} {ads}$"
-            f_p.add_run(info_line).bold = True
-    
-    target = io.BytesIO(); doc.save(target); target.seek(0)
+            p_price = doc.add_paragraph()
+            p_price.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            price_text = f"{ar('العدد:')} {int(total_n)} | {ar('أجور العرض:')} {ads}$ | {ar('أجور الطباعة:')} {prnt}$"
+            run_p = p_price.add_run(price_text)
+            run_p.bold = True
+            run_p.font.color.rgb = RGBColor(102, 0, 153)
+
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
     return target
 
-# --- نظام الأمان ---
+# --- واجهة التطبيق (Streamlit) ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔒 تسجيل الدخول - نظام بريفيو")
+    st.title("🔒 تسجيل الدخول - PreView ERP")
     user = st.text_input("اسم المستخدم")
     pwd = st.text_input("كلمة المرور", type="password")
     if st.button("دخول"):
@@ -91,43 +135,28 @@ else:
     if 'cart' not in st.session_state: st.session_state.cart = {}
     
     with st.sidebar:
-        if os.path.exists("logo.png"): st.image("logo.png")
+        st.header("PreView Ads")
         page = st.radio("القائمة:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
         if st.button("خروج"):
             st.session_state.authenticated = False
             st.rerun()
 
     if page == "🏠 الداشبورد والخريطة":
-        st.title("📊 الخريطة التفاعلية للمواقع")
+        st.title("📊 الخريطة التفاعلية والداشبورد")
         df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn).copy()
-        
-        # جلب الفترات من جدول "الفترة"
-        df_periods_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
-        
-        try:
-            df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
-            df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
-        except:
-            df_map = df_all.copy()
-            df_map['اسم الزبون'] = None
-
+        df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
+        df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
         df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
 
         with st.sidebar:
             st.divider()
-            city_f = st.selectbox("اختر المحافظة:", ["الكل"] + sorted(df_map['المحافظة'].unique().tolist()))
-            period_f = st.selectbox("فلترة حسب فترة الحجز:", ["الكل"] + df_periods_list)
-            stat_f = st.radio("حالة اللوحة:", ["الكل", "متاح", "محجوز"])
+            city_f = st.selectbox("المحافظة:", ["الكل"] + sorted(df_map['المحافظة'].unique().tolist()))
+            stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
 
         filtered_df = df_map.copy()
-        if city_f != "الكل":
-            filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
-        if period_f != "الكل":
-            filtered_df = filtered_df[filtered_df['فترة الحجز'] == period_f]
-        if stat_f == "محجوز":
-            filtered_df = filtered_df[filtered_df['اسم الزبون'].notna()]
-        elif stat_f == "متاح":
-            filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
+        if city_f != "الكل": filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
+        if stat_f == "محجوز": filtered_df = filtered_df[filtered_df['اسم الزبون'].notna()]
+        elif stat_f == "متاح": filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
 
         m = folium.Map(location=[33.51, 36.27], zoom_start=12)
         marker_cluster = MarkerCluster().add_to(m)
@@ -142,20 +171,17 @@ else:
         st.dataframe(filtered_df.drop(columns=['Latitude', 'Longitude'], errors='ignore'), use_container_width=True)
 
     elif page == "📄 إنشاء عرض سعر":
-        st.title("📄 بناء عرض سعر")
-        
-        # جلب الفترات للاختيار داخل العرض
-        df_periods_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+        st.title("📄 بناء عرض سعر احترافي")
+        df_periods = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
         
         col1, col2 = st.columns(2)
         with col1:
             cust = st.text_input("اسم الزبون")
-            selected_period = st.selectbox("اختر فترة العرض المطلوبة:", df_periods_list)
-            
+            selected_period = st.selectbox("اختر الفترة:", df_periods)
             city_list = sorted(pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist())
             sel_city = st.selectbox("المحافظة", city_list)
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
-            nets = st.multiselect("الشبكات:", raw['الشبكة'].unique().tolist())
+            nets = st.multiselect("الشبكات المتاحة:", raw['الشبكة'].unique().tolist())
             
             if st.button("➕ إضافة للسلة"):
                 if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
@@ -171,8 +197,7 @@ else:
                         with st.expander(f"📍 {c} - {n}"):
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 if st.button("🚀 تصدير Word"):
-                    # تمرير اسم الفترة للدالة
                     doc_out = export_word(cust, st.session_state.cart, selected_period)
-                    st.download_button("📥 تحميل العرض", doc_out, f"Quotation_{cust}.docx")
+                    st.download_button("📥 تحميل عرض السعر", doc_out, f"Quotation_{cust}.docx")
                 if st.button("🗑️ تفريغ السلة"): st.session_state.cart = {}; st.rerun()
     conn.close()
