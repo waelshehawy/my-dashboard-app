@@ -18,102 +18,95 @@ from bidi.algorithm import get_display
 st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 
 def get_connection():
-    # تأكد من وجود ملف قاعدة البيانات في نفس المسار
     return sqlite3.connect('billboards_data.db')
 
 def ar(text):
-    """دالة لمعالجة النصوص العربية للعرض في المكتبات التي لا تدعم RTL"""
-    if not text: return ""
+    """معالجة النصوص العربية"""
+    if not text or str(text).strip() == "": return ""
     return get_display(reshape(str(text)))
 
 def set_cell_shading(cell, color):
-    """تلوين خلفية خلايا الجدول في Word"""
+    """تلوين خلفية الخلايا"""
     tcPr = cell._tc.get_or_add_tcPr()
     shd = OxmlElement('w:shd')
     shd.set(qn('w:fill'), color)
     tcPr.append(shd)
 
-# --- وظيفة تصدير الوورد الاحترافية (مع شعار خلف النص) ---
+# --- دالة تصدير الوورد الاحترافية ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
+    
+    # 1. إعدادات الصفحة A4
     section = doc.sections[0]
     section.page_height = Cm(29.7)
     section.page_width = Cm(21)
-    # هوامش المحتوى (النص سيتحرك داخلها)
     section.left_margin = Cm(2)
     section.right_margin = Cm(2)
-    section.top_margin = Cm(2.5) # ترك مساحة علوية للنص
+    section.top_margin = Cm(2)
     section.bottom_margin = Cm(2)
 
+    # 2. إضافة الخلفية (خلف النص تماماً وبدون إزاحة)
     header = section.header
-    p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    header.is_linked_to_previous = False
+    p_head = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    p_head.alignment = WD_ALIGN_PARAGRAPH.LEFT
     
     if os.path.exists('logo_full.png'):
-        run = p_header.add_run()
-        picture = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
+        run = p_head.add_run()
+        pic = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
         
         try:
-            inline = picture._inline
+            # تحويل الصورة إلى عنصر عائم مطلق خلف النص
+            inline = pic._inline
             extent = inline.extent
             doc_pr = inline.docPr
             graphic = inline.graphic
             
             anchor = OxmlElement('wp:anchor')
-            # الأوامر الثلاثة التالية تضمن أن الصورة "خلفية" حقيقية
-            anchor.set(qn('wp:behindDoc'), '1') 
+            anchor.set(qn('wp:behindDoc'), '1') # جعلها خلف النص
             anchor.set(qn('wp:locked'), '0')
+            anchor.set(qn('wp:layoutInCell'), '1')
             anchor.set(qn('wp:allowOverlap'), '1')
+            anchor.set(qn('wp:simplePos'), '0')
+            anchor.set(qn('wp:relativeHeight'), '0')
 
-            # ضبط التموضع الأفقي المطلق من حافة الصفحة اليسرى
-            h_pos = OxmlElement('wp:positionH')
-            h_pos.set(qn('relativeFrom'), 'page')
-            h_offset = OxmlElement('wp:posOffset')
-            h_offset.text = '0' # صفر إزاحة
-            h_pos.append(h_offset)
+            # إحداثيات (0,0) بالنسبة للصفحة
+            for axis in ['H', 'V']:
+                pos = OxmlElement(f'wp:position{axis}')
+                pos.set(qn('relativeFrom'), 'page')
+                offset = OxmlElement('wp:posOffset')
+                offset.text = '0'
+                pos.append(offset)
+                anchor.append(pos)
 
-            # ضبط التموضع الرأسي المطلق من حافة الصفحة العلوية
-            v_pos = OxmlElement('wp:positionV')
-            v_pos.set(qn('relativeFrom'), 'page')
-            v_offset = OxmlElement('wp:posOffset')
-            v_offset.text = '0' # صفر إزاحة
-            v_pos.append(v_offset)
-
-            anchor.append(OxmlElement('wp:simplePos'))
-            anchor.get_element(qn('wp:simplePos')).set('x', '0')
-            anchor.get_element(qn('wp:simplePos')).set('y', '0')
-            anchor.append(h_pos)
-            anchor.append(v_pos)
             anchor.append(extent)
             anchor.append(OxmlElement('wp:effectExtent'))
-            anchor.append(OxmlElement('wp:wrapNone')) # مهم جداً لظهور النص فوقها
+            anchor.append(OxmlElement('wp:wrapNone')) # لا تزيح النص
             anchor.append(doc_pr)
             anchor.append(graphic)
+            
+            p_head._p.remove(run._r)
+            p_head._p.add_run()._r.append(anchor)
+        except: pass
 
-            p_header._p.remove(run._r)
-            p_header._p.add_run()._r.append(anchor)
-        except Exception:
-            pass
-
-    # --- تكملة محتوى النص (سيكون فوق الصورة الآن) ---
-    doc.add_paragraph() 
+    # 3. محتوى العرض (فوق الخلفية)
+    doc.add_paragraph()
     p_date = doc.add_paragraph(f"{ar('التاريخ:')} 2026/03/09")
     p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-    p_cust = doc.add_paragraph()
-    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_c = p_cust.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
-    run_c.bold = True
-    run_c.font.size = Pt(20)
-    run_c.font.color.rgb = RGBColor(102, 0, 153)
+    p_title = doc.add_paragraph()
+    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_t = p_title.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
+    run_t.bold = True
+    run_t.font.size = Pt(20)
+    run_t.font.color.rgb = RGBColor(102, 0, 153)
 
     doc.add_paragraph(ar("تحية طيبة وبعد،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة الإعلانية: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-
-    # 3. بناء الجداول لكل محافظة
+    # 4. بناء الجداول
     for city, networks in cart_data.items():
-        p_city = doc.add_paragraph(ar(f"■ محافظة {city}"))
-        p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_city.runs[0].bold = True
+        doc.add_paragraph(ar(f"■ محافظة {city}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
         
         for net, df in networks.items():
             doc.add_paragraph(ar(f"شبكة: {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -132,14 +125,16 @@ def export_word(customer_name, cart_data, period_name):
                 run.bold = True
                 hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-            data = df.values.tolist()
-            for i in range(0, len(data), 2):
+            data_list = df.values.tolist()
+            for i in range(0, len(data_list), 2):
                 row_cells = table.add_row().cells
-                row_cells[1].text = ar(data[i][0]) # الموقع
-                row_cells[0].text = str(data[i][1]) # العدد
-                if i + 1 < len(data):
-                    row_cells[3].text = ar(data[i+1][0])
-                    row_cells[2].text = str(data[i+1][1])
+                # اليمين
+                row_cells[1].text = ar(data_list[i][0])
+                row_cells[0].text = str(data_list[i][1])
+                # اليسار
+                if i + 1 < len(data_list):
+                    row_cells[3].text = ar(data_list[i+1][0])
+                    row_cells[2].text = str(data_list[i+1][1])
             
             total_n = pd.to_numeric(df.iloc[:, 1], errors='coerce').sum()
             ads = pd.to_numeric(df['أجور العرض'], errors='coerce').sum()
@@ -151,11 +146,11 @@ def export_word(customer_name, cart_data, period_name):
             run_p.bold = True
             run_p.font.color.rgb = RGBColor(102, 0, 153)
 
-    # 4. الفوتر (تذييل الصفحة)
+    # 5. الفوتر
     footer = section.footer
-    p_footer = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
-    p_footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_f = p_footer.add_run(ar("سوريا - دمشق - مزة جبل | هاتف: 9394 (963+) | info@previewsyria.com"))
+    p_foot = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    p_foot.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_f = p_foot.add_run(ar("سوريا - دمشق | info@previewsyria.com | +963 9394"))
     run_f.font.size = Pt(9)
     run_f.font.color.rgb = RGBColor(102, 0, 153)
 
@@ -164,89 +159,80 @@ def export_word(customer_name, cart_data, period_name):
     target.seek(0)
     return target
 
-# --- واجهة التطبيق (Streamlit) ---
+# --- تطبيق Streamlit ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔒 تسجيل الدخول - PreView ERP")
-    user = st.text_input("اسم المستخدم")
-    pwd = st.text_input("كلمة المرور", type="password")
-    if st.button("دخول"):
+    st.title("🔒 PreView ERP Login")
+    user = st.text_input("User")
+    pwd = st.text_input("Password", type="password")
+    if st.button("Login"):
         if user == "admin" and pwd == "preview2026":
             st.session_state.authenticated = True
             st.rerun()
-        else: st.error("❌ بيانات خاطئة")
+        else: st.error("Wrong Credentials")
 else:
     conn = get_connection()
     if 'cart' not in st.session_state: st.session_state.cart = {}
     
     with st.sidebar:
-        # حل مشكلة حجم اللوجو في السايدبار
         if os.path.exists('logo_full.png'):
-            st.image('logo_full.png', width=200)
-        
-        st.header("PreView Ads")
-        page = st.radio("القائمة:", ["🏠 الداشبورد والخريطة", "📄 إنشاء عرض سعر"])
-        if st.button("خروج"):
+            st.image('logo_full.png', width=180)
+        st.header("Control Panel")
+        page = st.radio("Menu", ["📊 Dashboard", "📄 Create Quotation"])
+        if st.button("Logout"):
             st.session_state.authenticated = False
             st.rerun()
 
-    if page == "🏠 الداشبورد والخريطة":
-        st.title("📊 الخريطة التفاعلية والداشبورد")
-        
+    if page == "📊 Dashboard":
+        st.title("📊 Dashboard & Map")
         try:
-            df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn).copy()
+            df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز] FROM [حجوزات1]", conn)
             df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
-            df_map['المحافظة'] = df_map['المحافظة'].astype(str).str.strip()
-
+            
             with st.sidebar:
                 st.divider()
-                city_f = st.selectbox("المحافظة:", ["الكل"] + sorted(df_map['المحافظة'].unique().tolist()))
-                stat_f = st.radio("الحالة:", ["الكل", "متاح", "محجوز"])
+                city_f = st.selectbox("City", ["All"] + sorted(df_map['المحافظة'].unique().tolist()))
+                stat_f = st.radio("Status", ["All", "Available", "Booked"])
 
-            filtered_df = df_map.copy()
-            if city_f != "الكل": filtered_df = filtered_df[filtered_df['المحافظة'] == city_f]
-            if stat_f == "محجوز": filtered_df = filtered_df[filtered_df['اسم الزبون'].notna()]
-            elif stat_f == "متاح": filtered_df = filtered_df[filtered_df['اسم الزبون'].isna()]
+            f_df = df_map.copy()
+            if city_f != "All": f_df = f_df[f_df['المحافظة'] == city_f]
+            if stat_f == "Booked": f_df = f_df[f_df['اسم الزبون'].notna()]
+            elif stat_f == "Available": f_df = f_df[f_df['اسم الزبون'].isna()]
 
-            # الخريطة
             m = folium.Map(location=[33.51, 36.27], zoom_start=12)
             marker_cluster = MarkerCluster().add_to(m)
-            for _, row in filtered_df.iterrows():
-                lat, lon = row.get('Latitude'), row.get('Longitude')
-                if pd.notnull(lat) and pd.notnull(lon):
-                    is_b = pd.notnull(row.get('اسم الزبون'))
-                    pop_html = f"<div style='direction:rtl; text-align:right; font-family:Tahoma;'><b>{row['اسم العمود']}</b><br>الشركة: {row['اسم الزبون'] if is_b else 'متاح'}</div>"
-                    folium.Marker([lat, lon], popup=folium.Popup(pop_html, max_width=200), 
+            for _, row in f_df.iterrows():
+                if pd.notnull(row['Latitude']):
+                    is_b = pd.notnull(row['اسم الزبون'])
+                    pop = f"<div style='direction:rtl;'><b>{row['اسم العمود']}</b><br>{'Booked' if is_b else 'Available'}</div>"
+                    folium.Marker([row['Latitude'], row['Longitude']], popup=folium.Popup(pop, max_width=200), 
                                   icon=folium.Icon(color='red' if is_b else 'purple')).add_to(marker_cluster)
-            
             st_folium(m, width="100%", height=500)
-            st.dataframe(filtered_df.drop(columns=['Latitude', 'Longitude'], errors='ignore'), use_container_width=True)
-        except Exception as e:
-            st.error(f"خطأ في تحميل البيانات: {e}")
+            st.dataframe(f_df, use_container_width=True)
+        except Exception as e: st.error(f"Error: {e}")
 
-    elif page == "📄 إنشاء عرض سعر":
-        st.title("📄 بناء عرض سعر احترافي")
+    elif page == "📄 Create Quotation":
+        st.title("📄 Quotation Builder")
         try:
             df_periods = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
-            
             col1, col2 = st.columns(2)
             with col1:
-                cust = st.text_input("اسم الزبون")
-                selected_period = st.selectbox("اختر الفترة:", df_periods)
-                city_list = sorted(pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist())
-                sel_city = st.selectbox("المحافظة", city_list)
-                raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
-                nets = st.multiselect("الشبكات المتاحة:", raw['الشبكة'].unique().tolist())
+                cust_name = st.text_input("Customer Name")
+                period = st.selectbox("Period", df_periods)
+                city_list = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
+                city = st.selectbox("Select City", city_list)
+                raw = pd.read_sql(f"SELECT [اسم العمود], [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{city}'", conn)
+                nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
                 
-                if st.button("➕ إضافة للسلة"):
-                    if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
+                if st.button("Add to Cart"):
+                    if city not in st.session_state.cart: st.session_state.cart[city] = {}
                     for n in nets:
-                        df_net = raw[raw['الشبكة'] == n].copy()
-                        df_net['أجور الطباعة'], df_net['أجور العرض'] = 0, 0
-                        st.session_state.cart[sel_city][n] = df_net
+                        d_net = raw[raw['الشبكة'] == n].copy()
+                        d_net['أجور العرض'] = 0
+                        st.session_state.cart[city][n] = d_net
 
             with col2:
                 if st.session_state.cart:
@@ -255,14 +241,9 @@ else:
                             with st.expander(f"📍 {c} - {n}"):
                                 st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                     
-                    if st.button("🚀 تصدير Word"):
-                        doc_out = export_word(cust, st.session_state.cart, selected_period)
-                        st.download_button("📥 تحميل عرض السعر", doc_out, f"Quotation_{cust}.docx")
-                    
-                    if st.button("🗑️ تفريغ السلة"): 
-                        st.session_state.cart = {}
-                        st.rerun()
-        except Exception as e:
-            st.error(f"حدث خطأ: {e}")
-
+                    if st.button("Export Word"):
+                        doc_file = export_word(cust_name, st.session_state.cart, period)
+                        st.download_button("Download Doc", doc_file, f"Quotation_{cust_name}.docx")
+                    if st.button("Clear Cart"): st.session_state.cart = {}; st.rerun()
+        except Exception as e: st.error(f"Error: {e}")
     conn.close()
