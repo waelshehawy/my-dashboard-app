@@ -7,13 +7,12 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor, cm 
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from arabic_reshaper import reshape
-from bidi.algorithm import get_display
-from docx.shared import cm
+from bidi.algorithm import get_display 
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 
