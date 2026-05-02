@@ -21,7 +21,7 @@ def get_connection():
     return sqlite3.connect('billboards_data.db')
 
 def ar(text):
-    """تصحيح عرض النصوص العربية"""
+    """تصحيح عرض النصوص العربية RTL"""
     if not text or str(text).strip() == "": return ""
     return get_display(reshape(str(text)))
 
@@ -42,7 +42,7 @@ def set_cell_shading(cell, color):
     tcPr.append(shd)
 
 def export_word(customer_name, cart_data, period_name):
-    # فتح القالب الجاهز (الذي يحتوي على الخلفية Behind Text)
+    # فتح القالب الجاهز (template.docx)
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
 
     # ترويسة الخطاب
@@ -66,14 +66,14 @@ def export_word(customer_name, cart_data, period_name):
             for net, df in networks.items():
                 doc.add_paragraph(ar(f"شبكة: {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 
-                # جدول عرض المواقع: الموقع | العدد
+                # جدول عرض المواقع: اسم الموقع | العدد
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
                 table.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 
                 hdr_cells = table.rows[0].cells
-                hdr_cells[1].text = ar("اسم الموقع / العمود")
-                hdr_cells[0].text = ar("العدد")
+                hdr_cells[0].text = ar("اسم الموقع / العمود")
+                hdr_cells[1].text = ar("العدد")
                 
                 for cell in hdr_cells:
                     set_cell_shading(cell, "660099")
@@ -82,19 +82,19 @@ def export_word(customer_name, cart_data, period_name):
                     run_h.font.color.rgb = RGBColor(255, 255, 255)
                     run_h.bold = True
 
-                # تعبئة المواقع
+                # تعبئة المواقع من السلة
                 for _, row in df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[1].text = ar(row.get('الموقع', ''))
-                    row_cells[0].text = str(row.get('العدد', 1))
+                    row_cells[0].text = ar(row.get('الموقع', ''))
+                    row_cells[1].text = str(row.get('العدد', 1))
                     for cell in row_cells: set_cell_rtl(cell)
 
-                # الحسابات أسفل الجدول
+                # --- منطقة الحسابات والمجاميع ---
                 total_qty = pd.to_numeric(df['العدد'], errors='coerce').sum()
                 
                 # حساب (العدد * أجرة الرسم)
-                drawing_unit = pd.to_numeric(df['اجرة الرسم'], errors='coerce') if 'اجرة الرسم' in df.columns else 0
-                total_drawing = (pd.to_numeric(df['العدد'], errors='coerce') * drawing_unit).sum()
+                fee_val = pd.to_numeric(df['اجرة الرسم'], errors='coerce') if 'اجرة الرسم' in df.columns else 0
+                total_drawing = (pd.to_numeric(df['العدد'], errors='coerce') * fee_val).sum()
                 
                 total_printing = pd.to_numeric(df.get('أجور الطباعة', 0), errors='coerce').sum()
 
@@ -115,63 +115,73 @@ def export_word(customer_name, cart_data, period_name):
     target.seek(0)
     return target
 
-# --- Streamlit UI ---
+# --- واجهة تطبيق Streamlit ---
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 تسجيل الدخول")
-    u, p = st.text_input("User"), st.text_input("Password", type="password")
-    if st.button("Login"):
-        if u == "admin" and p == "preview2026": st.session_state.auth = True; st.rerun()
+    st.title("🔒 تسجيل الدخول - PreView ERP")
+    u, p = st.text_input("Username"), st.text_input("Password", type="password")
+    if st.button("دخول"):
+        if u == "admin" and p == "preview2026":
+            st.session_state.auth = True
+            st.rerun()
+        else: st.error("بيانات الدخول خاطئة")
 else:
     conn = get_connection()
     if 'cart' not in st.session_state: st.session_state.cart = {}
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("Menu", ["📊 Dashboard", "📄 Quotation"])
+        page = st.radio("القائمة", ["📊 الداشبورد", "📄 إنشاء عرض سعر"])
 
-    if page == "📊 Dashboard":
-        st.title("📊 Dashboard")
+    if page == "📊 الداشبورد":
+        st.title("📊 حالة المواقع والخريطة")
         df_m = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
         st.dataframe(df_m, use_container_width=True)
 
-    elif page == "📄 Quotation":
-        st.title("📄 إنشاء عرض سعر")
+    elif page == "📄 إنشاء عرض سعر":
+        st.title("📄 بناء عرض سعر ذكي")
         try:
-            # جلب فترات وأحجام الرسوم
-            p_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
-            drawing_df = pd.read_sql("SELECT * FROM [اسماء الرسم لكل مقاس ونوع لوحات رسم مختلف]", conn)
+            # 1. جلب البيانات من الجداول الصحيحة
+            df_periods = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+            # تصحيح اسم الجدول هنا إلى [اسماء الرسم]
+            drawing_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             
-            cust = st.text_input("Customer Name")
-            period = st.selectbox("Period", p_list)
+            cust = st.text_input("اسم الشركة / الزبون")
+            period = st.selectbox("اختر الفترة الإعلانية", df_periods)
             
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
-            sel_c = st.selectbox("City", city_l)
+            sel_c = st.selectbox("المحافظة", city_l)
             
-            # اختيار الحجم لجلب أجرة الرسم المناسبة
-            sel_size = st.selectbox("اختر قياس/نوع الرسم:", drawing_df['الحجم'].tolist())
-            current_fee = drawing_df[drawing_df['الحجم'] == sel_size]['اجرة الرسم'].iloc[0]
+            # اختيار مقاس الرسم لجلب الأجرة
+            sel_size = st.selectbox("اختر نوع/مقاس الرسم:", drawing_df['الحجم'].tolist())
+            # جلب أجرة الرسم بناءً على الحجم المختار
+            current_fee = drawing_df[drawing_df['الحجم'] == sel_size]['اجرة الرسم'].values[0]
 
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_c}'", conn)
-            nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
+            nets = st.multiselect("اختر الشبكات المتاحة:", raw['الشبكة'].unique().tolist())
 
-            if st.button("➕ Add to Cart"):
+            if st.button("➕ إضافة المواقع المختارة"):
                 if sel_c not in st.session_state.cart: st.session_state.cart[sel_c] = {}
                 for n in nets:
                     df_to_add = raw[raw['الشبكة'] == n].copy()
-                    df_to_add['اجرة الرسم'] = current_fee # تطبيق أجرة الرسم المختارة
+                    df_to_add['اجرة الرسم'] = current_fee # إضافة أجرة الرسم لكل سطر
                     df_to_add['أجور الطباعة'] = 0
                     st.session_state.cart[sel_c][n] = df_to_add
 
+            # تحرير البيانات وتصديرها
             if st.session_state.cart:
+                st.write("---")
                 for c, nts in list(st.session_state.cart.items()):
                     for n, df in nts.items():
                         with st.expander(f"📍 {c} - {n}"):
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 
-                if st.button("🚀 Export Word"):
-                    doc_io = export_word(cust, st.session_state.cart, period)
-                    st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
-        except Exception as e: st.error(f"Error: {e}")
+                if st.button("🚀 تصدير عرض السعر (Word)"):
+                    if cust:
+                        doc_io = export_word(cust, st.session_state.cart, period)
+                        st.download_button("📥 تحميل الملف الجاهز", doc_io, f"Quotation_{cust}.docx")
+                    else: st.warning("يرجى إدخال اسم الزبون أولاً")
+        except Exception as e:
+            st.error(f"حدث خطأ في قاعدة البيانات: {e}")
     conn.close()
