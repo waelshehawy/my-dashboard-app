@@ -15,23 +15,32 @@ st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-def set_arabic_format(paragraph):
-    """إعداد الفقرة لتدعم العربية والارتباط الصحيح للحروف"""
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    pPr = paragraph._element.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi')
-    bidi.set(qn('w:val'), '1')
-    pPr.append(bidi)
+def set_cell_rtl(cell):
+    """ضبط الخلية لتدعم العربية والمحاذاة لليمين"""
+    # 1. ضبط محاذاة الفقرة لليمين
+    for paragraph in cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        pPr = paragraph._element.get_or_add_pPr()
+        bidi = OxmlElement('w:bidi')
+        bidi.set(qn('w:val'), '1')
+        pPr.append(bidi)
+        
+        # ضبط اتجاه النص داخل الفقرة
+        for run in paragraph.runs:
+            rPr = run._element.get_or_add_rPr()
+            rtl = OxmlElement('w:rtl')
+            rtl.set(qn('w:val'), '1')
+            rPr.append(rtl)
+
+def set_table_rtl(table):
+    """جعل الجدول نفسه يبدأ من اليمين لليسار في الصفحة"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    tblBorders = OxmlElement('w:tblLayout')
+    tblBorders.set(qn('w:type'), 'fixed')
     
-    for run in paragraph.runs:
-        rPr = run._element.get_or_add_rPr()
-        rtl = OxmlElement('w:rtl')
-        rtl.set(qn('w:val'), '1')
-        rPr.append(rtl)
-        # إجبار استخدام الخط العربي
-        rFonts = OxmlElement('w:rFonts')
-        rFonts.set(qn('w:cs'), 'Arial')
-        rPr.append(rFonts)
+    # إضافة خاصية الـ Bidi للجدول
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
 
 def set_cell_shading(cell, color):
     tcPr = cell._tc.get_or_add_tcPr()
@@ -40,78 +49,89 @@ def set_cell_shading(cell, color):
     tcPr.append(shd)
 
 def export_word(customer_name, cart_data, period_name):
-    # نستخدم القالب الجاهز الذي أعددته
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
 
-    # 1. التاريخ
+    # التاريخ (يسار)
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/02")
     p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-    # 2. ترويسة الخطاب
+    # اسم الزبون (منتصف)
     p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
     run_c.bold = True
     run_c.font.size = Pt(20)
     run_c.font.color.rgb = RGBColor(102, 0, 153)
-    set_arabic_format(p_cust)
 
+    # التحية (يمين)
     p_greet = doc.add_paragraph()
     p_greet.add_run("تحية طيبة وبعد،")
-    set_arabic_format(p_greet)
+    set_cell_rtl(p_greet) # استخدام نفس وظيفة الـ RTL للفقرات
 
     p_info = doc.add_paragraph()
     p_info.add_run(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")
-    set_arabic_format(p_info)
+    set_cell_rtl(p_info)
 
-    # 3. بناء الجداول
+    # بناء الجداول المجمعة حسب المقاس
     if cart_data:
         for city, networks in cart_data.items():
             p_city = doc.add_paragraph()
             p_city.add_run(f"■ محافظة {city}")
-            set_arabic_format(p_city)
+            set_cell_rtl(p_city)
             
             for net, df in networks.items():
-                p_net = doc.add_paragraph()
-                p_net.add_run(f"شبكة: {net}")
-                set_arabic_format(p_net)
+                # التجميع حسب المقاس (اجرة الرسم أو الحجم)
+                # سنقوم بتقسيم الـ DataFrame بناءً على 'اجرة الرسم'
+                grouped = df.groupby('اجرة الرسم')
                 
-                table = doc.add_table(rows=1, cols=2)
-                table.style = 'Table Grid'
-                table.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                
-                hdr_cells = table.rows[0].cells
-                hdr_cells[0].text = "اسم الموقع / العمود"
-                hdr_cells[1].text = "العدد"
-                
-                for cell in hdr_cells:
-                    set_cell_shading(cell, "660099")
-                    set_arabic_format(cell.paragraphs[0])
-                    run_h = cell.paragraphs[0].runs[0]
-                    run_h.font.color.rgb = RGBColor(255, 255, 255)
-                    run_h.bold = True
+                for fee, group_df in grouped:
+                    p_net = doc.add_paragraph()
+                    p_net.add_run(f"الشبكة: {net} (سعر الرسم: {fee}$)")
+                    set_cell_rtl(p_net)
+                    
+                    # إنشاء الجدول (موقع | عدد)
+                    table = doc.add_table(rows=1, cols=2)
+                    table.style = 'Table Grid'
+                    set_table_rtl(table) # جعل الجدول RTL
+                    
+                    hdr_cells = table.rows[0].cells
+                    hdr_cells[1].text = "اسم الموقع / العمود"
+                    hdr_cells[0].text = "العدد"
+                    
+                    for cell in hdr_cells:
+                        set_cell_shading(cell, "660099")
+                        set_cell_rtl(cell)
+                        run_h = cell.paragraphs[0].runs[0]
+                        run_h.font.color.rgb = RGBColor(255, 255, 255)
+                        run_h.bold = True
 
-                for _, row in df.iterrows():
-                    row_cells = table.add_row().cells
-                    row_cells[0].text = str(row.get('الموقع', ''))
-                    row_cells[1].text = str(row.get('العدد', 1))
-                    for cell in row_cells:
-                        set_arabic_format(cell.paragraphs[0])
+                    # تعبئة الصفوف
+                    for _, row in group_df.iterrows():
+                        row_cells = table.add_row().cells
+                        row_cells[1].text = str(row.get('الموقع', ''))
+                        row_cells[0].text = str(row.get('العدد', 1))
+                        for cell in row_cells:
+                            set_cell_rtl(cell)
 
-                # الحسابات
-                total_qty = pd.to_numeric(df['العدد'], errors='coerce').sum()
-                fee = pd.to_numeric(df['اجرة الرسم'], errors='coerce') if 'اجرة الرسم' in df.columns else 0
-                sum_drawing = (pd.to_numeric(df['العدد'], errors='coerce') * fee).sum()
-                sum_print = pd.to_numeric(df.get('أجور الطباعة', 0), errors='coerce').sum()
+                    # حساب مجاميع هذا الجدول الصغير
+                    total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
+                    total_d = total_q * fee
+                    total_p = pd.to_numeric(group_df.get('أجور الطباعة', 0), errors='coerce').sum()
 
-                p_sum = doc.add_paragraph()
-                total_text = f"إجمالي العدد: {int(total_qty)} | إجمالي أجور الرسم: {sum_drawing:,}$ | إجمالي الطباعة: {sum_print:,}$"
-                p_sum.add_run(total_text).bold = True
-                set_arabic_format(p_sum)
+                    p_sum = doc.add_paragraph()
+                    summary = f"العدد: {int(total_q)} | رسم: {total_d:,}$ | طباعة: {total_p:,}$ | المجموع: {total_d + total_p:,}$"
+                    p_sum.add_run(summary).bold = True
+                    set_cell_rtl(p_sum)
+                    doc.add_paragraph() # سطر فارغ بين الجداول
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
+# --- واجهة الاستخدام (نفس كود السلة والبيانات السابق) ---
+# ... (لا تغيير في جزء Streamlit) ...
+
 
 # --- واجهة التطبيق ---
 if "auth" not in st.session_state: st.session_state.auth = False
