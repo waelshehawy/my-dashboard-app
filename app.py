@@ -15,30 +15,32 @@ st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-def set_cell_rtl(cell):
-    """ضبط الخلية لتدعم العربية والمحاذاة لليمين"""
-    # 1. ضبط محاذاة الفقرة لليمين
-    for paragraph in cell.paragraphs:
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        pPr = paragraph._element.get_or_add_pPr()
-        bidi = OxmlElement('w:bidi')
-        bidi.set(qn('w:val'), '1')
-        pPr.append(bidi)
-        
-        # ضبط اتجاه النص داخل الفقرة
-        for run in paragraph.runs:
-            rPr = run._element.get_or_add_rPr()
-            rtl = OxmlElement('w:rtl')
-            rtl.set(qn('w:val'), '1')
-            rPr.append(rtl)
+def set_rtl(obj):
+    """ضبط اتجاه النص للعربية سواء كان الكائن (خلية) أو (فقرة)"""
+    # إذا كان الكائن خلية، نطبق التنسيق على كل فقراتها
+    if hasattr(obj, 'paragraphs'):
+        for paragraph in obj.paragraphs:
+            apply_rtl_to_p(paragraph)
+    else:
+        # إذا كان الكائن فقرة مباشرة
+        apply_rtl_to_p(obj)
+
+def apply_rtl_to_p(paragraph):
+    """دالة مساعدة لضبط خصائص الـ XML للفقرة"""
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    pPr = paragraph._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    for run in paragraph.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
 
 def set_table_rtl(table):
-    """جعل الجدول نفسه يبدأ من اليمين لليسار في الصفحة"""
+    """ضبط اتجاه الجدول نفسه ليكون من اليمين لليسار في الصفحة"""
     tblPr = table._element.xpath('w:tblPr')[0]
-    tblBorders = OxmlElement('w:tblLayout')
-    tblBorders.set(qn('w:type'), 'fixed')
-    
-    # إضافة خاصية الـ Bidi للجدول
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
 
@@ -51,69 +53,63 @@ def set_cell_shading(cell, color):
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
 
-    # التاريخ (يسار)
+    # 1. التاريخ
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/02")
     p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-    # اسم الزبون (منتصف)
+    # 2. اسم الزبون
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
-    run_c.bold = True
-    run_c.font.size = Pt(20)
+    run_c.bold, run_c.font.size = True, Pt(20)
     run_c.font.color.rgb = RGBColor(102, 0, 153)
 
-    # التحية (يمين)
+    # 3. التحية
     p_greet = doc.add_paragraph()
     p_greet.add_run("تحية طيبة وبعد،")
-    set_cell_rtl(p_greet) # استخدام نفس وظيفة الـ RTL للفقرات
+    set_rtl(p_greet)
 
     p_info = doc.add_paragraph()
     p_info.add_run(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")
-    set_cell_rtl(p_info)
+    set_rtl(p_info)
 
-    # بناء الجداول المجمعة حسب المقاس
+    # 4. بناء الجداول المجمعة حسب المقاس
     if cart_data:
         for city, networks in cart_data.items():
             p_city = doc.add_paragraph()
             p_city.add_run(f"■ محافظة {city}")
-            set_cell_rtl(p_city)
+            set_rtl(p_city)
             
             for net, df in networks.items():
-                # التجميع حسب المقاس (اجرة الرسم أو الحجم)
-                # سنقوم بتقسيم الـ DataFrame بناءً على 'اجرة الرسم'
+                # التجميع حسب "اجرة الرسم" (كل مقاس في جدول)
                 grouped = df.groupby('اجرة الرسم')
                 
                 for fee, group_df in grouped:
                     p_net = doc.add_paragraph()
                     p_net.add_run(f"الشبكة: {net} (سعر الرسم: {fee}$)")
-                    set_cell_rtl(p_net)
+                    set_rtl(p_net)
                     
-                    # إنشاء الجدول (موقع | عدد)
+                    # إنشاء الجدول
                     table = doc.add_table(rows=1, cols=2)
                     table.style = 'Table Grid'
-                    set_table_rtl(table) # جعل الجدول RTL
+                    set_table_rtl(table)
                     
-                    hdr_cells = table.rows[0].cells
-                    hdr_cells[1].text = "اسم الموقع / العمود"
-                    hdr_cells[0].text = "العدد"
+                    hdr = table.rows[0].cells
+                    hdr[0].text, hdr[1].text = "اسم الموقع / العمود", "العدد"
                     
-                    for cell in hdr_cells:
+                    for cell in hdr:
                         set_cell_shading(cell, "660099")
-                        set_cell_rtl(cell)
-                        run_h = cell.paragraphs[0].runs[0]
-                        run_h.font.color.rgb = RGBColor(255, 255, 255)
-                        run_h.bold = True
+                        set_rtl(cell)
+                        for run in cell.paragraphs[0].runs:
+                            run.font.color.rgb, run.bold = RGBColor(255, 255, 255), True
 
-                    # تعبئة الصفوف
                     for _, row in group_df.iterrows():
                         row_cells = table.add_row().cells
-                        row_cells[1].text = str(row.get('الموقع', ''))
-                        row_cells[0].text = str(row.get('العدد', 1))
-                        for cell in row_cells:
-                            set_cell_rtl(cell)
+                        row_cells[0].text = str(row.get('الموقع', ''))
+                        row_cells[1].text = str(row.get('العدد', 1))
+                        for cell in row_cells: set_rtl(cell)
 
-                    # حساب مجاميع هذا الجدول الصغير
+                    # حساب المجاميع
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
                     total_d = total_q * fee
                     total_p = pd.to_numeric(group_df.get('أجور الطباعة', 0), errors='coerce').sum()
@@ -121,13 +117,17 @@ def export_word(customer_name, cart_data, period_name):
                     p_sum = doc.add_paragraph()
                     summary = f"العدد: {int(total_q)} | رسم: {total_d:,}$ | طباعة: {total_p:,}$ | المجموع: {total_d + total_p:,}$"
                     p_sum.add_run(summary).bold = True
-                    set_cell_rtl(p_sum)
-                    doc.add_paragraph() # سطر فارغ بين الجداول
+                    set_rtl(p_sum)
+                    doc.add_paragraph()
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
+# --- بقية كود Streamlit (Login, Sidebar, Cart) تبقى كما هي ---
+# ... (استخدم كود الواجهة السابق) ...
+
 
 # --- واجهة الاستخدام (نفس كود السلة والبيانات السابق) ---
 # ... (لا تغيير في جزء Streamlit) ...
