@@ -31,23 +31,62 @@ def set_cell_shading(cell, color):
     shd.set(qn('w:fill'), color)
     tcPr.append(shd)
 
-# --- وظيفة تصدير الوورد الاحترافية المطابقة للنموذج ---
 # --- وظيفة تصدير الوورد الاحترافية (تحديث الصورة المدمجة) ---
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import cm
+
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
     section = doc.sections[0]
-    section.right_to_left = True
     
-    # 1. إضافة الصورة المدمجة (اللوغو + الشريط الجانبي)
-    if os.path.exists('logo_full.png'): # افترضت أن اسم الصورة المدمجة logo_full
-        header = section.header
-        p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    # إعداد الهيدر ووضع الصورة كخلفية كاملة
+    header = section.header
+    p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    
+    if os.path.exists('logo_full.png'):
+        run = p.add_run()
+        # إضافة الصورة بأبعاد صفحة A4 (21x29.7 سم)
+        picture = run.add_picture('logo_full.png', width=cm(21), height=cm(29.7))
         
-        # ضبط المحاذاة لتكون الصورة في أقصى اليمين/اليسار حسب تصميمك المدمج
-        p_header.alignment = WD_ALIGN_PARAGRAPH.CENTER 
-        run_h = p_header.add_run()
-        # جعل عرض الصورة يغطي عرض الصفحة A4 تقريباً (7.5 إنش) لضمان ظهور الشريط الجانبي على الحافة
-        run_h.add_picture('logo_full.png', width=Inches(7.8)) 
+        # كود متقدم لجعل الصورة خلف النص وبدون هوامش
+        tag = picture._inline.getparent().getparent().getparent() # الوصول لعنصر الرسم
+        
+        # تغيير نوع الرسم من 'inline' إلى 'anchor' (عنصر عائم)
+        anchor = OxmlElement('wp:anchor')
+        anchor.set(qn('wp:behindDoc'), '1') # وضعها خلف النص
+        anchor.set(qn('wp:locked'), '0')
+        anchor.set(qn('wp:layoutInCell'), '1')
+        anchor.set(qn('wp:allowOverlap'), '1')
+        
+        # تحديد الموضع المطلق بالنسبة للصفحة (Page) وليس الهامش
+        simple_pos = OxmlElement('wp:simplePos')
+        simple_pos.set(qn('x'), '0')
+        simple_pos.set(qn('y'), '0')
+        anchor.append(simple_pos)
+        
+        # ضبط الإزاحة الأفقية والعمودية لتكون 0 من زاوية الصفحة
+        for axis in ['horz', 'vert']:
+            pos = OxmlElement(f'wp:{axis}')
+            pos.set(qn('relativeFrom'), 'page') # المرجع هو الصفحة
+            pos_offset = OxmlElement(f'wp:posOffset')
+            pos_offset.text = '0' # الإزاحة صفر
+            pos.append(pos_offset)
+            anchor.append(pos)
+            
+        # نقل محتوى الصورة من inline إلى anchor
+        anchor.append(picture._inline.get_or_add_extent())
+        anchor.append(picture._inline.get_or_add_effectExtent())
+        anchor.append(OxmlElement('wp:wrapNone')) # إلغاء التفاف النص حولها
+        anchor.append(picture._inline.graphic)
+        
+        # استبدال العنصر القديم بالجديد
+        p._p.xpath('.//w:r')[0].remove(picture._inline.getparent())
+        p._p.xpath('.//w:r')[0].append(anchor)
+
+    # بقية محتوى المستند (الجداول والنصوص ستظهر فوق الصورة الآن)
+    # ...
+ 
 
     # 2. الفوتر (بيانات الاتصال كما في النموذج)
     footer = section.footer
