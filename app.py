@@ -15,31 +15,37 @@ st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-def set_rtl(obj):
-    """ضبط اتجاه النص للعربية سواء كان الكائن (خلية) أو (فقرة)"""
-    # إذا كان الكائن خلية، نطبق التنسيق على كل فقراتها
-    if hasattr(obj, 'paragraphs'):
-        for paragraph in obj.paragraphs:
-            apply_rtl_to_p(paragraph)
-    else:
-        # إذا كان الكائن فقرة مباشرة
-        apply_rtl_to_p(obj)
-
 def apply_rtl_to_p(paragraph):
-    """دالة مساعدة لضبط خصائص الـ XML للفقرة"""
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    """إجبار الفقرة على المحاذاة لليمين واتجاه النص العربي"""
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT # محاذاة يمين قسرية
     pPr = paragraph._element.get_or_add_pPr()
+    
+    # ضبط اتجاه الفقرة (Bidi)
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
     pPr.append(bidi)
+    
+    # ضبط اتجاه النص (RTL) لكل جزء داخل الفقرة
     for run in paragraph.runs:
         rPr = run._element.get_or_add_rPr()
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
+        # إجبار استخدام خط يدعم العربية لضمان الاتساق
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
+
+def set_rtl(obj):
+    """تطبيق الـ RTL على خلية أو فقرة"""
+    if hasattr(obj, 'paragraphs'):
+        for paragraph in obj.paragraphs:
+            apply_rtl_to_p(paragraph)
+    else:
+        apply_rtl_to_p(obj)
 
 def set_table_rtl(table):
-    """ضبط اتجاه الجدول نفسه ليكون من اليمين لليسار في الصفحة"""
+    """جعل الجدول يبدأ من اليمين (العمود الأول على اليمين)"""
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
@@ -53,7 +59,7 @@ def set_cell_shading(cell, color):
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
 
-    # 1. التاريخ
+    # 1. التاريخ (يبقى يسار كما طلبت سابقاً أو نغيره لليمين)
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/02")
     p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
@@ -64,13 +70,13 @@ def export_word(customer_name, cart_data, period_name):
     run_c.bold, run_c.font.size = True, Pt(20)
     run_c.font.color.rgb = RGBColor(102, 0, 153)
 
-    # 3. التحية
+    # 3. التحية (الآن ستصبح يمين قسرياً)
     p_greet = doc.add_paragraph()
     p_greet.add_run("تحية طيبة وبعد،")
     set_rtl(p_greet)
 
     p_info = doc.add_paragraph()
-    p_info.add_run(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")
+    p_info.add_run(f"نقدم لكم المواقع المتاحة للفترة الإعلانية: {period_name}")
     set_rtl(p_info)
 
     # 4. بناء الجداول المجمعة حسب المقاس
@@ -78,18 +84,17 @@ def export_word(customer_name, cart_data, period_name):
         for city, networks in cart_data.items():
             p_city = doc.add_paragraph()
             p_city.add_run(f"■ محافظة {city}")
-            set_rtl(p_city)
+            set_rtl(p_city) # اسم المحافظة يمين
             
             for net, df in networks.items():
-                # التجميع حسب "اجرة الرسم" (كل مقاس في جدول)
+                # التجميع حسب سعر الرسم (المقاس)
                 grouped = df.groupby('اجرة الرسم')
                 
                 for fee, group_df in grouped:
                     p_net = doc.add_paragraph()
                     p_net.add_run(f"الشبكة: {net} (سعر الرسم: {fee}$)")
-                    set_rtl(p_net)
+                    set_rtl(p_net) # عنوان الجدول يمين
                     
-                    # إنشاء الجدول
                     table = doc.add_table(rows=1, cols=2)
                     table.style = 'Table Grid'
                     set_table_rtl(table)
@@ -109,7 +114,7 @@ def export_word(customer_name, cart_data, period_name):
                         row_cells[1].text = str(row.get('العدد', 1))
                         for cell in row_cells: set_rtl(cell)
 
-                    # حساب المجاميع
+                    # حساب المجاميع أسفل الجدول مباشرة
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
                     total_d = total_q * fee
                     total_p = pd.to_numeric(group_df.get('أجور الطباعة', 0), errors='coerce').sum()
@@ -117,13 +122,17 @@ def export_word(customer_name, cart_data, period_name):
                     p_sum = doc.add_paragraph()
                     summary = f"العدد: {int(total_q)} | رسم: {total_d:,}$ | طباعة: {total_p:,}$ | المجموع: {total_d + total_p:,}$"
                     p_sum.add_run(summary).bold = True
-                    set_rtl(p_sum)
+                    set_rtl(p_sum) # سطر المجموع يمين
                     doc.add_paragraph()
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
+# --- واجهة Streamlit ---
+# (استخدم نفس كود تسجيل الدخول والسلة الذي يعمل لديك حالياً)
+
 
 # --- بقية كود Streamlit (Login, Sidebar, Cart) تبقى كما هي ---
 # ... (استخدم كود الواجهة السابق) ...
