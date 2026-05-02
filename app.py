@@ -41,32 +41,62 @@ def set_cell_shading(cell, color):
     shd.set(qn('w:fill'), color)
     tcPr.append(shd)
 
+def set_arabic_format(paragraph):
+    """إجبار الفقرة على دعم العربية والاتصال الصحيح للحروف"""
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    # تعديل الـ XML الخاص بالفقرة
+    pPr = paragraph._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    
+    # تعديل الـ XML الخاص بالنص (Run) لضمان عدم تقطع الحروف
+    for run in paragraph.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        # تحديد نوع الخط العربي لضمان الاتصال
+        lang = OxmlElement('w:lang')
+        lang.set(qn('w:bidi'), 'ar-SA')
+        rPr.append(lang)
+
 def export_word(customer_name, cart_data, period_name):
-    # فتح القالب الجاهز (template.docx)
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
 
-    # ترويسة الخطاب
-    p_date = doc.add_paragraph(f"{ar('التاريخ:')} 2026/05/02")
+    # 1. التاريخ
+    p_date = doc.add_paragraph()
+    p_date.add_run(ar(f"التاريخ: 2026/05/02"))
     p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
+    # 2. اسم الزبون
     p_cust = doc.add_paragraph()
-    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
     run_c.bold = True
     run_c.font.size = Pt(20)
-    run_c.font.color.rgb = RGBColor(102, 0, 153)
+    set_arabic_format(p_cust) # تطبيق التنسيق العربي
 
-    doc.add_paragraph(ar("تحية طيبة وبعد،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    # 3. التحية
+    p_greet = doc.add_paragraph()
+    p_greet.add_run(ar("تحية طيبة وبعد،"))
+    set_arabic_format(p_greet)
 
-    # بناء الجداول
+    p_period = doc.add_paragraph()
+    p_period.add_run(ar(f"نقدم لكم المواقع المتاحة للفترة: {period_name}"))
+    set_arabic_format(p_period)
+
+    # 4. بناء الجداول
     if cart_data:
         for city, networks in cart_data.items():
-            doc.add_paragraph(ar(f"■ محافظة {city}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            p_city = doc.add_paragraph()
+            p_city.add_run(ar(f"■ محافظة {city}"))
+            set_arabic_format(p_city)
+            
             for net, df in networks.items():
-                doc.add_paragraph(ar(f"شبكة: {net}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p_net = doc.add_paragraph()
+                p_net.add_run(ar(f"شبكة: {net}"))
+                set_arabic_format(p_net)
                 
-                # جدول عرض المواقع: اسم الموقع | العدد
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
                 table.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -77,43 +107,38 @@ def export_word(customer_name, cart_data, period_name):
                 
                 for cell in hdr_cells:
                     set_cell_shading(cell, "660099")
-                    set_cell_rtl(cell)
-                    run_h = cell.paragraphs[0].runs[0]
-                    run_h.font.color.rgb = RGBColor(255, 255, 255)
-                    run_h.bold = True
+                    set_arabic_format(cell.paragraphs[0])
+                    for run in cell.paragraphs[0].runs:
+                        run.font.color.rgb = RGBColor(255, 255, 255)
+                        run.bold = True
 
-                # تعبئة المواقع من السلة
                 for _, row in df.iterrows():
                     row_cells = table.add_row().cells
                     row_cells[0].text = ar(row.get('الموقع', ''))
                     row_cells[1].text = str(row.get('العدد', 1))
-                    for cell in row_cells: set_cell_rtl(cell)
+                    for cell in row_cells:
+                        set_arabic_format(cell.paragraphs[0])
 
-                # --- منطقة الحسابات والمجاميع ---
+                # حساب المجاميع
                 total_qty = pd.to_numeric(df['العدد'], errors='coerce').sum()
-                
-                # حساب (العدد * أجرة الرسم)
                 fee_val = pd.to_numeric(df['اجرة الرسم'], errors='coerce') if 'اجرة الرسم' in df.columns else 0
                 total_drawing = (pd.to_numeric(df['العدد'], errors='coerce') * fee_val).sum()
-                
                 total_printing = pd.to_numeric(df.get('أجور الطباعة', 0), errors='coerce').sum()
 
                 p_sum = doc.add_paragraph()
-                p_sum.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 summary_text = (
                     f"{ar('إجمالي العدد:')} {int(total_qty)} | "
                     f"{ar('إجمالي أجور الرسم:')} {total_drawing:,}$ | "
-                    f"{ar('إجمالي أجور الطباعة:')} {total_printing:,}$ | "
-                    f"{ar('المجموع الكلي:')} {total_drawing + total_printing:,}$"
+                    f"{ar('إجمالي أجور الطباعة:')} {total_printing:,}$"
                 )
-                run_s = p_sum.add_run(summary_text)
-                run_s.bold = True
-                run_s.font.color.rgb = RGBColor(102, 0, 153)
+                p_sum.add_run(summary_text).bold = True
+                set_arabic_format(p_sum)
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
 
 # --- واجهة تطبيق Streamlit ---
 if "auth" not in st.session_state: st.session_state.auth = False
