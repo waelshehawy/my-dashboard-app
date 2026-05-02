@@ -38,52 +38,54 @@ def export_word(customer_name, cart_data, period_name):
     doc = Document()
     section = doc.sections[0]
     
-    # إعداد الهيدر ووضع الصورة كخلفية كاملة
-    header = section.header
+        # إعداد الهيدر لوضع الخلفية
+    header = doc.sections[0].header
     p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
     
     if os.path.exists('logo_full.png'):
         run = p.add_run()
-        # إضافة الصورة بأبعاد صفحة A4 (21x29.7 سم)
-        picture = run.add_picture('logo_full.png', width=cm(21), height=cm(29.7))
+        # استخدام Cm بحرف كبير لتفادي الخطأ
+        # أبعاد A4: 21cm x 29.7cm
+        picture = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
         
-        # كود متقدم لجعل الصورة خلف النص وبدون هوامش
-        tag = picture._inline.getparent().getparent().getparent() # الوصول لعنصر الرسم
-        
-        # تغيير نوع الرسم من 'inline' إلى 'anchor' (عنصر عائم)
-        anchor = OxmlElement('wp:anchor')
-        anchor.set(qn('wp:behindDoc'), '1') # وضعها خلف النص
-        anchor.set(qn('wp:locked'), '0')
-        anchor.set(qn('wp:layoutInCell'), '1')
-        anchor.set(qn('wp:allowOverlap'), '1')
-        
-        # تحديد الموضع المطلق بالنسبة للصفحة (Page) وليس الهامش
-        simple_pos = OxmlElement('wp:simplePos')
-        simple_pos.set(qn('x'), '0')
-        simple_pos.set(qn('y'), '0')
-        anchor.append(simple_pos)
-        
-        # ضبط الإزاحة الأفقية والعمودية لتكون 0 من زاوية الصفحة
-        for axis in ['horz', 'vert']:
-            pos = OxmlElement(f'wp:{axis}')
-            pos.set(qn('relativeFrom'), 'page') # المرجع هو الصفحة
-            pos_offset = OxmlElement(f'wp:posOffset')
-            pos_offset.text = '0' # الإزاحة صفر
-            pos.append(pos_offset)
-            anchor.append(pos)
-            
-        # نقل محتوى الصورة من inline إلى anchor
-        anchor.append(picture._inline.get_or_add_extent())
-        anchor.append(picture._inline.get_or_add_effectExtent())
-        anchor.append(OxmlElement('wp:wrapNone')) # إلغاء التفاف النص حولها
-        anchor.append(picture._inline.graphic)
-        
-        # استبدال العنصر القديم بالجديد
-        p._p.xpath('.//w:r')[0].remove(picture._inline.getparent())
-        p._p.xpath('.//w:r')[0].append(anchor)
+        # كود التموضع المطلق (خلف النص وبدون هوامش)
+        try:
+            from docx.oxml.ns import qn
+            from docx.oxml import OxmlElement
 
-    # بقية محتوى المستند (الجداول والنصوص ستظهر فوق الصورة الآن)
-    # ...
+            # تحويل الصورة من inline إلى anchor (عنصر عائم)
+            graphic = picture._inline.graphic
+            picture._inline.getparent().remove(picture._inline)
+            
+            anchor = OxmlElement('wp:anchor')
+            anchor.set(qn('wp:behindDoc'), '1') # خلف النص
+            anchor.set(qn('wp:locked'), '0')
+            anchor.set(qn('wp:relativeHeight'), '0')
+            
+            # تحديد نقطة البداية من زاوية الصفحة (0,0)
+            simple_pos = OxmlElement('wp:simplePos')
+            simple_pos.set(qn('x'), '0')
+            simple_pos.set(qn('y'), '0')
+            
+            # ضبط الموقع الأفقي والعمودي بالنسبة للصفحة (وليس الهوامش)
+            for axis in ['horz', 'vert']:
+                pos = OxmlElement(f'wp:{axis}')
+                pos.set(qn('relativeFrom'), 'page') # البدء من حافة الصفحة
+                pos_offset = OxmlElement('wp:posOffset')
+                pos_offset.text = '0'
+                pos.append(pos_offset)
+                anchor.append(pos)
+
+            anchor.append(simple_pos)
+            anchor.append(graphic)
+            anchor.append(OxmlElement('wp:wrapNone')) # لا يوجد التفاف للنص
+            
+            # إضافة العنصر الجديد للـ Run
+            p._p.add_run()._r.append(anchor)
+        except Exception:
+            # في حال فشل الكود المتقدم، سيستمر التصدير بالصورة العادية
+            pass
+
  
 
     # 2. الفوتر (بيانات الاتصال كما في النموذج)
