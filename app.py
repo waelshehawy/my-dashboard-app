@@ -32,28 +32,33 @@ def set_cell_shading(cell, color):
     tcPr.append(shd)
 
 # --- وظيفة تصدير الوورد الاحترافية المطابقة للنموذج ---
+# --- وظيفة تصدير الوورد الاحترافية (تحديث الصورة المدمجة) ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
-    
-    # إعداد الهوامش والاتجاه
     section = doc.sections[0]
     section.right_to_left = True
     
-    # 1. الهيدر (اللوجو أعلى اليسار كما في النموذج)
-    header = section.header
-    p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-    p_header.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    if os.path.exists('logo.png'):
-        p_header.add_run().add_picture('logo.png', width=Inches(1.5))
+    # 1. إضافة الصورة المدمجة (اللوغو + الشريط الجانبي)
+    if os.path.exists('logo_full.png'): # افترضت أن اسم الصورة المدمجة logo_full
+        header = section.header
+        p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        
+        # ضبط المحاذاة لتكون الصورة في أقصى اليمين/اليسار حسب تصميمك المدمج
+        p_header.alignment = WD_ALIGN_PARAGRAPH.CENTER 
+        run_h = p_header.add_run()
+        # جعل عرض الصورة يغطي عرض الصفحة A4 تقريباً (7.5 إنش) لضمان ظهور الشريط الجانبي على الحافة
+        run_h.add_picture('logo_full.png', width=Inches(7.8)) 
 
-    # 2. الفوتر (بيانات الاتصال أسفل اليمين)
+    # 2. الفوتر (بيانات الاتصال كما في النموذج)
     footer = section.footer
     p_footer = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
     p_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    # استخدام الخط الأرجواني للفوتر ليتناسب مع الهوية
     contact_info = ar("سوريا - دمشق - مزة جبل | هاتف: 9394 (963+) | info@previewsyria.com")
     run_f = p_footer.add_run(contact_info)
     run_f.font.size = Pt(9)
-    run_f.font.color.rgb = RGBColor(100, 100, 100)
+    run_f.font.color.rgb = RGBColor(102, 0, 153) # لون أرجواني
+
 
     # 3. محتوى الخطاب
     doc.add_paragraph(f"{ar('التاريخ:')} 2026/3/9").alignment = WD_ALIGN_PARAGRAPH.LEFT
