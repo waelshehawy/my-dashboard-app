@@ -67,15 +67,66 @@ def export_word(customer_name, cart_data, period_name):
             apply_rtl(p_city)
             
             for net, df in networks.items():
-                # التجميع حسب أجرة الرسم (المقاس)
+                # 1. التجميع حسب السعر (الذي يمثل المقاس/الحجم)
                 grouped = df.groupby('اجرة الرسم')
                 
                 for fee, group_df in grouped:
-                    drawing_name = group_df['اسم الرسم'].iloc[0] if 'اسم الرسم' in group_df.columns else "رسم إعلاني"
+                    # جلب مسمى الرسم (مثلاً: أجور طباعة فلكس أو أجور عرض لوحة)
+                    drawing_name = group_df['اسم الرسم'].iloc[0] if 'اسم الرسم' in group_df.columns else ""
                     
-                    p_size = doc.add_paragraph(f"نوع الرسم: {drawing_name} (السعر: {fee}$)")
+                    # عنوان الجدول الفرعي
+                    p_size = doc.add_paragraph(f"البيان: {drawing_name} (سعر الوحدة: {fee}$)")
                     apply_rtl(p_size)
                     p_size.runs[0].bold = True
+
+                    # بناء الجدول (الموقع | العدد)
+                    table = doc.add_table(rows=1, cols=2)
+                    table.style = 'Table Grid'
+                    table._element.xpath('w:tblPr')[0].append(OxmlElement('w:bidiVisual'))
+                    
+                    hdr = table.rows[0].cells
+                    hdr[0].text = "اسم الموقع / العمود"
+                    hdr[1].text = "العدد"
+                    for cell in hdr:
+                        set_cell_background(cell, "660099")
+                        for p in cell.paragraphs:
+                            apply_rtl(p)
+                            for r in p.runs: r.font.color.rgb, r.bold = RGBColor(255, 255, 255), True
+
+                    # تعبئة الصفوف
+                    for _, row in group_df.iterrows():
+                        row_cells = table.add_row().cells
+                        row_cells[0].text = str(row.get('الموقع', ''))
+                        row_cells[1].text = str(row.get('العدد', 1))
+                        for cell in row_cells:
+                            for p in cell.paragraphs: apply_rtl(p)
+
+                    # --- منطق الحساب الذكي ---
+                    total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
+                    total_value = total_q * fee
+                    
+                    # تحديد هل المبلغ يتبع للطباعة أم للعرض بناءً على "اسم الرسم"
+                    print_total = 0
+                    ads_total = 0
+                    
+                    if "طباعة" in drawing_name:
+                        print_total = total_value
+                    elif "عرض" in drawing_name:
+                        ads_total = total_value
+                    else:
+                        # إذا لم يوجد مسمى صريح، نضعها في العرض كافتراض
+                        ads_total = total_value
+
+                    # سطر المجاميع أسفل الجدول
+                    p_sum = doc.add_paragraph()
+                    # بناء نص المجموع بناءً على النوع المكتشف
+                    summary_text = f"إجمالي العدد: {int(total_q)} | "
+                    if print_total > 0: summary_text += f"إجمالي أجور الطباعة: {print_total:,}$"
+                    if ads_total > 0: summary_text += f"إجمالي أجور العرض: {ads_total:,}$"
+                    
+                    p_sum.add_run(summary_text).bold = True
+                    apply_rtl(p_sum)
+                    doc.add_paragraph() # سطر فارغ للفصل
 
                     # بناء الجدول
                     table = doc.add_table(rows=1, cols=2)
