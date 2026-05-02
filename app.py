@@ -35,74 +35,91 @@ def set_cell_shading(cell, color):
 # --- دالة تصدير الوورد الاحترافية ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
-    
-    # 1. إعدادات الصفحة A4
     section = doc.sections[0]
+    # أبعاد A4
     section.page_height = Cm(29.7)
     section.page_width = Cm(21)
+    # هوامش النص
     section.left_margin = Cm(2)
     section.right_margin = Cm(2)
     section.top_margin = Cm(2)
     section.bottom_margin = Cm(2)
 
-    # 2. إضافة الخلفية (خلف النص تماماً وبدون إزاحة)
+    # وضع الخلفية في الهيدر لضمان عدم تكرار الصفحات الفارغة في جسم المستند
     header = section.header
-    header.is_linked_to_previous = False
-    p_head = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-    p_head.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
     
     if os.path.exists('logo_full.png'):
-        run = p_head.add_run()
-        pic = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
+        run = p_header.add_run()
+        picture = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
         
         try:
-            # تحويل الصورة إلى عنصر عائم مطلق خلف النص
-            inline = pic._inline
+            # الوصول إلى بنية XML
+            inline = picture._inline
             extent = inline.extent
             doc_pr = inline.docPr
             graphic = inline.graphic
             
-            anchor = OxmlElement('wp:In Front of Text')
-            anchor.set(qn('wp:behindDoc'), '1') # جعلها خلف النص
+            # إنشاء عنصر Anchor (عائم) بدلاً من Inline
+            anchor = OxmlElement('wp:anchor')
+            
+            # --- الإعدادات السحرية لظهور النص فوق الصورة ---
+            anchor.set(qn('wp:behindDoc'), '1')  # 1 تعني خلف النص تماماً
             anchor.set(qn('wp:locked'), '0')
             anchor.set(qn('wp:layoutInCell'), '1')
-            anchor.set(qn('wp:allowOverlap'), '1')
+            anchor.set(qn('wp:allowOverlap'), '1') # السماح للنص بالتداخل
             anchor.set(qn('wp:simplePos'), '0')
             anchor.set(qn('wp:relativeHeight'), '0')
 
-            # إحداثيات (0,0) بالنسبة للصفحة
-            for axis in ['H', 'V']:
-                pos = OxmlElement(f'wp:position{axis}')
-                pos.set(qn('relativeFrom'), 'page')
-                offset = OxmlElement('wp:posOffset')
-                offset.text = '0'
-                pos.append(offset)
-                anchor.append(pos)
+            # تحديد الموقع من زاوية الصفحة المطلقة (0,0)
+            h_pos = OxmlElement('wp:positionH')
+            h_pos.set(qn('relativeFrom'), 'page') # من حافة الورقة
+            h_offset = OxmlElement('wp:posOffset')
+            h_offset.text = '0'
+            h_pos.append(h_offset)
 
+            v_pos = OxmlElement('wp:positionV')
+            v_pos.set(qn('relativeFrom'), 'page') # من حافة الورقة
+            v_offset = OxmlElement('wp:posOffset')
+            v_offset.text = '0'
+            v_pos.append(v_offset)
+
+            # إضافة العناصر للـ Anchor بالترتيب الصحيح
+            anchor.append(OxmlElement('wp:simplePos'))
+            anchor.get_element(qn('wp:simplePos')).set('x', '0')
+            anchor.get_element(qn('wp:simplePos')).set('y', '0')
+            anchor.append(h_pos)
+            anchor.append(v_pos)
             anchor.append(extent)
             anchor.append(OxmlElement('wp:effectExtent'))
-            anchor.append(OxmlElement('wp:wrapNone')) # لا تزيح النص
+            
+            # هذا هو السطر الذي يمنع الصورة من دفع النص (Wrap None)
+            anchor.append(OxmlElement('wp:wrapNone')) 
+            
             anchor.append(doc_pr)
             anchor.append(graphic)
-            
-            p_head._p.remove(run._r)
-            p_head._p.add_run()._r.append(anchor)
-        except: pass
 
-    # 3. محتوى العرض (فوق الخلفية)
-    doc.add_paragraph()
-    p_date = doc.add_paragraph(f"{ar('التاريخ:')} 2026/03/09")
-    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            # استبدال العنصر القديم بالجديد في الـ XML
+            p_header._p.remove(run._r)
+            p_header._p.add_run()._r.append(anchor)
+        except Exception as e:
+            st.error(f"XML Error: {e}")
+
+    # --- الآن نكتب النص (سيظهر قسرياً فوق الصورة) ---
+    # إضافة مسافة علوية بسيطة
+    for _ in range(2): doc.add_paragraph()
 
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_t = p_title.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
+    run_t = p_title.add_run(ar(f"عرض سعر: {customer_name}"))
     run_t.bold = True
-    run_t.font.size = Pt(20)
+    run_t.font.size = Pt(22)
     run_t.font.color.rgb = RGBColor(102, 0, 153)
 
-    doc.add_paragraph(ar("تحية طيبة وبعد،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة الإعلانية: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"الفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+
+
 
     # 4. بناء الجداول
     for city, networks in cart_data.items():
