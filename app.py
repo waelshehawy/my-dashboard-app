@@ -32,8 +32,7 @@ def set_cell_shading(cell, color):
     tcPr.append(shd)
 
 # --- وظيفة تصدير الوورد الاحترافية (تحديث الصورة المدمجة) ---
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+
 from docx.shared import cm
 
 def export_word(customer_name, cart_data, period_name):
