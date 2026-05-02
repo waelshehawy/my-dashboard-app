@@ -46,7 +46,7 @@ def export_word(customer_name, cart_data, period_name):
 
     # التاريخ (محاذاة يمين ليظهر يساراً كما كان صحيحاً عندك)
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/02")
-    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
     # ترويسة الخطاب
     p_cust = doc.add_paragraph()
