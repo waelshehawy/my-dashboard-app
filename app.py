@@ -32,91 +32,129 @@ def set_cell_shading(cell, color):
     shd.set(qn('w:fill'), color)
     tcPr.append(shd)
 
-# --- دالة تصدير الوورد الاحترافية ---
+# --- دالة تصدير الوورد  ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
+    
+    # 1. إعدادات الصفحة
     section = doc.sections[0]
-    # أبعاد A4
     section.page_height = Cm(29.7)
     section.page_width = Cm(21)
-    # هوامش النص
     section.left_margin = Cm(2)
     section.right_margin = Cm(2)
     section.top_margin = Cm(2)
     section.bottom_margin = Cm(2)
 
-    # وضع الخلفية في الهيدر لضمان عدم تكرار الصفحات الفارغة في جسم المستند
+    # 2. إضافة الخلفية في الهيدر
     header = section.header
-    p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    header.is_linked_to_previous = False
+    p_head = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
     
     if os.path.exists('logo_full.png'):
-        run = p_header.add_run()
-        picture = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
+        run = p_head.add_run()
+        # تقليل الارتفاع قليلاً جداً لمنع خلق صفحات فارغة (29.6 بدلاً من 29.7)
+        pic = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.6))
         
         try:
-            # الوصول إلى بنية XML
-            inline = picture._inline
+            inline = pic._inline
             extent = inline.extent
             doc_pr = inline.docPr
             graphic = inline.graphic
             
-            # إنشاء عنصر Anchor (عائم) بدلاً من Inline
             anchor = OxmlElement('wp:anchor')
-            
-            # --- الإعدادات السحرية لظهور النص فوق الصورة ---
-            anchor.set(qn('wp:behindDoc'), '1')  # 1 تعني خلف النص تماماً
+            anchor.set(qn('wp:behindDoc'), '1') # خلف النص
             anchor.set(qn('wp:locked'), '0')
             anchor.set(qn('wp:layoutInCell'), '1')
-            anchor.set(qn('wp:allowOverlap'), '1') # السماح للنص بالتداخل
+            anchor.set(qn('wp:allowOverlap'), '1')
             anchor.set(qn('wp:simplePos'), '0')
             anchor.set(qn('wp:relativeHeight'), '0')
 
-            # تحديد الموقع من زاوية الصفحة المطلقة (0,0)
+            # --- ضبط الموقع الأفقي (Absolute) ---
             h_pos = OxmlElement('wp:positionH')
-            h_pos.set(qn('relativeFrom'), 'page') # من حافة الورقة
+            h_pos.set(qn('relativeFrom'), 'page')
             h_offset = OxmlElement('wp:posOffset')
             h_offset.text = '0'
             h_pos.append(h_offset)
+            anchor.append(h_pos)
 
+            # --- ضبط الموقع الرأسي (Absolute) ---
             v_pos = OxmlElement('wp:positionV')
-            v_pos.set(qn('relativeFrom'), 'page') # من حافة الورقة
+            v_pos.set(qn('relativeFrom'), 'page')
             v_offset = OxmlElement('wp:posOffset')
             v_offset.text = '0'
             v_pos.append(v_offset)
-
-            # إضافة العناصر للـ Anchor بالترتيب الصحيح
-            anchor.append(OxmlElement('wp:simplePos'))
-            anchor.get_element(qn('wp:simplePos')).set('x', '0')
-            anchor.get_element(qn('wp:simplePos')).set('y', '0')
-            anchor.append(h_pos)
             anchor.append(v_pos)
+
             anchor.append(extent)
             anchor.append(OxmlElement('wp:effectExtent'))
-            
-            # هذا هو السطر الذي يمنع الصورة من دفع النص (Wrap None)
-            anchor.append(OxmlElement('wp:wrapNone')) 
-            
+            anchor.append(OxmlElement('wp:wrapNone')) # النص يمر فوقها
             anchor.append(doc_pr)
             anchor.append(graphic)
-
-            # استبدال العنصر القديم بالجديد في الـ XML
-            p_header._p.remove(run._r)
-            p_header._p.add_run()._r.append(anchor)
+            
+            p_head._p.remove(run._r)
+            p_head._p.add_run()._r.append(anchor)
         except Exception as e:
-            st.error(f"XML Error: {e}")
+            st.error(f"XML Fix Error: {e}")
 
-    # --- الآن نكتب النص (سيظهر قسرياً فوق الصورة) ---
-    # إضافة مسافة علوية بسيطة
-    for _ in range(2): doc.add_paragraph()
+    # 3. محتوى الخطاب
+    # ترك مساحة علوية لكي لا يبدأ النص من الحافة تماماً
+    for _ in range(3): doc.add_paragraph()
 
-    p_title = doc.add_paragraph()
-    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_t = p_title.add_run(ar(f"عرض سعر: {customer_name}"))
-    run_t.bold = True
-    run_t.font.size = Pt(22)
-    run_t.font.color.rgb = RGBColor(102, 0, 153)
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_c = p_cust.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
+    run_c.bold = True
+    run_c.font.size = Pt(20)
+    run_c.font.color.rgb = RGBColor(102, 0, 153)
 
-    doc.add_paragraph(ar(f"الفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"التاريخ: 2026/03/09")).alignment = WD_ALIGN_PARAGRAPH.LEFT
+    doc.add_paragraph(ar("تحية طيبة وبعد،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # 4. بناء الجداول
+    for city, networks in cart_data.items():
+        doc.add_paragraph(ar(f"■ محافظة {city}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        for net, df in networks.items():
+            table = doc.add_table(rows=1, cols=4)
+            table.style = 'Table Grid'
+            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            hdr_cells = table.rows[0].cells
+            titles = ["العدد", "الموقع", "العدد", "الموقع"]
+            for i, title in enumerate(titles):
+                hdr_cells[i].text = ar(title)
+                set_cell_shading(hdr_cells[i], "660099")
+                # تنسيق نص الهيدر
+                run_h = hdr_cells[i].paragraphs[0].runs[0]
+                run_h.font.color.rgb = RGBColor(255, 255, 255)
+                run_h.bold = True
+
+            # تعبئة البيانات
+            data_list = df.values.tolist()
+            for i in range(0, len(data_list), 2):
+                row_cells = table.add_row().cells
+                row_cells[1].text = ar(data_list[i][0]) # اسم العمود/الموقع
+                row_cells[0].text = str(data_list[i][1]) # العدد
+                if i + 1 < len(data_list):
+                    row_cells[3].text = ar(data_list[i+1][0])
+                    row_cells[2].text = str(data_list[i+1][1])
+            
+            # حساب المجاميع
+            total_n = pd.to_numeric(df.iloc[:, 1], errors='coerce').sum()
+            ads_sum = pd.to_numeric(df['أجور العرض'], errors='coerce').sum() if 'أجور العرض' in df.columns else 0
+            
+            p_total = doc.add_paragraph()
+            p_total.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            total_text = f"{ar('إجمالي العدد:')} {int(total_n)} | {ar('أجور العرض:')} {ads_sum:,}$"
+            run_total = p_total.add_run(total_text)
+            run_total.bold = True
+            run_total.font.color.rgb = RGBColor(102, 0, 153)
+
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
+    return target
+
 
 
 
