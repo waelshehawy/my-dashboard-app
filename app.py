@@ -9,41 +9,109 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-# --- 1. تعريف الدوال الأساسية (يجب أن تكون في البداية) ---
-
 def get_connection():
-    """الاتصال بقاعدة البيانات"""
     return sqlite3.connect('billboards_data.db')
 
-def apply_rtl(obj):
-    """إجبار الفقرة أو الخلية على المحاذاة لليمين واتجاه النص العربي"""
-    if hasattr(obj, 'paragraphs'):
-        for p in obj.paragraphs:
-            _force_rtl_style(p)
-    else:
-        _force_rtl_style(obj)
-
-def _force_rtl_style(p):
-    """تنسيق الـ XML للفقرة لضمان عدم تقطع الحروف والمحاذاة لليمين"""
-    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+def apply_custom_rtl(p):
+    """إجبار النص على اليمين باستخدام المنطق العكسي وتفعيل Bidi"""
+    # بما أن اليمين يظهر يساراً عندك، سنضبطها على LEFT لتظهر يميناً
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
+    
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
     pPr.append(bidi)
+    
     for run in p.runs:
         rPr = run._element.get_or_add_rPr()
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
-        rFonts = OxmlElement('w:rFonts')
-        rFonts.set(qn('w:cs'), 'Arial')
-        rPr.append(rFonts)
 
-def set_table_rtl(table):
-    """جعل الجدول يبدأ من اليمين لليسار"""
-    tblPr = table._element.xpath('w:tblPr')[0]
-    bidi = OxmlElement('w:bidiVisual')
-    tblPr.append(bidi)
+def export_word(customer_name, cart_data, period_name):
+    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+    
+    # ضبط هوامش كل الصفحات لضمان عدم تداخل النص مع اللوجو في الأعلى
+    for section in doc.sections:
+        section.top_margin = Cm(4) # هامش علوي كبير لكل الصفحات
+
+    # التاريخ (سنضعه RIGHT ليظهر عندك يساراً كما كان صحيحاً)
+    p_date = doc.add_paragraph(f"التاريخ: 2026/05/02")
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # ترويسة الخطاب
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
+    run_c.bold, run_c.font.size = True, Pt(20)
+    run_c.font.color.rgb = RGBColor(102, 0, 153)
+
+    p_greet = doc.add_paragraph("تحية طيبة وبعد،")
+    apply_custom_rtl(p_greet)
+
+    p_info = doc.add_paragraph(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")
+    apply_custom_rtl(p_info)
+
+    if cart_data:
+        for city, networks in cart_data.items():
+            p_city = doc.add_paragraph(f"■ محافظة {city}")
+            apply_custom_rtl(p_city)
+            
+            for net, df in networks.items():
+                # التجميع حسب "اجرة الرسم"
+                grouped = df.groupby('اجرة الرسم')
+                
+                for fee, group_df in grouped:
+                    # جلب اسم الرسم من السطر الأول في المجموعة
+                    drawing_name = group_df['اسم الرسم'].iloc[0] if 'اسم الرسم' in group_df.columns else "رسم"
+                    
+                    p_size = doc.add_paragraph(f"الرسم: {drawing_name} (السعر: {fee}$)")
+                    apply_custom_rtl(p_size)
+
+                    # بناء الجدول
+                    table = doc.add_table(rows=1, cols=2)
+                    table.style = 'Table Grid'
+                    # قلب الجدول (BidiVisual)
+                    table._element.xpath('w:tblPr')[0].append(OxmlElement('w:bidiVisual'))
+                    
+                    hdr = table.rows[0].cells
+                    hdr[0].text = f"الشبكة: {net}"
+                    hdr[1].text = "العدد"
+                    
+                    for cell in hdr:
+                        set_cell_background(cell, "660099")
+                        for p in cell.paragraphs:
+                            apply_custom_rtl(p)
+                            for run in p.runs:
+                                run.font.color.rgb, run.bold = RGBColor(255, 255, 255), True
+
+                    for _, row in group_df.iterrows():
+                        row_cells = table.add_row().cells
+                        row_cells[0].text = str(row.get('الموقع', ''))
+                        row_cells[1].text = str(row.get('العدد', 1))
+                        for cell in row_cells:
+                            for p in cell.paragraphs: apply_custom_rtl(p)
+
+                    # المجاميع
+                    total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
+                    total_p = pd.to_numeric(group_df.get('أجور الطباعة', 0), errors='coerce').sum()
+                    
+                    p_sum = doc.add_paragraph(f"العدد: {int(total_q)} | رسم: {total_q*fee:,}$ | طباعة: {total_p:,}$ | المجموع: {(total_q*fee)+total_p:,}$")
+                    apply_custom_rtl(p_sum)
+                    doc.add_paragraph()
+
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
+    return target
+
+def set_cell_background(cell, color):
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:fill'), color)
+    cell._tc.get_or_add_tcPr().append(shd)
+
+# --- واجهة التطبيق ---
+# (استخدم نفس كود الـ Sidebar والسلة، مع التأكد من إضافة 'اسم الرسم' عند الإضافة للسلة)
 
 # --- 2. دالة تصدير الوورد الاحترافية ---
 
