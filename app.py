@@ -93,7 +93,7 @@ def export_word(customer_name, cart_data, period_name):
             
             # استبدال الفقرة القديمة بالخلفية الجديدة
             p_head._p.remove(run._r)
-            p_head._p.add_run()._r.append(anchor)
+            p_head._p.add_run()._r.append(Behind text)
         except Exception as e:
             st.error(f"Logo XML Fix Error: {e}")
 
