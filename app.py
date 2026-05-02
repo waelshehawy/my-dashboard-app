@@ -36,17 +36,15 @@ def set_cell_shading(cell, color):
 # --- وظيفة تصدير الوورد الاحترافية (مع شعار خلف النص) ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
-    
-    # ضبط هوامش وأبعاد الصفحة A4
     section = doc.sections[0]
     section.page_height = Cm(29.7)
     section.page_width = Cm(21)
+    # هوامش المحتوى (النص سيتحرك داخلها)
     section.left_margin = Cm(2)
     section.right_margin = Cm(2)
-    section.top_margin = Cm(2)
+    section.top_margin = Cm(2.5) # ترك مساحة علوية للنص
     section.bottom_margin = Cm(2)
 
-    # 1. إضافة اللوجو كخلفية (Watermark) عبر الهيدر
     header = section.header
     p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
     
@@ -55,30 +53,29 @@ def export_word(customer_name, cart_data, period_name):
         picture = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
         
         try:
-            # تحويل الصورة إلى عنصر عائم خلف النص (Behind Text)
             inline = picture._inline
             extent = inline.extent
             doc_pr = inline.docPr
             graphic = inline.graphic
             
             anchor = OxmlElement('wp:anchor')
+            # الأوامر الثلاثة التالية تضمن أن الصورة "خلفية" حقيقية
             anchor.set(qn('wp:behindDoc'), '1') 
             anchor.set(qn('wp:locked'), '0')
-            anchor.set(qn('wp:layoutInCell'), '1')
             anchor.set(qn('wp:allowOverlap'), '1')
 
-            # التموضع الأفقي من حافة الصفحة
+            # ضبط التموضع الأفقي المطلق من حافة الصفحة اليسرى
             h_pos = OxmlElement('wp:positionH')
             h_pos.set(qn('relativeFrom'), 'page')
             h_offset = OxmlElement('wp:posOffset')
-            h_offset.text = '0'
+            h_offset.text = '0' # صفر إزاحة
             h_pos.append(h_offset)
 
-            # التموضع الرأسي من حافة الصفحة
+            # ضبط التموضع الرأسي المطلق من حافة الصفحة العلوية
             v_pos = OxmlElement('wp:positionV')
             v_pos.set(qn('relativeFrom'), 'page')
             v_offset = OxmlElement('wp:posOffset')
-            v_offset.text = '0'
+            v_offset.text = '0' # صفر إزاحة
             v_pos.append(v_offset)
 
             anchor.append(OxmlElement('wp:simplePos'))
@@ -88,29 +85,29 @@ def export_word(customer_name, cart_data, period_name):
             anchor.append(v_pos)
             anchor.append(extent)
             anchor.append(OxmlElement('wp:effectExtent'))
-            anchor.append(OxmlElement('wp:wrapNone'))
+            anchor.append(OxmlElement('wp:wrapNone')) # مهم جداً لظهور النص فوقها
             anchor.append(doc_pr)
             anchor.append(graphic)
 
             p_header._p.remove(run._r)
-            new_run = p_header.add_run()
-            new_run._r.append(anchor)
+            p_header._p.add_run()._r.append(anchor)
         except Exception:
             pass
 
-    # 2. محتوى الخطاب
-    doc.add_paragraph() # مسافة علوية
-    doc.add_paragraph(f"{ar('التاريخ:')} 2026/03/09").alignment = WD_ALIGN_PARAGRAPH.LEFT
-    
+    # --- تكملة محتوى النص (سيكون فوق الصورة الآن) ---
+    doc.add_paragraph() 
+    p_date = doc.add_paragraph(f"{ar('التاريخ:')} 2026/03/09")
+    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
     run_c.bold = True
-    run_c.font.size = Pt(18)
+    run_c.font.size = Pt(20)
     run_c.font.color.rgb = RGBColor(102, 0, 153)
 
-    doc.add_paragraph(ar("تحية طيبة،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar("تحية طيبة وبعد،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
 
     # 3. بناء الجداول لكل محافظة
     for city, networks in cart_data.items():
