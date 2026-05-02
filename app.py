@@ -36,9 +36,8 @@ def set_cell_shading(cell, color):
 # --- وظيفة تصدير الوورد الاحترافية (مع شعار خلف النص) ---
 def export_word(customer_name, cart_data, period_name):
     doc = Document()
-    
-    # ضبط هوامش وأبعاد الصفحة A4
     section = doc.sections[0]
+    # أبعاد الصفحة A4
     section.page_height = Cm(29.7)
     section.page_width = Cm(21)
     section.left_margin = Cm(2)
@@ -46,69 +45,89 @@ def export_word(customer_name, cart_data, period_name):
     section.top_margin = Cm(2)
     section.bottom_margin = Cm(2)
 
-    # 1. إضافة اللوجو كخلفية (Watermark) عبر الهيدر
+    # إضافة الصورة في الهيدر لضمان ثباتها خلف النص في كل الصفحات
     header = section.header
-    p_header = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    p_head = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
     
     if os.path.exists('logo_full.png'):
-        run = p_header.add_run()
-        picture = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.7))
+        run = p_head.add_run()
+        # تقليل الارتفاع بـ 2 ملم لضمان عدم القفز لصفحة جديدة
+        pic = run.add_picture('logo_full.png', width=Cm(21), height=Cm(29.5))
         
         try:
-            # تحويل الصورة إلى عنصر عائم خلف النص (Behind Text)
-            inline = picture._inline
+            inline = pic._inline
             extent = inline.extent
             doc_pr = inline.docPr
             graphic = inline.graphic
             
-    
-            anchor.set(qn('wp:behind Text'), '1') 
+            # بناء عنصر Anchor (عائم) قسرياً
+            anchor = OxmlElement('wp:anchor')
+            # الإعدادات الأساسية لـ "Behind Text"
+            anchor.set(qn('wp:behindDoc'), '1') 
+            anchor.set(qn('wp:locked'), '0')
+            anchor.set(qn('wp:layoutInCell'), '1')
+            anchor.set(qn('wp:allowOverlap'), '1')
+            anchor.set(qn('wp:simplePos'), '0')
+            anchor.set(qn('wp:relativeHeight'), '0')
 
-
-            # التموضع الأفقي من حافة الصفحة
+            # التموضع الأفقي المطلق من حافة الصفحة (Page)
             h_pos = OxmlElement('wp:positionH')
             h_pos.set(qn('relativeFrom'), 'page')
             h_offset = OxmlElement('wp:posOffset')
             h_offset.text = '0'
             h_pos.append(h_offset)
 
-            # التموضع الرأسي من حافة الصفحة
+            # التموضع الرأسي المطلق من حافة الصفحة (Page)
             v_pos = OxmlElement('wp:positionV')
             v_pos.set(qn('relativeFrom'), 'page')
             v_offset = OxmlElement('wp:posOffset')
             v_offset.text = '0'
             v_pos.append(v_offset)
 
-            anchor.append(OxmlElement('wp:simplePos'))
+            # الترتيب الصارم للعناصر داخل Anchor (مهم جداً للـ Word)
+            anchor.append(OxmlElement('wp:simplePos')) # يجب أن يكون موجوداً حتى لو 0
             anchor.get_element(qn('wp:simplePos')).set('x', '0')
             anchor.get_element(qn('wp:simplePos')).set('y', '0')
+            
             anchor.append(h_pos)
             anchor.append(v_pos)
             anchor.append(extent)
             anchor.append(OxmlElement('wp:effectExtent'))
-            anchor.append(OxmlElement('wp:wrapNone'))
+            
+            # WrapNone هو المعادل لـ Behind Text و In Front of Text في الـ XML
+            # وبما أننا وضعنا behindDoc=1 ستصبح خلف النص
+            anchor.append(OxmlElement('wp:wrapNone')) 
+            
             anchor.append(doc_pr)
             anchor.append(graphic)
+            
+            # استبدال عنصر Inline بـ Anchor
+            p_head._p.remove(run._r)
+            p_head._p.add_run()._r.append(anchor)
+        except Exception as e:
+            st.error(f"Logo Fix Error: {e}")
 
-            p_header._p.remove(run._r)
-            new_run = p_header.add_run()
-            new_run._r.append(anchor)
-        except Exception:
-            pass
+    # --- كتابة محتوى الخطاب ---
+    # إضافة مسافة علوية لضمان عدم تداخل النص مع حافة الورقة العلوية
+    for _ in range(3): doc.add_paragraph()
 
-    # 2. محتوى الخطاب
-    doc.add_paragraph() # مسافة علوية
-    doc.add_paragraph(f"{ar('التاريخ:')} 2026/03/09").alignment = WD_ALIGN_PARAGRAPH.LEFT
-    
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(ar(f"السادة شركة {customer_name} المحترمين"))
     run_c.bold = True
-    run_c.font.size = Pt(18)
+    run_c.font.size = Pt(22)
     run_c.font.color.rgb = RGBColor(102, 0, 153)
 
-    doc.add_paragraph(ar("تحية طيبة،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    doc.add_paragraph(ar("تحية طيبة وبعد،")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
     doc.add_paragraph(ar(f"نقدم لكم المواقع المتاحة للفترة: {period_name}")).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # (بقية كود الجداول الملونة كما هو في الرد السابق)
+    # ...
+
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
+    return target
 
     # 3. بناء الجداول لكل محافظة
     for city, networks in cart_data.items():
