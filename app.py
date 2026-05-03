@@ -238,9 +238,7 @@ else:
 
 # --- السطر الأخير في الملف (خارج كل الشروط) ---
 if 'conn' in locals():
-   
-
-        conn.close()
+    conn.close()
 
 
                 
