@@ -8,6 +8,9 @@ from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+import folium
+from streamlit_folium import st_folium
+from folium.plugins import MarkerCluster
 
 # --- 1. الدوال الأساسية وتنسيق العربي ---
 
