@@ -215,9 +215,12 @@ else:
                             'ads_label': a_label
                         })
                     st.rerun()
-   # الكارد
+         # الكارد
                        # --- عرض وتحرير السلة ---
-             if st.session_state.cart:
+               
+
+            # --- عرض وتحرير السلة ---
+            if st.session_state.cart:
                 st.write("---")
                 st.subheader("🛒 مراجعة وتعديل العرض")
                 
@@ -265,8 +268,7 @@ else:
                 with c2:
                     if st.button("🧹 تفريغ العرض بالكامل", use_container_width=True):
                         st.session_state.cart = {}
-                        st.rerun()     
-
+                        st.rerun()
 
     
     # الداشبورد
