@@ -160,8 +160,8 @@ else:
             f_print, f_ads = 0.0, 0.0
             for _, row in subset.iterrows():
                 name = str(row['اسم الرسم'])
-                if "طباعة" in name: f_print = float(row['اجرة الرسم'])
-                elif "عرض" in name: f_ads = float(row['اجرة الرسم'])
+                if " أجور طباعة وتركيب" in name: f_print = float(row['اجرة الرسم'])
+                elif "أجور عرض" in name: f_ads = float(row['اجرة الرسم'])
 
             st.info(f"💡 المقاس {sel_size} | أجر الطباعة: {f_print}$ | أجر العرض: {f_ads}$")
 
