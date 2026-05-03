@@ -9,13 +9,15 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-# --- 1. الدوال الأساسية ---
+# --- إعدادات الصفحة ---
+st.set_page_config(page_title="PreView Ads ERP", layout="wide")
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
 def apply_rtl(p):
     """إجبار النص على اليمين بالمنطق العكسي وتفعيل Bidi"""
+    # ضبط المحاذاة (جرب تبديل LEFT بـ RIGHT إذا لزم الأمر حسب نسخة الوورد)
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -31,6 +33,7 @@ def apply_rtl(p):
         rPr.append(rFonts)
 
 def set_table_rtl(table):
+    """جعل الجدول يبدأ من اليمين (العمود الأول يميناً)"""
     tblPr = table._element.xpath('w:tblPr')
     if tblPr:
         bidi = OxmlElement('w:bidiVisual')
@@ -41,17 +44,18 @@ def set_cell_background(cell, color):
     shd.set(qn('w:fill'), color)
     cell._tc.get_or_add_tcPr().append(shd)
 
-# --- 2. دالة تصدير الوورد المصححة ---
-
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     
+    # تجاوز اللوغو في كل الصفحات عبر ضبط الهوامش العلوية
     for section in doc.sections:
         section.top_margin = Cm(4.5) 
 
+    # التاريخ
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/03")
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
+    # ترويسة الخطاب
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
@@ -70,7 +74,7 @@ def export_word(customer_name, cart_data, period_name):
             apply_rtl(p_city)
             
             for net, df in networks.items():
-                # التجميع حسب الحجم
+                # التجميع حسب "الحجم" ليكون كل مقاس في جدول مستقل
                 grouped = df.groupby('الحجم')
                 
                 for size, group_df in grouped:
@@ -83,12 +87,11 @@ def export_word(customer_name, cart_data, period_name):
                     table.style = 'Table Grid'
                     set_table_rtl(table)
                     
-                    # تصحيح الخطأ: الوصول لكل خلية في الرأس بشكل منفصل
-                    hdr_cells = table.rows[0].cells
-                    hdr_cells[0].text = f"الشبكة: {net}"
-                    hdr_cells[1].text = "العدد"
+                    hdr = table.rows[0].cells
+                    hdr[0].text = f"الشبكة: {net}"
+                    hdr[1].text = "العدد"
                     
-                    for cell in hdr_cells:
+                    for cell in hdr:
                         set_cell_background(cell, "660099")
                         for p in cell.paragraphs:
                             apply_rtl(p)
@@ -102,148 +105,128 @@ def export_word(customer_name, cart_data, period_name):
                         for cell in row_cells:
                             for p in cell.paragraphs: apply_rtl(p)
 
-                    # الحسابات
-                    # --- منطق الحساب المضمون ---
+                    # حساب المجاميع لكل مقاس
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
+                    f_print = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
+                    f_ads = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
                     
-                    # جلب الأجور مع التأكد من أنها أرقام وليست مصفوفات
-                    fee_print = 0
-                    if 'fee_print' in group_df.columns:
-                        val = group_df['fee_print'].iloc[0]
-                        fee_print = float(val) if pd.notnull(val) else 0
-                        
-                    fee_ads = 0
-                    if 'fee_ads' in group_df.columns:
-                        val = group_df['fee_ads'].iloc[0]
-                        fee_ads = float(val) if pd.notnull(val) else 0
-                    
-                    # عملية الضرب
-                    total_print = total_q * fee_print
-                    total_ads = total_q * fee_ads
-                    grand_total = total_print + total_ads
-
-                    # كتابة السطر الملون والمحاذى لليمين
                     p_sum = doc.add_paragraph()
-                    summary_text = (
-                        f"العدد الإجمالي: {int(total_q)} | "
-                        f"أجور الطباعة: {total_print:,.0f}$ | "
-                        f"أجور العرض: {total_ads:,.0f}$ | "
-                        f"الإجمالي: {grand_total:,.0f}$"
-                    )
-                    p_sum.add_run(summary_text).bold = True
+                    txt = f"العدد: {int(total_q)} | طباعة: {total_q*f_print:,.0f}$ | عرض: {total_q*f_ads:,.0f}$ | الإجمالي: {(total_q*f_print)+(total_q*f_ads):,.0f}$"
+                    p_sum.add_run(txt).bold = True
                     apply_rtl(p_sum)
-                    doc.add_paragraph() # مسافة للفصل
-
+                    doc.add_paragraph()
 
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+# --- 3. واجهة تطبيق Streamlit ---
 
-# --- 3. واجهة Streamlit ---
-
-if "auth" not in st.session_state: st.session_state.auth = False
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 تسجيل الدخول")
-    u, p = st.text_input("User"), st.text_input("Pass", type="password")
-    if st.button("Login"):
+    st.title("🔒 تسجيل الدخول - PreView ERP")
+    u = st.text_input("اسم المستخدم")
+    p = st.text_input("كلمة المرور", type="password")
+    if st.button("دخول"):
         if u == "admin" and p == "preview2026":
             st.session_state.auth = True
             st.rerun()
-        else: st.error("Error")
+        else:
+            st.error("❌ بيانات الدخول خاطئة")
 else:
     conn = get_connection()
-    if 'cart' not in st.session_state: st.session_state.cart = {}
+    # التأكد من تهيئة السلة في ذاكرة الجلسة لضمان عدم اختفائها
+    if 'cart' not in st.session_state:
+        st.session_state.cart = {}
     
     with st.sidebar:
-        if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("Menu", ["📊 Dashboard", "📄 Quotation"])
+        if os.path.exists('logo_full.png'):
+            st.image('logo_full.png', width=180)
+        st.header("PreView Ads")
+        page = st.radio("القائمة:", ["📊 الداشبورد", "📄 إنشاء عرض سعر"])
+        if st.button("تسجيل الخروج"):
+            st.session_state.auth = False
+            st.rerun()
 
-    if page == "📊 Dashboard":
+    if page == "📊 الداشبورد":
         st.title("📊 حالة المواقع")
         try:
             df_m = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
             st.dataframe(df_m, use_container_width=True)
-        except: st.error("Database Error")
+        except Exception as e:
+            st.error(f"خطأ في قاعدة البيانات: {e}")
 
     elif page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر احترافي")
-        
-        # التأكد من تهيئة السلة في ذاكرة الجلسة
-        if 'cart' not in st.session_state:
-            st.session_state.cart = {}
-
         try:
-            # 1. جلب البيانات الأساسية
-            drawing_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
-            sizes = drawing_df['الحجم'].unique().tolist()
-            periods_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+            # جلب البيانات من الجداول
+            draw_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
+            sizes = draw_df['الحجم'].unique().tolist()
+            periods = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
             
-            # تقسيم الشاشة لسهولة العرض
             col_input, col_cart = st.columns([1, 1.5])
             
             with col_input:
                 st.subheader("⚙️ إعدادات العرض")
                 cust = st.text_input("اسم الزبون")
-                period = st.selectbox("اختر الفترة:", periods_list)
+                sel_period = st.selectbox("اختر الفترة:", periods)
                 sel_size = st.selectbox("اختر المقاس:", sizes)
-
-                # جلب الأسعار المزدوجة للمقاس المختار
-                size_subset = drawing_df[drawing_df['الحجم'] == sel_size]
-                f_print, f_ads = 0.0, 0.0
-                for _, row in size_subset.iterrows():
-                    label = str(row['اسم الرسم'])
-                    val = float(row['اجرة الرسم']) if pd.notnull(row['اجرة الرسم']) else 0.0
-                    if "طباعة" in label: f_print = val
-                    elif "عرض" in label: f_ads = val
                 
-                st.info(f"💰 أجور المقاس: طباعة ({f_print}$)، عرض ({f_ads}$)")
+                # --- منطق جلب الأجور المزدوجة (طباعة وعرض) ---
+                subset = draw_df[draw_df['الحجم'] == sel_size]
+                f_print, f_ads = 0.0, 0.0
+                for _, row in subset.iterrows():
+                    name = str(row['اسم الرسم'])
+                    val = float(row['اجرة الرسم'])
+                    if "طباعة" in name: f_print = val
+                    elif "عرض" in name: f_ads = val
+                
+                st.info(f"💰 الأسعار المكتشفة: طباعة ({f_print}$)، عرض ({f_ads}$)")
 
-                # جلب المحافظات والشبكات
                 cities = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
                 sel_city = st.selectbox("المحافظة:", cities)
                 raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
-                nets = st.multiselect("اختر الشبكات:", raw['الشبكة'].unique().tolist())
+                nets = st.multiselect("اختر الشبكات المتاحة:", raw['الشبكة'].unique().tolist())
 
                 if st.button("➕ إضافة للسلة"):
                     if sel_city not in st.session_state.cart:
                         st.session_state.cart[sel_city] = {}
                     for n in nets:
                         df_to_add = raw[raw['الشبكة'] == n].copy()
+                        # إضافة معلومات الحجم والأجور لكل سطر في السلة
                         df_to_add['الحجم'] = sel_size
                         df_to_add['fee_print'] = f_print
                         df_to_add['fee_ads'] = f_ads
                         st.session_state.cart[sel_city][n] = df_to_add
-                    st.success("تمت الإضافة!")
-                    st.rerun() # إجبار المتصفح على التحديث لرؤية النتائج فوراً
+                    st.success("✅ تمت الإضافة بنجاح")
+                    st.rerun()
 
             with col_cart:
                 st.subheader("🛒 السلة الحالية")
                 if st.session_state.cart:
-                    # تكرار عرض الجداول الموجودة في السلة
-                    for city_name, nets_in_city in list(st.session_state.cart.items()):
-                        for net_name, df_in_cart in nets_in_city.items():
-                            with st.expander(f"📍 {city_name} - {net_name}", expanded=True):
-                                # عرض الجدول والسماح بالتعديل
-                                updated_df = st.data_editor(df_in_cart, key=f"editor_{city_name}_{net_name}")
-                                st.session_state.cart[city_name][net_name] = updated_df
+                    for c_name, nts in list(st.session_state.cart.items()):
+                        for n_name, df_cart in nts.items():
+                            with st.expander(f"📍 {c_name} - {n_name}", expanded=True):
+                                # السماح للمستخدم بتعديل الأعداد أو الأسعار يدوياً إذا رغب
+                                edited_df = st.data_editor(df_cart, key=f"ed_{c_name}_{n_name}")
+                                st.session_state.cart[c_name][n_name] = edited_df
                     
                     st.divider()
                     if st.button("🚀 تصدير ملف Word"):
                         if cust:
-                            doc_io = export_word(cust, st.session_state.cart, period)
-                            st.download_button("📥 تحميل الآن", doc_io, f"Quotation_{cust}.docx")
+                            doc_io = export_word(cust, st.session_state.cart, sel_period)
+                            st.download_button("📥 تحميل عرض السعر", doc_io, f"Quotation_{cust}.docx")
                         else:
-                            st.warning("⚠️ أدخل اسم الزبون أولاً")
+                            st.warning("⚠️ يرجى إدخال اسم الزبون أولاً")
                     
-                    if st.button("🗑️ تفريغ"):
+                    if st.button("🗑️ تفريغ السلة"):
                         st.session_state.cart = {}
                         st.rerun()
                 else:
-                    st.warning("السلة فارغة. اختر المواقع من اليمين واضغط إضافة.")
+                    st.info("السلة فارغة. اختر الشبكات من اليمين واضغط إضافة.")
 
         except Exception as e:
-            st.error(f"حدث خطأ: {e}")
-
-
+            st.error(f"حدث خطأ في عرض السعر: {e}")
+    conn.close()
