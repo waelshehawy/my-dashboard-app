@@ -183,47 +183,71 @@ else:
     
     # الداشبورد
 
-    if page == "📊 Dashboard":
+       if page == "📊 Dashboard":
         st.title("📊 حالة الإشغال الزمنية للمواقع")
         try:
             # 1. جلب البيانات الأساسية
             df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
-            # جلب الحجوزات مع العام
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام] FROM [حجوزات1]", conn)
-            # جلب جدول الفترات مع رقم الترتيب (no)
             df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
 
-            # 2. ربط الحجوزات برقم الفترة (no) لترتيبها زمنياً
+            # --- قسم الفلاتر (يجب أن يكون في الأعلى لضمان ظهوره دائماً) ---
+            st.subheader("🔍 فلاتر البحث والعرض")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                # فلتر الفترة الزمنية
+                current_p_name = st.selectbox("الفحص بدءاً من فترة:", df_periods['namee'].tolist())
+                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].iloc[0]
+            
+            with col2:
+                # فلتر العام
+                target_year = st.number_input("العام المستهدف:", value=2026)
+            
+            with col3:
+                # فلتر المحافظة
+                city_list = ["الكل"] + sorted([str(x) for x in df_all['المحافظة'].unique() if x])
+                city_sel = st.selectbox("المحافظة:", city_list)
+            
+            with col4:
+                # فلتر الحالة (متاح/محجوز)
+                status_sel = st.radio("الحالة المطلوبة:", ["الكل", "متاح", "محجوز"], horizontal=True)
+
+            # --- منطق المعالجة والحسابات ---
+            
+            # ربط الحجوزات بترتيب الفترات
             df_booked_timed = pd.merge(df_booked, df_periods, left_on='فترة الحجز', right_on='namee', how='left')
 
-            # 3. اختيار الفترة الحالية للمقارنة
-            col1, col2 = st.columns(2)
-            with col1:
-                current_p_name = st.selectbox("الفترة الحالية (بداية الفحص):", df_periods['namee'].tolist())
-                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].iloc[0]
-            with col2:
-                target_year = st.number_input("العام:", value=2026)
-
-            # 4. منطق الفحص: اللوحة محجوزة إذا وجد أي سجل (رقم فترته >= الفترة الحالية) ونفس العام
-            # نفلتر الحجوزات التي تقع في "المستقبل" بالنسبة للفترة المختارة
+            # تحديد اللوحات المحجوزة في "المستقبل"
             future_bookings = df_booked_timed[
                 (df_booked_timed['no'] >= current_no) & 
                 (df_booked_timed['العام'] == target_year)
             ]
 
-            # الحصول على أحدث حجز لكل لوحة لعرض بيانات الزبون
+            # الحصول على أحدث حجز لكل لوحة
             latest_booking = future_bookings.sort_values('no').groupby('رقم اللوحة').last().reset_index()
 
-            # 5. دمج الحالة مع الجدول الرئيسي
+            # دمج الحالة مع الجدول الرئيسي
             df_m = pd.merge(df_all, latest_booking[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'no']], on='رقم اللوحة', how='left')
 
-            # 6. رسم الخريطة
+            # --- تطبيق فلاتر المستخدم النهائية ---
+            if city_sel != "الكل":
+                df_m = df_m[df_m['المحافظة'] == city_sel]
+            
+            if status_sel == "محجوز":
+                df_m = df_m[df_m['no'].notna()]
+            elif status_sel == "متاح":
+                df_m = df_m[df_m['no'].isna()]
+
+            st.divider()
+
+            # --- رسم الخريطة بناءً على النتائج المفلترة ---
+            st.subheader(f"📍 الخريطة (نتائج البحث: {len(df_m)} موقع)")
             m = folium.Map(location=[33.51, 36.27], zoom_start=12)
             marker_cluster = MarkerCluster().add_to(m)
 
             for _, row in df_m.iterrows():
-                if pd.notnull(row['Latitude']):
-                    # محجوزة إذا وُجد لها سجل حجز مستقبلي (no ليس فارغاً)
+                if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
                     is_booked = pd.notnull(row['no'])
                     color = 'red' if is_booked else 'purple'
                     
@@ -237,9 +261,12 @@ else:
                     ).add_to(marker_cluster)
 
             st_folium(m, width="100%", height=500)
-            st.dataframe(df_m.drop(columns=['no'], errors='ignore'))
+            
+            # عرض الجدول
+            st.subheader("📋 كشف البيانات التفصيلي")
+            st.dataframe(df_m.drop(columns=['no'], errors='ignore'), use_container_width=True)
 
         except Exception as e:
-            st.error(f"خطأ في منطق الفترات: {e}")
+            st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
 
      
