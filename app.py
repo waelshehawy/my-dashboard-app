@@ -156,37 +156,65 @@ else:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
         page = st.radio("Menu", ["📊 Dashboard", "📄 Quotation"])
 
+       # --- صفحة عرض السعر (Quotation) ---
     if page == "📄 Quotation":
-        st.title("📄 بناء عرض سعر")
+        st.title("📄 بناء عرض سعر ذكي")
         try:
             draw_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             sizes = draw_df['الحجم'].unique().tolist()
-            cust = st.text_input("Customer Name")
-            sel_size = st.selectbox("Select Size:", sizes)
             
-            # جلب الأسعار بدقة وتحويلها لـ float فوراً
+            cust = st.text_input("Customer Name")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                sel_size = st.selectbox("Select Size:", sizes)
+            with c2:
+                # الفلتر الجديد للتمييز بين عادي وسكوتش
+                print_type = st.radio("Quality / النوع:", ["عادي", "سكوتش (بدون كلمة عادي)"], horizontal=True)
+
+            # --- منطق جلب الأجور المطور بناءً على الفلتر ---
             subset = draw_df[draw_df['الحجم'] == sel_size]
             f_print = 0.0
             f_ads = 0.0
+            
             for _, row in subset.iterrows():
-                name = str(row['اسم الرسم'])
-                if "طباعة" in name: f_print = float(row['اجرة الرسم'])
-                elif "عرض" in name: f_ads = float(row['اجرة الرسم'])
+                name = str(row['اسم الرسم']).strip()
+                val = float(row['اجرة الرسم'])
+                
+                if print_type == "عادي":
+                    if "طباعة" in name and "عادي" in name: f_print = val
+                    elif "عرض" in name and "عادي" in name: f_ads = val
+                else:
+                    # للسكوتش: نبحث عن الكلمة دون وجود كلمة "عادي" في النص
+                    if "طباعة" in name and "عادي" not in name: f_print = val
+                    elif "عرض" in name and "عادي" not in name: f_ads = val
 
-            st.info(f"💰 الأسعار المكتشفة: طباعة {f_print}$, عرض {f_ads}$")
+            # تحديد المسميات النهائية التي ستظهر في ملف الوورد
+            p_label = "أجور طباعة وتركيب" + (" عادي" if print_type == "عادي" else "")
+            a_label = "أجور عرض" + (" عادي" if print_type == "عادي" else "")
+
+            st.info(f"📍 {p_label}: {f_print}$ | {a_label}: {f_ads}$")
 
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
             sel_city = st.selectbox("City", city_l)
-            raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'", conn)
-            nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
+            
+            # فلترة الأعمدة حسب المقاس المختار والمحافظة
+            query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'"
+            raw = pd.read_sql(query, conn)
 
-            if st.button("➕ Add to Cart"):
-                if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
-                for n in nets:
-                    st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
-                        'الحجم': sel_size, 'fee_print': f_print, 'fee_ads': f_ads
-                    })
-                st.rerun()
+            if not raw.empty:
+                nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
+                if st.button("➕ Add to Cart"):
+                    if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
+                    for n in nets:
+                        st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
+                            'الحجم': sel_size, 
+                            'fee_print': f_print, 
+                            'fee_ads': f_ads,
+                            'print_label': p_label, 
+                            'ads_label': a_label
+                        })
+                    st.rerun()
 
             if st.session_state.cart:
                 for c_name, nts in list(st.session_state.cart.items()):
@@ -198,6 +226,7 @@ else:
                     doc_io = export_word(cust, st.session_state.cart, "2026")
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
+
     
     # الداشبورد
     if page == "📊 Dashboard":
