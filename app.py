@@ -27,14 +27,36 @@ SYRIA_CITIES_COORDS = {
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-def apply_rtl(p):
+def apply_rtl(obj):
+    """Applies RTL and Alignment to Paragraphs or Cells correctly"""
+    if hasattr(obj, 'paragraphs'):
+        # If it's a cell, apply to all paragraphs inside it
+        for p in obj.paragraphs:
+            _force_rtl_style(p)
+    else:
+        # If it's a direct paragraph object
+        _force_rtl_style(obj)
+
+def _force_rtl_style(p):
+    """Internal logic to force RTL and Right-to-Left text flow"""
+    # Note: If your Word shows LEFT as RIGHT, keep it as LEFT. 
+    # Otherwise, change to WD_ALIGN_PARAGRAPH.RIGHT
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
+    
     pPr = p._element.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    
     for run in p.runs:
         rPr = run._element.get_or_add_rPr()
-        rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
-        rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
+
 
 def set_table_rtl(table):
     tblPr = table._element.xpath('w:tblPr')[0]
