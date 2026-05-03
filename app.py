@@ -167,43 +167,63 @@ else:
             st.dataframe(df_m, use_container_width=True)
         except: st.error("Database Error")
 
-    elif page == "📄 Quotation":
+    elif page == "📄 عرض سعر":
         st.title("📄 بناء عرض سعر")
         try:
+            # 1. جلب البيانات من الجداول
             drawing_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             sizes = drawing_df['الحجم'].unique().tolist()
             
-            cust = st.text_input("Customer Name")
-            period_df = pd.read_sql("SELECT namee FROM [الفترة]", conn)
-            sel_period = st.selectbox("Period", period_df['namee'].tolist())
-            sel_size = st.selectbox("Select Size:", sizes)
+            cust = st.text_input("اسم الزبون")
+            period_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+            sel_period = st.selectbox("الفترة", period_list)
             
-            size_data = drawing_df[drawing_df['الحجم'] == sel_size]
-            f_print = size_data[size_data['اسم الرسم'].str.contains("طباعة", na=False)]['اجرة الرسم'].iloc[0] if not size_data[size_data['اسم الرسم'].str.contains("طباعة", na=False)].empty else 0
-            f_ads = size_data[size_data['اسم الرسم'].str.contains("عرض", na=False)]['اجرة الرسم'].iloc[0] if not size_data[size_data['اسم الرسم'].str.contains("عرض", na=False)].empty else 0
+            # اختر المقاس (الحجم)
+            sel_size = st.selectbox("اختر المقاس:", sizes)
+
+            # --- الجزء الجديد: جلب الأجور (ضعه هنا واحذف القديم) ---
+            size_subset = drawing_df[drawing_df['الحجم'] == sel_size]
+            f_print, f_ads = 0.0, 0.0
+            
+            for _, row in size_subset.iterrows():
+                label = str(row['اسم الرسم'])
+                value = float(row['اجرة الرسم'])
+                if "طباعة" in label:
+                    f_print = value
+                elif "عرض" in label:
+                    f_ads = value
+            
+            # عرض رسالة للتأكد من جلب الأرقام
+            st.info(f"✅ أجور المكتشفة: طباعة {f_print}$ | عرض {f_ads}$")
+            # ---------------------------------------------------
 
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
-            sel_city = st.selectbox("City", city_l)
+            sel_city = st.selectbox("المحافظة", city_l)
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
-            nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
+            nets = st.multiselect("الشبكات", raw['الشبكة'].unique().tolist())
 
-            if st.button("➕ Add to Cart"):
+            if st.button("➕ إضافة للسلة"):
                 if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                 for n in nets:
+                    # إضافة البيانات مع الأجور المكتشفة
                     st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
-                        'الحجم': sel_size,
-                        'fee_print': f_print,
+                        'الحجم': sel_size, 
+                        'fee_print': f_print, 
                         'fee_ads': f_ads
                     })
+                st.success("تمت الإضافة بنجاح")
 
+            # عرض السلة وتصدير الوورد
             if st.session_state.cart:
                 for c, nts in list(st.session_state.cart.items()):
                     for n, df in nts.items():
                         with st.expander(f"📍 {c} - {n}"):
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 
-                if st.button("🚀 Export Word"):
+                if st.button("🚀 تصدير"):
                     doc_io = export_word(cust, st.session_state.cart, sel_period)
-                    st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
-        except Exception as e: st.error(f"Error: {e}")
-    conn.close()
+                    st.download_button("📥 تحميل", doc_io, f"Quotation_{cust}.docx")
+
+        except Exception as e:
+            st.error(f"حدث خطأ: {e}")
+
