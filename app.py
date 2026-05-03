@@ -170,7 +170,7 @@ else:
                 sel_size = st.selectbox("Select Size:", sizes)
             with c2:
                 # الفلتر الجديد للتمييز بين عادي وسكوتش
-                print_type = st.radio("Quality / النوع:", ["عادي", "سكوتش (بدون كلمة عادي)"], horizontal=True)
+                print_type = st.radio("Quality / النوع:", ["عادي", "سكوتش "], horizontal=True)
 
             # --- منطق جلب الأجور المطور بناءً على الفلتر ---
             subset = draw_df[draw_df['الحجم'] == sel_size]
