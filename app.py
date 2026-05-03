@@ -183,7 +183,7 @@ else:
     
     # الداشبورد
 
-       if page == "📊 Dashboard":
+    if page == "📊 Dashboard":
         st.title("📊 تتبع الحجوزات والفترات")
         try:
             # 1. جلب البيانات
@@ -243,3 +243,4 @@ else:
 
         except Exception as e:
             st.error(f"حدث خطأ في منطق الفترات: {e}")
+     
