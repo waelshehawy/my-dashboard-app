@@ -180,7 +180,6 @@ else:
                     doc_io = export_word(cust, st.session_state.cart, "2026")
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
-    conn.close()
     
     # الداشبورد
 
