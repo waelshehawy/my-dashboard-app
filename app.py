@@ -11,6 +11,24 @@ from docx.oxml import OxmlElement
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
+# إحداثيات مراكز المحافظات السورية
+SYRIA_CITIES_COORDS = {
+    "دمشق": [33.5138, 36.2765],
+    "ريف دمشق": [33.5138, 36.2765],
+    "حلب": [36.2021, 37.1343],
+    "حمص": [34.7324, 36.7137],
+    "حماة": [35.1318, 36.7578],
+    "اللاذقية": [35.5312, 35.7908],
+    "طرطوس": [34.8890, 35.8864],
+    "إدلب": [35.9300, 36.6333],
+    "دير الزور": [35.3333, 40.1500],
+    "الرقة": [35.9500, 39.0167],
+    "الحسكة": [36.5024, 40.7477],
+    "درعا": [32.6167, 36.1000],
+    "السويداء": [32.7081, 36.5663],
+    "القنيطرة": [33.1256, 35.8239],
+    "سوريا": [34.8021, 38.9968] # مركز تقريبي لسوريا كاملة
+}
 
 
 # --- 1. الدوال الأساسية وتنسيق العربي ---
@@ -185,87 +203,73 @@ else:
     if page == "📊 Dashboard":
         st.title("📊 حالة الإشغال الزمنية للمواقع")
         try:
-            # 1. جلب البيانات الأساسية
+            # 1. جلب البيانات
             df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام] FROM [حجوزات1]", conn)
             df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
 
-            # --- قسم الفلاتر (يجب أن يكون في الأعلى لضمان ظهوره دائماً) ---
+            # --- قسم الفلاتر ---
             st.subheader("🔍 فلاتر البحث والعرض")
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                # فلتر الفترة الزمنية
                 current_p_name = st.selectbox("الفحص بدءاً من فترة:", df_periods['namee'].tolist())
-                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].iloc[0]
-            
+                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].iloc
             with col2:
-                # فلتر العام
                 target_year = st.number_input("العام المستهدف:", value=2026)
-            
             with col3:
-                # فلتر المحافظة
                 city_list = ["الكل"] + sorted([str(x) for x in df_all['المحافظة'].unique() if x])
                 city_sel = st.selectbox("المحافظة:", city_list)
-            
             with col4:
-                # فلتر الحالة (متاح/محجوز)
                 status_sel = st.radio("الحالة المطلوبة:", ["الكل", "متاح", "محجوز"], horizontal=True)
 
-            # --- منطق المعالجة والحسابات ---
-            
-            # ربط الحجوزات بترتيب الفترات
+            # --- منطق المعالجة ---
             df_booked_timed = pd.merge(df_booked, df_periods, left_on='فترة الحجز', right_on='namee', how='left')
-
-            # تحديد اللوحات المحجوزة في "المستقبل"
-            future_bookings = df_booked_timed[
-                (df_booked_timed['no'] >= current_no) & 
-                (df_booked_timed['العام'] == target_year)
-            ]
-
-            # الحصول على أحدث حجز لكل لوحة
+            future_bookings = df_booked_timed[(df_booked_timed['no'] >= current_no) & (df_booked_timed['العام'] == target_year)]
             latest_booking = future_bookings.sort_values('no').groupby('رقم اللوحة').last().reset_index()
-
-            # دمج الحالة مع الجدول الرئيسي
+            
+            # دمج الحالة
             df_m = pd.merge(df_all, latest_booking[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'no']], on='رقم اللوحة', how='left')
 
-            # --- تطبيق فلاتر المستخدم النهائية ---
+            # --- تحديد مركز الخريطة ومستوى التقريب ---
+            if city_sel == "الكل" or city_sel not in SYRIA_CITIES_COORDS:
+                map_center = SYRIA_CITIES_COORDS["سوريا"]
+                zoom_level = 7 # رؤية سوريا كاملة
+            else:
+                map_center = SYRIA_CITIES_COORDS[city_sel]
+                zoom_level = 12 # تقريب للمحافظة المختارة
+
+            # تطبيق فلاتر العرض
+            df_filtered = df_m.copy()
             if city_sel != "الكل":
-                df_m = df_m[df_m['المحافظة'] == city_sel]
+                df_filtered = df_filtered[df_filtered['المحافظة'] == city_sel]
             
             if status_sel == "محجوز":
-                df_m = df_m[df_m['no'].notna()]
+                df_filtered = df_filtered[df_filtered['no'].notna()]
             elif status_sel == "متاح":
-                df_m = df_m[df_m['no'].isna()]
+                df_filtered = df_filtered[df_filtered['no'].isna()]
 
-            st.divider()
-
-            # --- رسم الخريطة بناءً على النتائج المفلترة ---
-            st.subheader(f"📍 الخريطة (نتائج البحث: {len(df_m)} موقع)")
-            m = folium.Map(location=[33.51, 36.27], zoom_start=12)
+            # --- رسم الخريطة ---
+            st.subheader(f"📍 خريطة {city_sel if city_sel != 'الكل' else 'سوريا'}")
+            
+            # ملاحظة: سنستخدم مفتاح ديناميكي للخريطة لإجبارها على إعادة التحميل عند تغيير المحافظة
+            m = folium.Map(location=map_center, zoom_start=zoom_level)
             marker_cluster = MarkerCluster().add_to(m)
 
-            for _, row in df_m.iterrows():
+            for _, row in df_filtered.iterrows():
                 if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
                     is_booked = pd.notnull(row['no'])
                     color = 'red' if is_booked else 'purple'
-                    
-                    status_info = f"محجوزة لـ: {row['اسم الزبون']}<br>الفترة: {row['فترة الحجز']}" if is_booked else "متاحة"
-                    pop_html = f"<div style='direction:rtl; text-align:right; font-family:tahoma;'><b>{row['اسم العمود']}</b><br>{status_info}</div>"
-                    
-                    folium.Marker(
-                        [row['Latitude'], row['Longitude']],
-                        popup=folium.Popup(pop_html, max_width=200),
-                        icon=folium.Icon(color=color)
-                    ).add_to(marker_cluster)
+                    pop_html = f"<div style='direction:rtl; text-align:right;'><b>{row['اسم العمود']}</b><br>{'محجوز' if is_booked else 'متاح'}</div>"
+                    folium.Marker([row['Latitude'], row['Longitude']], 
+                                  popup=folium.Popup(pop_html, max_width=200),
+                                  icon=folium.Icon(color=color)).add_to(marker_cluster)
 
-            st_folium(m, width="100%", height=500)
+            st_folium(m, width="100%", height=500, key=f"map_{city_sel}")
             
-            # عرض الجدول
-            st.subheader("📋 كشف البيانات التفصيلي")
-            st.dataframe(df_m.drop(columns=['no'], errors='ignore'), use_container_width=True)
+            st.dataframe(df_filtered.drop(columns=['no'], errors='ignore'), use_container_width=True)
 
         except Exception as e:
-            st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
+            st.error(f"⚠️ حدث خطأ: {e}")
 
       
