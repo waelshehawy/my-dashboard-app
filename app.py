@@ -200,7 +200,7 @@ else:
         except Exception as e: st.error(f"Error: {e}")
     
     # الداشبورد
-             if page == "📊 Dashboard":
+    if page == "📊 Dashboard":
         st.title("📊 حالة الإشغال والخريطة التفاعلية")
         try:
             # 1. Fetching Data
@@ -280,7 +280,7 @@ else:
 
         except Exception as e:
             st.error(f"⚠️ حدث خطأ: {e}")
-
+            
 
 
 
