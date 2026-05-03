@@ -9,13 +9,13 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-# --- 1. الدوال الأساسية وتنسيق RTL ---
+# --- 1. الدوال الأساسية وتنسيق العربي ---
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
 def apply_rtl(p):
-    """إجبار النص على اليمين (منطق عكسي لضمان التوافق)"""
+    """إجبار النص على اليمين بالمنطق العكسي وتفعيل Bidi"""
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -28,7 +28,7 @@ def apply_rtl(p):
         rPr.append(rtl)
 
 def set_table_rtl(table):
-    """إجبار الجدول بالكامل على أن يبدأ من اليمين (Right-to-Left Table)"""
+    """إجبار الجدول بالكامل على أن يكون يمين لليسار"""
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
@@ -38,28 +38,25 @@ def set_cell_background(cell, color):
     shd.set(qn('w:fill'), color)
     cell._tc.get_or_add_tcPr().append(shd)
 
-# --- 2. دالة تصدير الوورد ---
+# --- 2. دالة تصدير الوورد المصلحة محاسبياً ومنطقياً ---
 
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     for section in doc.sections:
         section.top_margin = Cm(4.5) 
 
-    # التاريخ
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/03")
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    # ترويسة الزبون
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
     run_c.bold, run_c.font.size = True, Pt(20)
 
-    # التحية
     p_greet = doc.add_paragraph("تحية طيبة وبعد،")
     apply_rtl(p_greet)
 
-    # إضافة العبارة المطلوبة بعد سطرين من التحية
+    # العبارة المطلوبة بعد سطرين من التحية
     doc.add_paragraph() 
     doc.add_paragraph() 
     p_stat = doc.add_paragraph()
@@ -77,16 +74,15 @@ def export_word(customer_name, cart_data, period_name):
                     p_size = doc.add_paragraph(f"قياس اللوحة: {size}")
                     apply_rtl(p_size)
 
-                    # إنشاء الجدول (العمود الأول سيكون على اليمين)
                     table = doc.add_table(rows=1, cols=2)
                     table.style = 'Table Grid'
                     set_table_rtl(table) 
                     
-                    hdr_cells = table.rows[0].cells
-                    hdr_cells[0].text = f"الشبكة: {net}"
-                    hdr_cells[1].text = "العدد"
+                    hdr = table.rows[0].cells
+                    hdr[0].text = f"الشبكة: {net}"
+                    hdr[1].text = "العدد"
                     
-                    for cell in hdr_cells:
+                    for cell in hdr:
                         set_cell_background(cell, "660099")
                         for p in cell.paragraphs:
                             apply_rtl(p)
@@ -100,13 +96,17 @@ def export_word(customer_name, cart_data, period_name):
                         for cell in row_cells:
                             for p in cell.paragraphs: apply_rtl(p)
 
-                    # الحسابات
+                    # --- الحسابات (منع الأصفار) ---
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
-                    f_print = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
-                    f_ads = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
+                    # استخدام values[0] بدلاً من iloc[0] لضمان القيمة الصافية
+                    f_print = float(group_df['fee_print'].values[0]) if 'fee_print' in group_df.columns else 0
+                    f_ads = float(group_df['fee_ads'].values[0]) if 'fee_ads' in group_df.columns else 0
                     
+                    res_p = total_q * f_print
+                    res_a = total_q * f_ads
+
                     p_sum = doc.add_paragraph()
-                    txt = f"العدد: {int(total_q)} | طباعة: {total_q*f_print:,.0f}$ | عرض: {total_q*f_ads:,.0f}$ | الإجمالي: {(total_q*f_print)+(total_q*f_ads):,.0f}$"
+                    txt = f"العدد: {int(total_q)} | طباعة: {res_p:,.0f}$ | عرض: {res_a:,.0f}$ | الإجمالي: {res_p + res_a:,.0f}$"
                     p_sum.add_run(txt).bold = True
                     apply_rtl(p_sum)
                     doc.add_paragraph()
@@ -116,67 +116,56 @@ def export_word(customer_name, cart_data, period_name):
     target.seek(0)
     return target
 
-# --- 3. واجهة Streamlit --- (نفس منطق السلة والربط السابق)
-# ... [أكمل بجزء واجهة المستخدم السابق] ...
-
-
-# --- 3. Streamlit Interface ---
+# --- 3. واجهة Streamlit ---
 
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 PreView ERP Login")
+    st.title("🔒 تسجيل الدخول")
     u, p = st.text_input("User"), st.text_input("Pass", type="password")
     if st.button("Login"):
         if u == "admin" and p == "preview2026":
             st.session_state.auth = True
             st.rerun()
-        else: st.error("Access Denied")
 else:
     conn = get_connection()
     if 'cart' not in st.session_state: st.session_state.cart = {}
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("القائمة", ["📊 الداشبورد", "📄 إنشاء عرض سعر"])
+        page = st.radio("Menu", ["📊 Dashboard", "📄 Quotation"])
 
-    if page == "📄 إنشاء عرض سعر":
-        st.title("📄 بناء عرض سعر احترافي")
+    if page == "📄 Quotation":
+        st.title("📄 بناء عرض سعر")
         try:
             draw_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             sizes = draw_df['الحجم'].unique().tolist()
+            cust = st.text_input("Customer Name")
+            sel_size = st.selectbox("Select Size:", sizes)
             
-            cust = st.text_input("اسم الزبون")
-            sel_size = st.selectbox("اختر المقاس (لفلترة المواقع وجلب الأجور):", sizes)
-            
+            # جلب الأسعار بدقة وتحويلها لـ float فوراً
             subset = draw_df[draw_df['الحجم'] == sel_size]
-            f_print, f_ads = 0.0, 0.0
+            f_print = 0.0
+            f_ads = 0.0
             for _, row in subset.iterrows():
                 name = str(row['اسم الرسم'])
-                if " أجور طباعة وتركيب" in name: f_print = float(row['اجرة الرسم'])
-                elif "أجور عرض" in name: f_ads = float(row['اجرة الرسم'])
+                if "طباعة" in name: f_print = float(row['اجرة الرسم'])
+                elif "عرض" in name: f_ads = float(row['اجرة الرسم'])
 
-            st.info(f"💡 المقاس {sel_size} | أجر الطباعة: {f_print}$ | أجر العرض: {f_ads}$")
+            st.info(f"💰 الأسعار المكتشفة: طباعة {f_print}$, عرض {f_ads}$")
 
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
-            sel_city = st.selectbox("المحافظة:", city_l)
-            
-            # METHODOLOGICAL FIX: Ensure size match in query
-            query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'"
-            raw = pd.read_sql(query, conn)
-            
-            if raw.empty:
-                st.warning(f"⚠️ لا توجد لوحات بمقاس {sel_size} في محافظة {sel_city}")
-            else:
-                nets = st.multiselect("الشبكات المتاحة لهذا المقاس:", raw['الشبكة'].unique().tolist())
+            sel_city = st.selectbox("City", city_l)
+            raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'", conn)
+            nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
 
-                if st.button("➕ إضافة للسلة"):
-                    if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
-                    for n in nets:
-                        st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
-                            'الحجم': sel_size, 'fee_print': f_print, 'fee_ads': f_ads
-                        })
-                    st.rerun()
+            if st.button("➕ Add to Cart"):
+                if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
+                for n in nets:
+                    st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
+                        'الحجم': sel_size, 'fee_print': f_print, 'fee_ads': f_ads
+                    })
+                st.rerun()
 
             if st.session_state.cart:
                 for c_name, nts in list(st.session_state.cart.items()):
@@ -184,9 +173,8 @@ else:
                         with st.expander(f"📍 {c_name} - {n_name}", expanded=True):
                             st.session_state.cart[c_name][n_name] = st.data_editor(df_cart, key=f"ed_{c_name}_{n_name}")
                 
-                if st.button("🚀 تصدير Word"):
+                if st.button("🚀 Export Word"):
                     doc_io = export_word(cust, st.session_state.cart, "2026")
-                    st.download_button("📥 تحميل المستند", doc_io, f"Quotation_{cust}.docx")
-                if st.button("🗑️ تفريغ"): st.session_state.cart = {}; st.rerun()
+                    st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
     conn.close()
