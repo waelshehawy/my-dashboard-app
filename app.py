@@ -176,6 +176,70 @@ else:
                     doc_io = export_word(cust, st.session_state.cart, "2026")
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
+
+        # الداشبورد
+            if page == "📊 Dashboard":
+        st.title("📊 حالة المواقع والخريطة التفاعلية")
+        # لا نغلق الاتصال هنا، نتركه مفتوحاً لنهاية الملف
+        try:
+            df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
+            
+            # محاولة جلب الحجوزات إذا وجد الجدول
+            try:
+                df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون] FROM [حجوزات1]", conn)
+                df_m = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
+            except:
+                df_m = df_all
+                df_m['اسم الزبون'] = None
+
+            # الفلاتر
+            c1, c2 = st.columns(2)
+            with c1:
+                city_list = ["الكل"] + sorted([str(x) for x in df_m['المحافظة'].unique() if x])
+                city_sel = st.selectbox("تصفية حسب المحافظة:", city_list)
+            with c2:
+                status_sel = st.radio("الحالة:", ["الكل", "متاح", "محجوز"], horizontal=True)
+
+            # تطبيق الفلترة
+            if city_sel != "الكل":
+                df_m = df_m[df_m['المحافظة'] == city_sel]
+            if status_sel == "محجوز":
+                df_m = df_m[df_m['اسم الزبون'].notna()]
+            elif status_sel == "متاح":
+                df_m = df_m[df_m['اسم الزبون'].isna()]
+
+            # عرض الخريطة
+            m = folium.Map(location=[33.51, 36.27], zoom_start=12)
+            marker_cluster = MarkerCluster().add_to(m)
+
+            for _, row in df_m.iterrows():
+                if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
+                    is_booked = pd.notnull(row['اسم الزبون'])
+                    color = 'red' if is_booked else 'purple'
+                    
+                    pop_html = f"""
+                    <div style="direction:rtl; text-align:right; font-family:tahoma;">
+                        <b>{row['اسم العمود']}</b><br>
+                        {"الزبون: " + str(row['اسم الزبون']) if is_booked else "الحالة: متاح"}<br>
+                        المقاس: {row.get('الحجم', '-')}
+                    </div>
+                    """
+                    folium.Marker(
+                        [row['Latitude'], row['Longitude']],
+                        popup=folium.Popup(pop_html, max_width=200),
+                        icon=folium.Icon(color=color)
+                    ).add_to(marker_cluster)
+
+            st_folium(m, width="100%", height=500)
+            st.dataframe(df_m, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"خطأ في معالجة البيانات: {e}")
+
+# --- السطر الأخير في الملف (خارج كل الشروط) ---
+if 'conn' in locals():
+   
+
         conn.close()
 
 
