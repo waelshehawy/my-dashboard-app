@@ -103,18 +103,37 @@ def export_word(customer_name, cart_data, period_name):
                             for p in cell.paragraphs: apply_rtl(p)
 
                     # الحسابات
+                    # --- منطق الحساب المضمون ---
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
-                    fee_print = group_df['fee_print'].iloc[0] if 'fee_print' in group_df.columns else 0
-                    fee_ads = group_df['fee_ads'].iloc[0] if 'fee_ads' in group_df.columns else 0
                     
+                    # جلب الأجور مع التأكد من أنها أرقام وليست مصفوفات
+                    fee_print = 0
+                    if 'fee_print' in group_df.columns:
+                        val = group_df['fee_print'].iloc[0]
+                        fee_print = float(val) if pd.notnull(val) else 0
+                        
+                    fee_ads = 0
+                    if 'fee_ads' in group_df.columns:
+                        val = group_df['fee_ads'].iloc[0]
+                        fee_ads = float(val) if pd.notnull(val) else 0
+                    
+                    # عملية الضرب
                     total_print = total_q * fee_print
                     total_ads = total_q * fee_ads
+                    grand_total = total_print + total_ads
 
+                    # كتابة السطر الملون والمحاذى لليمين
                     p_sum = doc.add_paragraph()
-                    summary_text = f"العدد: {int(total_q)} | أجور الطباعة: {total_print:,}$ | أجور العرض: {total_ads:,}$ | الإجمالي: {total_print + total_ads:,}$"
+                    summary_text = (
+                        f"العدد الإجمالي: {int(total_q)} | "
+                        f"أجور الطباعة: {total_print:,.0f}$ | "
+                        f"أجور العرض: {total_ads:,.0f}$ | "
+                        f"الإجمالي: {grand_total:,.0f}$"
+                    )
                     p_sum.add_run(summary_text).bold = True
                     apply_rtl(p_sum)
-                    doc.add_paragraph()
+                    doc.add_paragraph() # مسافة للفصل
+
 
     target = io.BytesIO()
     doc.save(target)
