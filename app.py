@@ -9,14 +9,24 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-# --- إعدادات الصفحة ---
-st.set_page_config(page_title="PreView Ads ERP", layout="wide")
+# --- 1. Basic Functions & RTL Logic ---
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-def apply_rtl(p):
-    """إجبار النص على اليمين بالمنطق العكسي وتفعيل Bidi"""
+def apply_rtl(obj):
+    """Applies RTL and Right Alignment to Paragraphs or Cells correctly"""
+    if hasattr(obj, 'paragraphs'):
+        # If it's a cell, apply to all paragraphs inside it
+        for p in obj.paragraphs:
+            _force_rtl_style(p)
+    else:
+        # If it's a direct paragraph object
+        _force_rtl_style(obj)
+
+def _force_rtl_style(p):
+    """The logic to fix the 'Reversed Alignment' issue and Arabic text flow"""
+    # Inverse Logic: Setting to LEFT often appears as RIGHT in Arabic Word environments
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -27,6 +37,9 @@ def apply_rtl(p):
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
 
 def set_table_rtl(table):
     tblPr = table._element.xpath('w:tblPr')
@@ -34,9 +47,17 @@ def set_table_rtl(table):
         bidi = OxmlElement('w:bidiVisual')
         tblPr.append(bidi)
 
-# --- دالة تصدير الوورد ---
+def set_cell_background(cell, color):
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:fill'), color)
+    cell._tc.get_or_add_tcPr().append(shd)
+
+# --- 2. Word Export Logic ---
+
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+    
+    # Global Top Margin to avoid Logo overlap on all pages
     for section in doc.sections:
         section.top_margin = Cm(4.5) 
 
@@ -52,29 +73,31 @@ def export_word(customer_name, cart_data, period_name):
         for city, networks in cart_data.items():
             p_city = doc.add_paragraph(f"■ محافظة {city}")
             apply_rtl(p_city)
+            
             for net, df in networks.items():
                 grouped = df.groupby('الحجم')
                 for size, group_df in grouped:
                     p_size = doc.add_paragraph(f"قياس اللوحة: {size}")
                     apply_rtl(p_size)
-                    
+
                     table = doc.add_table(rows=1, cols=2)
                     table.style = 'Table Grid'
                     set_table_rtl(table)
-                    hdr = table.rows[0].cells
-                    hdr[0].text, hdr[1].text = f"الشبكة: {net}", "العدد"
+                    
+                    hdr = table.rows.cells
+                    hdr.text, hdr.text = f"الشبكة: {net}", "العدد"
                     for cell in hdr: apply_rtl(cell)
 
                     for _, row in group_df.iterrows():
                         row_cells = table.add_row().cells
-                        row_cells[0].text = str(row.get('الموقع', ''))
-                        row_cells[1].text = str(row.get('العدد', 1))
+                        row_cells.text = str(row.get('الموقع', ''))
+                        row_cells.text = str(row.get('العدد', 1))
                         for cell in row_cells: apply_rtl(cell)
 
-                    # الحسابات
+                    # Calculations
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
-                    f_print = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
-                    f_ads = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
+                    f_print = float(group_df['fee_print'].iloc) if 'fee_print' in group_df.columns else 0
+                    f_ads = float(group_df['fee_ads'].iloc) if 'fee_ads' in group_df.columns else 0
                     
                     p_sum = doc.add_paragraph()
                     txt = f"العدد: {int(total_q)} | طباعة: {total_q*f_print:,.0f}$ | عرض: {total_q*f_ads:,.0f}$ | الإجمالي: {(total_q*f_print)+(total_q*f_ads):,.0f}$"
@@ -86,7 +109,8 @@ def export_word(customer_name, cart_data, period_name):
     target.seek(0)
     return target
 
-# --- واجهة تطبيق Streamlit ---
+# --- 3. Streamlit UI ---
+
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
@@ -102,19 +126,19 @@ else:
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("Menu", ["📊 الداشبورد", "📄 إنشاء عرض سعر"])
+        page = st.radio("Menu", ["📊 Dashboard", "📄 إنشاء عرض سعر"])
 
     if page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر احترافي")
         try:
-            # 1. جلب بيانات المقاسات والأجور أولاً
+            # 1. Fetch drawing fees and sizes
             draw_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             sizes = draw_df['الحجم'].unique().tolist()
             
             cust = st.text_input("اسم الزبون")
-            sel_size = st.selectbox("اختر المقاس المطلوب (سيتم فلترة المواقع بناءً عليه):", sizes)
+            sel_size = st.selectbox("اختر المقاس (لفلترة المواقع وجلب الأجور):", sizes)
             
-            # --- منطق استخراج الأجور للمقاس المختار ---
+            # Logic to extract Print and Ad fees
             subset = draw_df[draw_df['الحجم'] == sel_size]
             f_print, f_ads = 0.0, 0.0
             for _, row in subset.iterrows():
@@ -124,11 +148,11 @@ else:
 
             st.info(f"💡 المقاس {sel_size} | أجر الطباعة: {f_print}$ | أجر العرض: {f_ads}$")
 
-            # 2. فلترة مواقع "اعمدة انارة" بناءً على المقاس المختار (الخطأ المنهجي الذي اكتشفته)
+            # 2. Filter billboards based on size
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
             sel_city = st.selectbox("المحافظة:", city_l)
             
-            # الفلترة تتم هنا بناءً على sel_city و sel_size
+            # METHODOLOGICAL FIX: Filter by City AND Size
             query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'"
             raw = pd.read_sql(query, conn)
             
@@ -140,14 +164,11 @@ else:
                 if st.button("➕ إضافة للسلة"):
                     if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                     for n in nets:
-                        df_to_add = raw[raw['الشبكة'] == n].copy()
-                        df_to_add['الحجم'] = sel_size
-                        df_to_add['fee_print'] = f_print
-                        df_to_add['fee_ads'] = f_ads
-                        st.session_state.cart[sel_city][n] = df_to_add
+                        st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
+                            'الحجم': sel_size, 'fee_print': f_print, 'fee_ads': f_ads
+                        })
                     st.rerun()
 
-            # عرض السلة
             if st.session_state.cart:
                 for c_name, nts in list(st.session_state.cart.items()):
                     for n_name, df_cart in nts.items():
