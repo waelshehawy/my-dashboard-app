@@ -200,8 +200,8 @@ else:
         except Exception as e: st.error(f"Error: {e}")
     
     # الداشبورد
-    if page == "📊 Dashboard":
-        st.title("📊 حالة الإشغال الزمنية للمواقع")
+        if page == "📊 Dashboard":
+        st.title("📊 حالة الإشغال والخريطة التفاعلية")
         try:
             # 1. جلب البيانات
             df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
@@ -209,67 +209,72 @@ else:
             df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
 
             # --- قسم الفلاتر ---
-            st.subheader("🔍 فلاتر البحث والعرض")
+            st.subheader("🔍 فلاتر البحث")
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                current_p_name = st.selectbox("الفحص بدءاً من فترة:", df_periods['namee'].tolist())
-                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].iloc
+                p_names = df_periods['namee'].tolist()
+                current_p_name = st.selectbox("الفحص بدءاً من فترة:", p_names)
+                # الإصلاح هنا: استخدام values[0] للحصول على الرقم
+                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].values[0]
+            
             with col2:
-                target_year = st.number_input("العام المستهدف:", value=2026)
+                target_year = st.number_input("العام:", value=2026)
+            
             with col3:
                 city_list = ["الكل"] + sorted([str(x) for x in df_all['المحافظة'].unique() if x])
                 city_sel = st.selectbox("المحافظة:", city_list)
+            
             with col4:
-                status_sel = st.radio("الحالة المطلوبة:", ["الكل", "متاح", "محجوز"], horizontal=True)
+                status_sel = st.radio("الحالة:", ["الكل", "متاح", "محجوز"], horizontal=True)
 
             # --- منطق المعالجة ---
             df_booked_timed = pd.merge(df_booked, df_periods, left_on='فترة الحجز', right_on='namee', how='left')
-            future_bookings = df_booked_timed[(df_booked_timed['no'] >= current_no) & (df_booked_timed['العام'] == target_year)]
-            latest_booking = future_bookings.sort_values('no').groupby('رقم اللوحة').last().reset_index()
             
-            # دمج الحالة
+            # فلترة الحجوزات المستقبلية بناءً على الرقم current_no
+            future_bookings = df_booked_timed[
+                (df_booked_timed['no'] >= int(current_no)) & 
+                (df_booked_timed['العام'] == target_year)
+            ]
+
+            latest_booking = future_bookings.sort_values('no').groupby('رقم اللوحة').last().reset_index()
             df_m = pd.merge(df_all, latest_booking[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'no']], on='رقم اللوحة', how='left')
 
-            # --- تحديد مركز الخريطة ومستوى التقريب ---
-            if city_sel == "الكل" or city_sel not in SYRIA_CITIES_COORDS:
+            # --- تحديد مركز الخريطة ---
+            if city_sel == "الكل":
                 map_center = SYRIA_CITIES_COORDS["سوريا"]
-                zoom_level = 7 # رؤية سوريا كاملة
+                zoom_val = 7
             else:
-                map_center = SYRIA_CITIES_COORDS[city_sel]
-                zoom_level = 12 # تقريب للمحافظة المختارة
+                map_center = SYRIA_CITIES_COORDS.get(city_sel, SYRIA_CITIES_COORDS["سوريا"])
+                zoom_val = 12
 
-            # تطبيق فلاتر العرض
-            df_filtered = df_m.copy()
+            # تطبيق فلاتر العرض النهائية
+            df_f = df_m.copy()
             if city_sel != "الكل":
-                df_filtered = df_filtered[df_filtered['المحافظة'] == city_sel]
-            
+                df_f = df_f[df_f['المحافظة'] == city_sel]
             if status_sel == "محجوز":
-                df_filtered = df_filtered[df_filtered['no'].notna()]
+                df_f = df_f[df_f['no'].notna()]
             elif status_sel == "متاح":
-                df_filtered = df_filtered[df_filtered['no'].isna()]
+                df_f = df_f[df_f['no'].isna()]
 
             # --- رسم الخريطة ---
-            st.subheader(f"📍 خريطة {city_sel if city_sel != 'الكل' else 'سوريا'}")
-            
-            # ملاحظة: سنستخدم مفتاح ديناميكي للخريطة لإجبارها على إعادة التحميل عند تغيير المحافظة
-            m = folium.Map(location=map_center, zoom_start=zoom_level)
+            m = folium.Map(location=map_center, zoom_start=zoom_val)
             marker_cluster = MarkerCluster().add_to(m)
 
-            for _, row in df_filtered.iterrows():
+            for _, row in df_f.iterrows():
                 if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
-                    is_booked = pd.notnull(row['no'])
-                    color = 'red' if is_booked else 'purple'
-                    pop_html = f"<div style='direction:rtl; text-align:right;'><b>{row['اسم العمود']}</b><br>{'محجوز' if is_booked else 'متاح'}</div>"
+                    is_b = pd.notnull(row['no'])
+                    color = 'red' if is_b else 'purple'
+                    pop = f"<div style='direction:rtl; text-align:right;'><b>{row['اسم العمود']}</b><br>{'محجوز' if is_b else 'متاح'}</div>"
                     folium.Marker([row['Latitude'], row['Longitude']], 
-                                  popup=folium.Popup(pop_html, max_width=200),
+                                  popup=folium.Popup(pop, max_width=200),
                                   icon=folium.Icon(color=color)).add_to(marker_cluster)
 
-            st_folium(m, width="100%", height=500, key=f"map_{city_sel}")
-            
-            st.dataframe(df_filtered.drop(columns=['no'], errors='ignore'), use_container_width=True)
+            st_folium(m, width="100%", height=500, key=f"map_{city_sel}_{current_no}")
+            st.dataframe(df_f.drop(columns=['no'], errors='ignore'), use_container_width=True)
 
         except Exception as e:
             st.error(f"⚠️ حدث خطأ: {e}")
+
 
       
