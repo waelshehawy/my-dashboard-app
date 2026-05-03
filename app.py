@@ -58,7 +58,6 @@ def export_word(customer_name, cart_data, period_name):
 
     # العبارة المطلوبة بعد سطرين من التحية
     doc.add_paragraph() 
-    doc.add_paragraph() 
     p_stat = doc.add_paragraph()
     p_stat.add_run("نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني من تاريخ  .................  ولغاية  .................")
     apply_rtl(p_stat)
@@ -149,8 +148,8 @@ else:
             f_ads = 0.0
             for _, row in subset.iterrows():
                 name = str(row['اسم الرسم'])
-                if "طباعة" in name: f_print = float(row['اجرة الرسم'])
-                elif "عرض" in name: f_ads = float(row['اجرة الرسم'])
+                if "أجور طباعة وتركيب" in name: f_print = float(row['اجرة الرسم'])
+                elif "أجور عرض" in name: f_ads = float(row['اجرة الرسم'])
 
             st.info(f"💰 الأسعار المكتشفة: طباعة {f_print}$, عرض {f_ads}$")
 
