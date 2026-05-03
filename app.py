@@ -177,7 +177,7 @@ else:
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
             # الداشبورد
-            if page == "📊 Dashboard":
+     if page == "📊 Dashboard":
         st.title("📊 حالة المواقع والخريطة التفاعلية")
         try:
             # 1. جلب البيانات ودمج الحجوزات
@@ -239,6 +239,7 @@ else:
 
         except Exception as e:
             st.error(f"خطأ في الداشبورد: {e}")
+
 
         conn.close()
 
