@@ -167,63 +167,83 @@ else:
             st.dataframe(df_m, use_container_width=True)
         except: st.error("Database Error")
 
-    elif page == "📄 عرض سعر":
-        st.title("📄 بناء عرض سعر")
+    elif page == "📄 إنشاء عرض سعر":
+        st.title("📄 بناء عرض سعر احترافي")
+        
+        # التأكد من تهيئة السلة في ذاكرة الجلسة
+        if 'cart' not in st.session_state:
+            st.session_state.cart = {}
+
         try:
-            # 1. جلب البيانات من الجداول
+            # 1. جلب البيانات الأساسية
             drawing_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             sizes = drawing_df['الحجم'].unique().tolist()
+            periods_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
             
-            cust = st.text_input("اسم الزبون")
-            period_list = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
-            sel_period = st.selectbox("الفترة", period_list)
+            # تقسيم الشاشة لسهولة العرض
+            col_input, col_cart = st.columns([1, 1.5])
             
-            # اختر المقاس (الحجم)
-            sel_size = st.selectbox("اختر المقاس:", sizes)
+            with col_input:
+                st.subheader("⚙️ إعدادات العرض")
+                cust = st.text_input("اسم الزبون")
+                period = st.selectbox("اختر الفترة:", periods_list)
+                sel_size = st.selectbox("اختر المقاس:", sizes)
 
-            # --- الجزء الجديد: جلب الأجور (ضعه هنا واحذف القديم) ---
-            size_subset = drawing_df[drawing_df['الحجم'] == sel_size]
-            f_print, f_ads = 0.0, 0.0
-            
-            for _, row in size_subset.iterrows():
-                label = str(row['اسم الرسم'])
-                value = float(row['اجرة الرسم'])
-                if "طباعة" in label:
-                    f_print = value
-                elif "عرض" in label:
-                    f_ads = value
-            
-            # عرض رسالة للتأكد من جلب الأرقام
-            st.info(f"✅ أجور المكتشفة: طباعة {f_print}$ | عرض {f_ads}$")
-            # ---------------------------------------------------
-
-            city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
-            sel_city = st.selectbox("المحافظة", city_l)
-            raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
-            nets = st.multiselect("الشبكات", raw['الشبكة'].unique().tolist())
-
-            if st.button("➕ إضافة للسلة"):
-                if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
-                for n in nets:
-                    # إضافة البيانات مع الأجور المكتشفة
-                    st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
-                        'الحجم': sel_size, 
-                        'fee_print': f_print, 
-                        'fee_ads': f_ads
-                    })
-                st.success("تمت الإضافة بنجاح")
-
-            # عرض السلة وتصدير الوورد
-            if st.session_state.cart:
-                for c, nts in list(st.session_state.cart.items()):
-                    for n, df in nts.items():
-                        with st.expander(f"📍 {c} - {n}"):
-                            st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
+                # جلب الأسعار المزدوجة للمقاس المختار
+                size_subset = drawing_df[drawing_df['الحجم'] == sel_size]
+                f_print, f_ads = 0.0, 0.0
+                for _, row in size_subset.iterrows():
+                    label = str(row['اسم الرسم'])
+                    val = float(row['اجرة الرسم']) if pd.notnull(row['اجرة الرسم']) else 0.0
+                    if "طباعة" in label: f_print = val
+                    elif "عرض" in label: f_ads = val
                 
-                if st.button("🚀 تصدير"):
-                    doc_io = export_word(cust, st.session_state.cart, sel_period)
-                    st.download_button("📥 تحميل", doc_io, f"Quotation_{cust}.docx")
+                st.info(f"💰 أجور المقاس: طباعة ({f_print}$)، عرض ({f_ads}$)")
+
+                # جلب المحافظات والشبكات
+                cities = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
+                sel_city = st.selectbox("المحافظة:", cities)
+                raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
+                nets = st.multiselect("اختر الشبكات:", raw['الشبكة'].unique().tolist())
+
+                if st.button("➕ إضافة للسلة"):
+                    if sel_city not in st.session_state.cart:
+                        st.session_state.cart[sel_city] = {}
+                    for n in nets:
+                        df_to_add = raw[raw['الشبكة'] == n].copy()
+                        df_to_add['الحجم'] = sel_size
+                        df_to_add['fee_print'] = f_print
+                        df_to_add['fee_ads'] = f_ads
+                        st.session_state.cart[sel_city][n] = df_to_add
+                    st.success("تمت الإضافة!")
+                    st.rerun() # إجبار المتصفح على التحديث لرؤية النتائج فوراً
+
+            with col_cart:
+                st.subheader("🛒 السلة الحالية")
+                if st.session_state.cart:
+                    # تكرار عرض الجداول الموجودة في السلة
+                    for city_name, nets_in_city in list(st.session_state.cart.items()):
+                        for net_name, df_in_cart in nets_in_city.items():
+                            with st.expander(f"📍 {city_name} - {net_name}", expanded=True):
+                                # عرض الجدول والسماح بالتعديل
+                                updated_df = st.data_editor(df_in_cart, key=f"editor_{city_name}_{net_name}")
+                                st.session_state.cart[city_name][net_name] = updated_df
+                    
+                    st.divider()
+                    if st.button("🚀 تصدير ملف Word"):
+                        if cust:
+                            doc_io = export_word(cust, st.session_state.cart, period)
+                            st.download_button("📥 تحميل الآن", doc_io, f"Quotation_{cust}.docx")
+                        else:
+                            st.warning("⚠️ أدخل اسم الزبون أولاً")
+                    
+                    if st.button("🗑️ تفريغ"):
+                        st.session_state.cart = {}
+                        st.rerun()
+                else:
+                    st.warning("السلة فارغة. اختر المواقع من اليمين واضغط إضافة.")
 
         except Exception as e:
             st.error(f"حدث خطأ: {e}")
+
 
