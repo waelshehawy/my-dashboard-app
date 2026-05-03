@@ -1,3 +1,4 @@
+# القسم الأول
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -120,6 +121,7 @@ def export_word(customer_name, cart_data, period_name):
     doc.save(target)
     target.seek(0)
     return target
+    # القسم الثاني
 # --- 3. واجهة تطبيق Streamlit ---
 
 if "auth" not in st.session_state:
