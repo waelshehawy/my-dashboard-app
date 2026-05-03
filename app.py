@@ -183,52 +183,55 @@ else:
     
     # الداشبورد
 
-    if page == "📊 Dashboard":
-        st.title("📊 حالة المواقع والخريطة التفاعلية")
-        # لا نغلق الاتصال هنا، نتركه مفتوحاً لنهاية الملف
+       if page == "📊 Dashboard":
+        st.title("📊 تتبع الحجوزات والفترات")
         try:
+            # 1. جلب البيانات
             df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
+            # جلب كل الحجوزات (كل السجلات لكل اللوحات)
+            df_booked = pd.read_sql("SELECT [رقم اللوحة], [فترة الحجز], [اسم الزبون] FROM [حجوزات1]", conn)
+            # جلب جدول الفترات لمعرفة ترتيب التواريخ
+            df_periods = pd.read_sql("SELECT namee, [تاريخ_البداية] FROM [الفترة]", conn)
+            df_periods['تاريخ_البداية'] = pd.to_datetime(df_periods['تاريخ_البداية'])
+
+            # 2. ربط الحجوزات بالتواريخ الحقيقية للفترات
+            df_booked_timed = pd.merge(df_booked, df_periods, left_on='فترة الحجز', right_on='namee', how='left')
             
-            # محاولة جلب الحجوزات إذا وجد الجدول
-            try:
-                df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون] FROM [حجوزات1]", conn)
-                df_m = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
-            except:
-                df_m = df_all
-                df_m['اسم الزبون'] = None
+            # 3. تحديد حالة كل لوحة بناءً على "تاريخ اليوم"
+            today = pd.to_datetime('today')
+            
+            # نوجد "آخر حجز مستقبلي" لكل لوحة
+            # إذا كان هناك أي سجل تاريخ بدايته > اليوم، فاللوحة تعتبر "محجوزة مستقبلاً"
+            future_bookings = df_booked_timed[df_booked_timed['تاريخ_البداية'] >= today]
+            
+            # نأخذ آخر حجز (الأحدث تاريخاً) لكل لوحة لعرضه في المعلومات
+            latest_status = future_bookings.sort_values('تاريخ_البداية').groupby('رقم اللوحة').last().reset_index()
 
-            # الفلاتر
-            c1, c2 = st.columns(2)
-            with c1:
-                city_list = ["الكل"] + sorted([str(x) for x in df_m['المحافظة'].unique() if x])
-                city_sel = st.selectbox("تصفية حسب المحافظة:", city_list)
-            with c2:
-                status_sel = st.radio("الحالة:", ["الكل", "متاح", "محجوز"], horizontal=True)
+            # 4. دمج الحالة مع جدول اللوحات الرئيسي
+            df_m = pd.merge(df_all, latest_status[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز']], on='رقم اللوحة', how='left')
 
-            # تطبيق الفلترة
-            if city_sel != "الكل":
-                df_m = df_m[df_m['المحافظة'] == city_sel]
-            if status_sel == "محجوز":
-                df_m = df_m[df_m['اسم الزبون'].notna()]
-            elif status_sel == "متاح":
-                df_m = df_m[df_m['اسم الزبون'].isna()]
+            # 5. الفلترة في الواجهة
+            status_sel = st.radio("عرض اللوحات:", ["الكل", "متاحة حالياً وللمستقبل", "محجوزة مستقبلاً"], horizontal=True)
 
-            # عرض الخريطة
+            if status_sel == "محجوزة مستقبلاً":
+                df_display = df_m[df_m['اسم الزبون'].notna()]
+            elif status_sel == "متاحة حالياً وللمستقبل":
+                df_display = df_m[df_m['اسم الزبون'].isna()]
+            else:
+                df_display = df_m
+
+            # 6. الخريطة
             m = folium.Map(location=[33.51, 36.27], zoom_start=12)
             marker_cluster = MarkerCluster().add_to(m)
 
-            for _, row in df_m.iterrows():
-                if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
+            for _, row in df_display.iterrows():
+                if pd.notnull(row['Latitude']):
                     is_booked = pd.notnull(row['اسم الزبون'])
                     color = 'red' if is_booked else 'purple'
                     
-                    pop_html = f"""
-                    <div style="direction:rtl; text-align:right; font-family:tahoma;">
-                        <b>{row['اسم العمود']}</b><br>
-                        {"الزبون: " + str(row['اسم الزبون']) if is_booked else "الحالة: متاح"}<br>
-                        المقاس: {row.get('الحجم', '-')}
-                    </div>
-                    """
+                    status_info = f"محجوزة لـ: {row['اسم الزبون']}<br>حتى فترة: {row['فترة الحجز']}" if is_booked else "متاحة"
+                    pop_html = f"<div style='direction:rtl; text-align:right;'><b>{row['اسم العمود']}</b><br>{status_info}</div>"
+                    
                     folium.Marker(
                         [row['Latitude'], row['Longitude']],
                         popup=folium.Popup(pop_html, max_width=200),
@@ -236,13 +239,7 @@ else:
                     ).add_to(marker_cluster)
 
             st_folium(m, width="100%", height=500)
-            st.dataframe(df_m, use_container_width=True)
+            st.dataframe(df_display)
 
         except Exception as e:
-            st.error(f"خطأ في معالجة البيانات: {e}")
-
-# --- السطر الأخير في الملف (خارج كل الشروط) ---
-if 'conn' in locals():
-    conn.close()
-
-
+            st.error(f"حدث خطأ في منطق الفترات: {e}")
