@@ -182,8 +182,7 @@ else:
         except Exception as e: st.error(f"Error: {e}")
     
     # الداشبورد
-
-       if page == "📊 Dashboard":
+    if page == "📊 Dashboard":
         st.title("📊 حالة الإشغال الزمنية للمواقع")
         try:
             # 1. جلب البيانات الأساسية
@@ -269,4 +268,4 @@ else:
         except Exception as e:
             st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
 
-     
+      
