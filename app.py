@@ -58,12 +58,25 @@ def export_word(customer_name, cart_data, period_name):
         section.top_margin = Cm(4.5) 
 
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/03")
-    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
+    # اسم الزبون
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
     run_c.bold, run_c.font.size = True, Pt(20)
+
+    # التحية
+    p_greet = doc.add_paragraph("تحية طيبة وبعد،")
+    apply_rtl(p_greet)
+
+    # إضافة العبارة بعد سطرين من التحية
+    doc.add_paragraph() # سطر فارغ أول
+    doc.add_paragraph() # سطر فارغ ثاني
+    
+    p_statement = doc.add_paragraph()
+    p_statement.add_run("نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني من تاريخ  .................  ولغاية  .................")
+    apply_rtl(p_statement)
 
     if cart_data:
         for city, networks in cart_data.items():
