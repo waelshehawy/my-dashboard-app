@@ -50,7 +50,7 @@ def export_word(customer_name, cart_data, period_name):
         section.top_margin = Cm(4.5) 
 
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/03")
-    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
