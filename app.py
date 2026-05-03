@@ -9,24 +9,21 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-# --- 1. Basic Functions & RTL Logic ---
+# --- 1. Core Functions & RTL Logic ---
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
 def apply_rtl(obj):
-    """Applies RTL and Right Alignment to Paragraphs or Cells correctly"""
+    """Applies RTL and Right Alignment (using Inverse Logic for Word Compatibility)"""
     if hasattr(obj, 'paragraphs'):
-        # If it's a cell, apply to all paragraphs inside it
         for p in obj.paragraphs:
             _force_rtl_style(p)
     else:
-        # If it's a direct paragraph object
         _force_rtl_style(obj)
 
 def _force_rtl_style(p):
-    """The logic to fix the 'Reversed Alignment' issue and Arabic text flow"""
-    # Inverse Logic: Setting to LEFT often appears as RIGHT in Arabic Word environments
+    # Setting to LEFT often correctly aligns Arabic to RIGHT in many Word versions
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -57,7 +54,6 @@ def set_cell_background(cell, color):
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     
-    # Global Top Margin to avoid Logo overlap on all pages
     for section in doc.sections:
         section.top_margin = Cm(4.5) 
 
@@ -84,20 +80,29 @@ def export_word(customer_name, cart_data, period_name):
                     table.style = 'Table Grid'
                     set_table_rtl(table)
                     
-                    hdr = table.rows.cells
-                    hdr.text, hdr.text = f"الشبكة: {net}", "العدد"
-                    for cell in hdr: apply_rtl(cell)
+                    # FIX: Access the first row explicitly
+                    hdr_cells = table.rows[0].cells
+                    hdr_cells[0].text = f"الشبكة: {net}"
+                    hdr_cells[1].text = "العدد"
+                    
+                    for cell in hdr_cells:
+                        set_cell_background(cell, "660099")
+                        for p in cell.paragraphs:
+                            apply_rtl(p)
+                            for run in p.runs:
+                                run.font.color.rgb, run.bold = RGBColor(255, 255, 255), True
 
                     for _, row in group_df.iterrows():
                         row_cells = table.add_row().cells
-                        row_cells.text = str(row.get('الموقع', ''))
-                        row_cells.text = str(row.get('العدد', 1))
-                        for cell in row_cells: apply_rtl(cell)
+                        row_cells[0].text = str(row.get('الموقع', ''))
+                        row_cells[1].text = str(row.get('العدد', 1))
+                        for cell in row_cells:
+                            apply_rtl(cell)
 
                     # Calculations
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
-                    f_print = float(group_df['fee_print'].iloc) if 'fee_print' in group_df.columns else 0
-                    f_ads = float(group_df['fee_ads'].iloc) if 'fee_ads' in group_df.columns else 0
+                    f_print = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
+                    f_ads = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
                     
                     p_sum = doc.add_paragraph()
                     txt = f"العدد: {int(total_q)} | طباعة: {total_q*f_print:,.0f}$ | عرض: {total_q*f_ads:,.0f}$ | الإجمالي: {(total_q*f_print)+(total_q*f_ads):,.0f}$"
@@ -109,36 +114,35 @@ def export_word(customer_name, cart_data, period_name):
     target.seek(0)
     return target
 
-# --- 3. Streamlit UI ---
+# --- 3. Streamlit Interface ---
 
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 تسجيل الدخول")
+    st.title("🔒 PreView ERP Login")
     u, p = st.text_input("User"), st.text_input("Pass", type="password")
     if st.button("Login"):
         if u == "admin" and p == "preview2026":
             st.session_state.auth = True
             st.rerun()
+        else: st.error("Access Denied")
 else:
     conn = get_connection()
     if 'cart' not in st.session_state: st.session_state.cart = {}
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("Menu", ["📊 Dashboard", "📄 إنشاء عرض سعر"])
+        page = st.radio("القائمة", ["📊 الداشبورد", "📄 إنشاء عرض سعر"])
 
     if page == "📄 إنشاء عرض سعر":
         st.title("📄 بناء عرض سعر احترافي")
         try:
-            # 1. Fetch drawing fees and sizes
             draw_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             sizes = draw_df['الحجم'].unique().tolist()
             
             cust = st.text_input("اسم الزبون")
             sel_size = st.selectbox("اختر المقاس (لفلترة المواقع وجلب الأجور):", sizes)
             
-            # Logic to extract Print and Ad fees
             subset = draw_df[draw_df['الحجم'] == sel_size]
             f_print, f_ads = 0.0, 0.0
             for _, row in subset.iterrows():
@@ -148,11 +152,10 @@ else:
 
             st.info(f"💡 المقاس {sel_size} | أجر الطباعة: {f_print}$ | أجر العرض: {f_ads}$")
 
-            # 2. Filter billboards based on size
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
             sel_city = st.selectbox("المحافظة:", city_l)
             
-            # METHODOLOGICAL FIX: Filter by City AND Size
+            # METHODOLOGICAL FIX: Ensure size match in query
             query = f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'"
             raw = pd.read_sql(query, conn)
             
@@ -177,7 +180,7 @@ else:
                 
                 if st.button("🚀 تصدير Word"):
                     doc_io = export_word(cust, st.session_state.cart, "2026")
-                    st.download_button("📥 تحميل", doc_io, f"Quotation_{cust}.docx")
+                    st.download_button("📥 تحميل المستند", doc_io, f"Quotation_{cust}.docx")
                 if st.button("🗑️ تفريغ"): st.session_state.cart = {}; st.rerun()
         except Exception as e: st.error(f"Error: {e}")
     conn.close()
