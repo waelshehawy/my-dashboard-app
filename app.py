@@ -9,21 +9,13 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-# --- 1. Core Functions & RTL Logic ---
+# --- 1. الدوال الأساسية وتنسيق RTL ---
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
 
-def apply_rtl(obj):
-    """Applies RTL and Right Alignment (using Inverse Logic for Word Compatibility)"""
-    if hasattr(obj, 'paragraphs'):
-        for p in obj.paragraphs:
-            _force_rtl_style(p)
-    else:
-        _force_rtl_style(obj)
-
-def _force_rtl_style(p):
-    # Setting to LEFT often correctly aligns Arabic to RIGHT in many Word versions
+def apply_rtl(p):
+    """إجبار النص على اليمين (منطق عكسي لضمان التوافق)"""
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -34,33 +26,30 @@ def _force_rtl_style(p):
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
-        rFonts = OxmlElement('w:rFonts')
-        rFonts.set(qn('w:cs'), 'Arial')
-        rPr.append(rFonts)
 
 def set_table_rtl(table):
-    tblPr = table._element.xpath('w:tblPr')
-    if tblPr:
-        bidi = OxmlElement('w:bidiVisual')
-        tblPr.append(bidi)
+    """إجبار الجدول بالكامل على أن يبدأ من اليمين (Right-to-Left Table)"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
 
 def set_cell_background(cell, color):
     shd = OxmlElement('w:shd')
     shd.set(qn('w:fill'), color)
     cell._tc.get_or_add_tcPr().append(shd)
 
-# --- 2. Word Export Logic ---
+# --- 2. دالة تصدير الوورد ---
 
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-    
     for section in doc.sections:
         section.top_margin = Cm(4.5) 
 
+    # التاريخ
     p_date = doc.add_paragraph(f"التاريخ: 2026/05/03")
-    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    # اسم الزبون
+    # ترويسة الزبون
     p_cust = doc.add_paragraph()
     p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
@@ -70,13 +59,12 @@ def export_word(customer_name, cart_data, period_name):
     p_greet = doc.add_paragraph("تحية طيبة وبعد،")
     apply_rtl(p_greet)
 
-    # إضافة العبارة بعد سطرين من التحية
-    doc.add_paragraph() # سطر فارغ أول
-    doc.add_paragraph() # سطر فارغ ثاني
-    
-    p_statement = doc.add_paragraph()
-    p_statement.add_run("نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني من تاريخ  .................  ولغاية  .................")
-    apply_rtl(p_statement)
+    # إضافة العبارة المطلوبة بعد سطرين من التحية
+    doc.add_paragraph() 
+    doc.add_paragraph() 
+    p_stat = doc.add_paragraph()
+    p_stat.add_run("نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني من تاريخ  .................  ولغاية  .................")
+    apply_rtl(p_stat)
 
     if cart_data:
         for city, networks in cart_data.items():
@@ -89,11 +77,11 @@ def export_word(customer_name, cart_data, period_name):
                     p_size = doc.add_paragraph(f"قياس اللوحة: {size}")
                     apply_rtl(p_size)
 
+                    # إنشاء الجدول (العمود الأول سيكون على اليمين)
                     table = doc.add_table(rows=1, cols=2)
                     table.style = 'Table Grid'
-                    set_table_rtl(table)
+                    set_table_rtl(table) 
                     
-                    # FIX: Access the first row explicitly
                     hdr_cells = table.rows[0].cells
                     hdr_cells[0].text = f"الشبكة: {net}"
                     hdr_cells[1].text = "العدد"
@@ -110,9 +98,9 @@ def export_word(customer_name, cart_data, period_name):
                         row_cells[0].text = str(row.get('الموقع', ''))
                         row_cells[1].text = str(row.get('العدد', 1))
                         for cell in row_cells:
-                            apply_rtl(cell)
+                            for p in cell.paragraphs: apply_rtl(p)
 
-                    # Calculations
+                    # الحسابات
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
                     f_print = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
                     f_ads = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
@@ -121,11 +109,16 @@ def export_word(customer_name, cart_data, period_name):
                     txt = f"العدد: {int(total_q)} | طباعة: {total_q*f_print:,.0f}$ | عرض: {total_q*f_ads:,.0f}$ | الإجمالي: {(total_q*f_print)+(total_q*f_ads):,.0f}$"
                     p_sum.add_run(txt).bold = True
                     apply_rtl(p_sum)
-    
+                    doc.add_paragraph()
+
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
+# --- 3. واجهة Streamlit --- (نفس منطق السلة والربط السابق)
+# ... [أكمل بجزء واجهة المستخدم السابق] ...
+
 
 # --- 3. Streamlit Interface ---
 
