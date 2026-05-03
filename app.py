@@ -215,17 +215,58 @@ else:
                             'ads_label': a_label
                         })
                     st.rerun()
-
+   # الكارد
+                       # --- عرض وتحرير السلة ---
             if st.session_state.cart:
-                for c_name, nts in list(st.session_state.cart.items()):
-                    for n_name, df_cart in nts.items():
-                        with st.expander(f"📍 {c_name} - {n_name}", expanded=True):
-                            st.session_state.cart[c_name][n_name] = st.data_editor(df_cart, key=f"ed_{c_name}_{n_name}")
+                st.write("---")
+                st.subheader("🛒 مراجعة وتعديل العرض")
                 
-                if st.button("🚀 Export Word"):
-                    doc_io = export_word(cust, st.session_state.cart, "2026")
-                    st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
-        except Exception as e: st.error(f"Error: {e}")
+                # إنشاء نسخة من المفاتيح لتجنب خطأ تغيير الحجم أثناء التكرار
+                for city_name in list(st.session_state.cart.keys()):
+                    for net_name in list(st.session_state.cart[city_name].keys()):
+                        
+                        # صندوق لكل جدول (شبكة/مقاس)
+                        with st.expander(f"📍 {city_name} - {net_name}", expanded=True):
+                            col_table, col_action = st.columns([4, 1])
+                            
+                            with col_table:
+                                # محرر البيانات: يسمح بحذف الأسطر (num_rows="dynamic")
+                                current_df = st.session_state.cart[city_name][net_name]
+                                edited_df = st.data_editor(
+                                    current_df, 
+                                    key=f"ed_{city_name}_{net_name}",
+                                    num_rows="dynamic", # يسمح للمستخدم بحذف صفوف محددة
+                                    use_container_width=True
+                                )
+                                # تحديث السلة بالبيانات الجديدة بعد الحذف أو التعديل
+                                st.session_state.cart[city_name][net_name] = edited_df
+
+                            with col_action:
+                                # زر لإزالة هذا الجدول بالكامل من العرض
+                                if st.button(f"🗑️ إزالة الجدول", key=f"del_{city_name}_{net_name}"):
+                                    del st.session_state.cart[city_name][net_name]
+                                    # إذا أصبحت المحافظة فارغة، نحذفها أيضاً
+                                    if not st.session_state.cart[city_name]:
+                                        del st.session_state.cart[city_name]
+                                    st.rerun()
+
+                # --- أزرار التحكم النهائي ---
+                st.divider()
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("🚀 تصدير ملف Word المحدث", use_container_width=True):
+                        if cust:
+                            # دالة التصدير ستستخدم البيانات المحدثة (بعد الحذف) تلقائياً
+                            doc_io = export_word(cust, st.session_state.cart, "2026")
+                            st.download_button("📥 اضغط هنا للتحميل", doc_io, f"Quotation_{cust}.docx", use_container_width=True)
+                        else:
+                            st.warning("⚠️ يرجى كتابة اسم الزبون")
+                
+                with c2:
+                    if st.button("🧹 تفريغ العرض بالكامل", use_container_width=True):
+                        st.session_state.cart = {}
+                        st.rerun()
+
 
     
     # الداشبورد
