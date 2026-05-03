@@ -177,14 +177,16 @@ else:
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
     conn.close()
+    
     # الداشبورد
 
     if page == "📊 Dashboard":
         st.title("📊 حالة المواقع والخريطة التفاعلية")
+        # لا نغلق الاتصال هنا، نتركه مفتوحاً لنهاية الملف
         try:
-            # 1. جلب البيانات ودمج الحجوزات
             df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
-            # نفترض وجود جدول حجوزات1 لتمييز اللوحات المحجوزة
+            
+            # محاولة جلب الحجوزات إذا وجد الجدول
             try:
                 df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون] FROM [حجوزات1]", conn)
                 df_m = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
@@ -192,10 +194,11 @@ else:
                 df_m = df_all
                 df_m['اسم الزبون'] = None
 
-            # 2. فلاتر سريعة في الأعلى
+            # الفلاتر
             c1, c2 = st.columns(2)
             with c1:
-                city_sel = st.selectbox("تصفية حسب المحافظة:", ["الكل"] + sorted(df_m['المحافظة'].unique().tolist()))
+                city_list = ["الكل"] + sorted([str(x) for x in df_m['المحافظة'].unique() if x])
+                city_sel = st.selectbox("تصفية حسب المحافظة:", city_list)
             with c2:
                 status_sel = st.radio("الحالة:", ["الكل", "متاح", "محجوز"], horizontal=True)
 
@@ -207,10 +210,7 @@ else:
             elif status_sel == "متاح":
                 df_m = df_m[df_m['اسم الزبون'].isna()]
 
-            # 3. عرض الخريطة
-            st.subheader("📍 مواقع اللوحات على الخريطة")
-            
-            # إحداثيات افتراضية (دمشق) في حال لم تكن هناك بيانات
+            # عرض الخريطة
             m = folium.Map(location=[33.51, 36.27], zoom_start=12)
             marker_cluster = MarkerCluster().add_to(m)
 
@@ -218,27 +218,28 @@ else:
                 if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
                     is_booked = pd.notnull(row['اسم الزبون'])
                     color = 'red' if is_booked else 'purple'
-                    status_txt = f"الزبون: {row['اسم الزبون']}" if is_booked else "الحالة: متاح"
                     
                     pop_html = f"""
                     <div style="direction:rtl; text-align:right; font-family:tahoma;">
                         <b>{row['اسم العمود']}</b><br>
-                        {status_txt}<br>
-                        المقاس: {row.get('الحجم', 'غير محدد')}
+                        {"الزبون: " + str(row['اسم الزبون']) if is_booked else "الحالة: متاح"}<br>
+                        المقاس: {row.get('الحجم', '-')}
                     </div>
                     """
                     folium.Marker(
                         [row['Latitude'], row['Longitude']],
                         popup=folium.Popup(pop_html, max_width=200),
-                        icon=folium.Icon(color=color, icon='info-sign')
+                        icon=folium.Icon(color=color)
                     ).add_to(marker_cluster)
 
             st_folium(m, width="100%", height=500)
-
-            # 4. عرض الجدول أسفل الخريطة
-            st.subheader("📋 تفاصيل المواقع")
             st.dataframe(df_m, use_container_width=True)
 
         except Exception as e:
-            st.error(f"خطأ في الداشبورد: {e}")
+            st.error(f"خطأ في معالجة البيانات: {e}")
+
+# --- السطر الأخير في الملف (خارج كل الشروط) ---
+if 'conn' in locals():
+    conn.close()
+
 
