@@ -15,7 +15,8 @@ def get_connection():
     return sqlite3.connect('billboards_data.db')
 
 def apply_rtl(p):
-    """إجبار النص على اليمين بالمنطق العكسي (Left لتظهر Right عندك)"""
+    """إجبار النص على اليمين بالمنطق العكسي وتفعيل Bidi"""
+    # في بعض البيئات، الضبط على LEFT مع Bidi يظهر النص في اليمين بشكل صحيح
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -30,23 +31,30 @@ def apply_rtl(p):
         rFonts.set(qn('w:cs'), 'Arial')
         rPr.append(rFonts)
 
+def set_table_rtl(table):
+    """ضبط اتجاه الجدول ليبدأ من اليمين (العمود الأول يميناً)"""
+    tblPr = table._element.xpath('w:tblPr')
+    if tblPr:
+        bidi = OxmlElement('w:bidiVisual')
+        tblPr[0].append(bidi)
+
 def set_cell_background(cell, color):
     shd = OxmlElement('w:shd')
     shd.set(qn('w:fill'), color)
     cell._tc.get_or_add_tcPr().append(shd)
 
-# --- 2. دالة تصدير الوورد ---
+# --- 2. دالة تصدير الوورد بتجميع المقاسات ---
 
 def export_word(customer_name, cart_data, period_name):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     
-    # حل مشكلة اللوغو: ضبط هامش علوي كبير لكل الصفحات لضمان عدم تداخل النص
+    # تجاوز اللوغو في كافة الصفحات عبر ضبط الهوامش العلوية
     for section in doc.sections:
         section.top_margin = Cm(4.5) 
 
-    # التاريخ (محاذاة يمين ليظهر يساراً كما كان صحيحاً عندك)
-    p_date = doc.add_paragraph(f"التاريخ: 2026/05/02")
-    p_date.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    # التاريخ (محاذاة يمين ليظهر في مكانه الصحيح)
+    p_date = doc.add_paragraph(f"التاريخ: 2026/05/03")
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     # ترويسة الخطاب
     p_cust = doc.add_paragraph()
@@ -67,76 +75,22 @@ def export_word(customer_name, cart_data, period_name):
             apply_rtl(p_city)
             
             for net, df in networks.items():
-                # 1. التجميع حسب السعر (الذي يمثل المقاس/الحجم)
-                grouped = df.groupby('اجرة الرسم')
+                # التجميع حسب "الحجم" (المقاس)
+                grouped = df.groupby('الحجم')
                 
-                for fee, group_df in grouped:
-                    # جلب مسمى الرسم (مثلاً: أجور طباعة فلكس أو أجور عرض لوحة)
-                    drawing_name = group_df['اسم الرسم'].iloc[0] if 'اسم الرسم' in group_df.columns else ""
-                    
-                    # عنوان الجدول الفرعي
-                    p_size = doc.add_paragraph(f"البيان: {drawing_name} (سعر الوحدة: {fee}$)")
+                for size, group_df in grouped:
+                    p_size = doc.add_paragraph(f"قياس اللوحة: {size}")
                     apply_rtl(p_size)
                     p_size.runs[0].bold = True
 
-                    # بناء الجدول (الموقع | العدد)
+                    # بناء الجدول (الشبكة في الرأس كما طلبت)
                     table = doc.add_table(rows=1, cols=2)
                     table.style = 'Table Grid'
-                    table._element.xpath('w:tblPr')[0].append(OxmlElement('w:bidiVisual'))
+                    set_table_rtl(table)
                     
                     hdr = table.rows[0].cells
-                    hdr[0].text = "اسم الموقع / العمود"
-                    hdr[1].text = "العدد"
-                    for cell in hdr:
-                        set_cell_background(cell, "660099")
-                        for p in cell.paragraphs:
-                            apply_rtl(p)
-                            for r in p.runs: r.font.color.rgb, r.bold = RGBColor(255, 255, 255), True
-
-                    # تعبئة الصفوف
-                    for _, row in group_df.iterrows():
-                        row_cells = table.add_row().cells
-                        row_cells[0].text = str(row.get('الموقع', ''))
-                        row_cells[1].text = str(row.get('العدد', 1))
-                        for cell in row_cells:
-                            for p in cell.paragraphs: apply_rtl(p)
-
-                    # --- منطق الحساب الذكي ---
-                    total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
-                    total_value = total_q * fee
-                    
-                    # تحديد هل المبلغ يتبع للطباعة أم للعرض بناءً على "اسم الرسم"
-                    print_total = 0
-                    ads_total = 0
-                    
-                    if "طباعة" in drawing_name:
-                        print_total = total_value
-                    elif "عرض" in drawing_name:
-                        ads_total = total_value
-                    else:
-                        # إذا لم يوجد مسمى صريح، نضعها في العرض كافتراض
-                        ads_total = total_value
-
-                    # سطر المجاميع أسفل الجدول
-                    p_sum = doc.add_paragraph()
-                    # بناء نص المجموع بناءً على النوع المكتشف
-                    summary_text = f"إجمالي العدد: {int(total_q)} | "
-                    if print_total > 0: summary_text += f"إجمالي أجور الطباعة: {print_total:,}$"
-                    if ads_total > 0: summary_text += f"إجمالي أجور العرض: {ads_total:,}$"
-                    
-                    p_sum.add_run(summary_text).bold = True
-                    apply_rtl(p_sum)
-                    doc.add_paragraph() # سطر فارغ للفصل
-
-                    # بناء الجدول
-                    table = doc.add_table(rows=1, cols=2)
-                    table.style = 'Table Grid'
-                    # تفعيل اتجاه الجدول RTL
-                    table._element.xpath('w:tblPr')[0].append(OxmlElement('w:bidiVisual'))
-                    
-                    hdr = table.rows[0].cells
-                    hdr[0].text = f"الشبكة: {net}"
-                    hdr[1].text = "العدد"
+                    hdr.text = f"الشبكة: {net}"
+                    hdr.text = "العدد"
                     
                     for cell in hdr:
                         set_cell_background(cell, "660099")
@@ -145,6 +99,7 @@ def export_word(customer_name, cart_data, period_name):
                             for run in p.runs:
                                 run.font.color.rgb, run.bold = RGBColor(255, 255, 255), True
 
+                    # تعبئة المواقع
                     for _, row in group_df.iterrows():
                         row_cells = table.add_row().cells
                         row_cells[0].text = str(row.get('الموقع', ''))
@@ -152,11 +107,17 @@ def export_word(customer_name, cart_data, period_name):
                         for cell in row_cells:
                             for p in cell.paragraphs: apply_rtl(p)
 
-                    # سطر المجاميع
+                    # حساب المجاميع لكل مقاس (ضرب المجموع الكلي في الأجور)
                     total_q = pd.to_numeric(group_df['العدد'], errors='coerce').sum()
-                    total_p = pd.to_numeric(group_df.get('أجور الطباعة', 0), errors='coerce').sum()
+                    fee_print = group_df['fee_print'].iloc[0] if 'fee_print' in group_df.columns else 0
+                    fee_ads = group_df['fee_ads'].iloc[0] if 'fee_ads' in group_df.columns else 0
                     
-                    p_sum = doc.add_paragraph(f"العدد: {int(total_q)} | رسم: {total_q*fee:,}$ | طباعة: {total_p:,}$ | المجموع: {(total_q*fee)+total_p:,}$")
+                    total_print = total_q * fee_print
+                    total_ads = total_q * fee_ads
+
+                    p_sum = doc.add_paragraph()
+                    summary_text = f"العدد: {int(total_q)} | أجور الطباعة: {total_print:,}$ | أجور العرض: {total_ads:,}$ | الإجمالي: {total_print + total_ads:,}$"
+                    p_sum.add_run(summary_text).bold = True
                     apply_rtl(p_sum)
                     doc.add_paragraph()
 
@@ -165,15 +126,14 @@ def export_word(customer_name, cart_data, period_name):
     target.seek(0)
     return target
 
-# --- 3. واجهة Streamlit ---
+# --- 3. واجهة تطبيق Streamlit ---
 
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
     st.title("🔒 تسجيل الدخول")
-    u = st.text_input("User")
-    p = st.text_input("Password", type="password")
-    if st.button("دخول"):
+    u, p = st.text_input("User"), st.text_input("Pass", type="password")
+    if st.button("Login"):
         if u == "admin" and p == "preview2026":
             st.session_state.auth = True
             st.rerun()
@@ -193,21 +153,22 @@ else:
     elif page == "📄 Quotation":
         st.title("📄 بناء عرض سعر")
         try:
-            df_periods = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+            # جلب المقاسات الفريدة من جدول اسماء الرسم
             drawing_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
+            sizes = drawing_df['الحجم'].unique().tolist()
             
             cust = st.text_input("Customer Name")
-            period = st.selectbox("Period", df_periods)
-            sel_size = st.selectbox("Size/Drawing Type:", drawing_df['الحجم'].tolist())
+            period = pd.read_sql("SELECT namee FROM [الفترة]", conn)['namee'].tolist()
+            sel_period = st.selectbox("Period", period)
+            sel_size = st.selectbox("Select Size:", sizes)
             
-            # جلب البيانات من جدول اسماء الرسم
-            drawing_info = drawing_df[drawing_df['الحجم'] == sel_size].iloc[0]
-            current_fee = drawing_info['اجرة الرسم']
-            drawing_name = drawing_info['اسم الرسم']
+            # جلب أجور الطباعة والعرض لهذا المقاس تلقائياً
+            size_data = drawing_df[drawing_df['الحجم'] == sel_size]
+            fee_print = size_data[size_data['اسم الرسم'].str.contains("طباعة", na=False)]['اجرة الرسم'].iloc[0] if not size_data[size_data['اسم الرسم'].str.contains("طباعة", na=False)].empty else 0
+            fee_ads = size_data[size_data['اسم الرسم'].str.contains("عرض", na=False)]['اجرة الرسم'].iloc[0] if not size_data[size_data['اسم الرسم'].str.contains("عرض", na=False)].empty else 0
 
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
             sel_city = st.selectbox("City", city_l)
-            
             raw = pd.read_sql(f"SELECT [اسم العمود] as الموقع, [العدد], [الشبكة] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)
             nets = st.multiselect("Nets", raw['الشبكة'].unique().tolist())
 
@@ -215,9 +176,9 @@ else:
                 if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                 for n in nets:
                     st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
-                        'اجرة الرسم': current_fee, 
-                        'اسم الرسم': drawing_name,
-                        'أجور الطباعة': 0
+                        'الحجم': sel_size,
+                        'fee_print': fee_print,
+                        'fee_ads': fee_ads
                     })
 
             if st.session_state.cart:
@@ -227,7 +188,7 @@ else:
                             st.session_state.cart[c][n] = st.data_editor(df, key=f"ed_{c}_{n}")
                 
                 if st.button("🚀 Export Word"):
-                    doc_io = export_word(cust, st.session_state.cart, period)
+                    doc_io = export_word(cust, st.session_state.cart, sel_period)
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
     conn.close()
