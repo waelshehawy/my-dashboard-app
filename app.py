@@ -200,23 +200,23 @@ else:
         except Exception as e: st.error(f"Error: {e}")
     
     # الداشبورد
-        if page == "📊 Dashboard":
+             if page == "📊 Dashboard":
         st.title("📊 حالة الإشغال والخريطة التفاعلية")
         try:
-            # 1. جلب البيانات
+            # 1. Fetching Data
             df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
             df_booked = pd.read_sql("SELECT [رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام] FROM [حجوزات1]", conn)
             df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
 
-            # --- قسم الفلاتر ---
+            # --- Filters Section ---
             st.subheader("🔍 فلاتر البحث")
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 p_names = df_periods['namee'].tolist()
                 current_p_name = st.selectbox("الفحص بدءاً من فترة:", p_names)
-                # الإصلاح هنا: استخدام values[0] للحصول على الرقم
-                current_no = df_periods[df_periods['namee'] == current_p_name]['no'].values[0]
+                # FIX: Use .iloc[0] or .values[0] to get the exact integer
+                current_no = int(df_periods[df_periods['namee'] == current_p_name]['no'].values[0])
             
             with col2:
                 target_year = st.number_input("العام:", value=2026)
@@ -228,19 +228,19 @@ else:
             with col4:
                 status_sel = st.radio("الحالة:", ["الكل", "متاح", "محجوز"], horizontal=True)
 
-            # --- منطق المعالجة ---
+            # --- Logic Processing ---
             df_booked_timed = pd.merge(df_booked, df_periods, left_on='فترة الحجز', right_on='namee', how='left')
             
-            # فلترة الحجوزات المستقبلية بناءً على الرقم current_no
+            # Filtering future bookings based on period number 'no'
             future_bookings = df_booked_timed[
-                (df_booked_timed['no'] >= int(current_no)) & 
+                (df_booked_timed['no'] >= current_no) & 
                 (df_booked_timed['العام'] == target_year)
             ]
 
             latest_booking = future_bookings.sort_values('no').groupby('رقم اللوحة').last().reset_index()
             df_m = pd.merge(df_all, latest_booking[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'no']], on='رقم اللوحة', how='left')
 
-            # --- تحديد مركز الخريطة ---
+            # --- Map Centering Logic ---
             if city_sel == "الكل":
                 map_center = SYRIA_CITIES_COORDS["سوريا"]
                 zoom_val = 7
@@ -248,16 +248,19 @@ else:
                 map_center = SYRIA_CITIES_COORDS.get(city_sel, SYRIA_CITIES_COORDS["سوريا"])
                 zoom_val = 12
 
-            # تطبيق فلاتر العرض النهائية
+            # Apply final display filters
             df_f = df_m.copy()
             if city_sel != "الكل":
                 df_f = df_f[df_f['المحافظة'] == city_sel]
+            
             if status_sel == "محجوز":
                 df_f = df_f[df_f['no'].notna()]
             elif status_sel == "متاح":
                 df_f = df_f[df_f['no'].isna()]
 
-            # --- رسم الخريطة ---
+            # --- Folium Map Rendering ---
+            st.subheader(f"📍 خريطة {city_sel if city_sel != 'الكل' else 'سوريا'}")
+            
             m = folium.Map(location=map_center, zoom_start=zoom_val)
             marker_cluster = MarkerCluster().add_to(m)
 
@@ -265,16 +268,20 @@ else:
                 if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
                     is_b = pd.notnull(row['no'])
                     color = 'red' if is_b else 'purple'
-                    pop = f"<div style='direction:rtl; text-align:right;'><b>{row['اسم العمود']}</b><br>{'محجوز' if is_b else 'متاح'}</div>"
+                    pop = f"<div style='direction:rtl; text-align:right; font-family:tahoma;'><b>{row['اسم العمود']}</b><br>{'محجوز لـ: ' + str(row['اسم الزبون']) if is_b else 'متاح'}</div>"
                     folium.Marker([row['Latitude'], row['Longitude']], 
                                   popup=folium.Popup(pop, max_width=200),
                                   icon=folium.Icon(color=color)).add_to(marker_cluster)
 
+            # The dynamic key ensures the map moves when the city selection changes
             st_folium(m, width="100%", height=500, key=f"map_{city_sel}_{current_no}")
+            
             st.dataframe(df_f.drop(columns=['no'], errors='ignore'), use_container_width=True)
 
         except Exception as e:
             st.error(f"⚠️ حدث خطأ: {e}")
+
+
 
 
       
