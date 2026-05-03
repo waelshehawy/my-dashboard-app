@@ -57,7 +57,7 @@ def export_word(customer_name, cart_data, period_name):
     apply_rtl(p_greet)
 
     # العبارة المطلوبة بعد سطرين من التحية
-    doc.add_paragraph() 
+
     p_stat = doc.add_paragraph()
     p_stat.add_run("نقدم لكم المواقع المتاحة في المحافظات لعرض إعلانكم الوطني من تاريخ  .................  ولغاية  .................")
     apply_rtl(p_stat)
@@ -176,7 +176,4 @@ else:
                     doc_io = export_word(cust, st.session_state.cart, "2026")
                     st.download_button("📥 Download", doc_io, f"Quotation_{cust}.docx")
         except Exception as e: st.error(f"Error: {e}")
-        conn.close()
-
-
-                
+    conn.close()
