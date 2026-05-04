@@ -344,53 +344,82 @@ else:
 
 
     elif page == "📋 تقرير المتاح المجمع":
-        st.title("📋 تقرير المواقع المتاحة (مجمع)")
+        st.title("📋 إحصائيات الإشغال والتوفر (مجمع)")
         
+        # 1. إعدادات الفترة
         df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
-        
         c1, c2, c3 = st.columns(3)
         with c1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist(), key="rep_s")
         with c2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1, key="rep_e")
         with c3: b_year = st.number_input("العام:", value=2026, key="rep_y")
 
-        # منطق استخراج المتاح (نجعله يعمل تلقائياً عند تغيير الاختيارات لضمان وجود المتغير)
+        # 2. جلب البيانات
         s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
         e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
         target_period_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
 
-        # جلب البيانات خارج الـ Button لضمان توفر available_df دائماً
+        # جلب المحجوزات
         booked_query = f"SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1] WHERE [العام]={b_year} AND [فترة الحجز] IN ({str(target_period_names)[1:-1]})"
-        booked_boards = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
-        all_boards = pd.read_sql("SELECT [رقم اللوحة], [اسم العمود] as الموقع, [المحافظة], [الشبكة], [الحجم], [توصيف العمود], [العدد] FROM [اعمدة انارة]", conn)
+        booked_ids = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
+
+        # جلب كل اللوحات
+        all_boards = pd.read_sql("SELECT [رقم اللوحة], [المحافظة], [الشبكة], [الحجم], [توصيف العمود], [العدد] FROM [اعمدة انارة]", conn)
         
-        # هذا هو المتغير الذي سبب الخطأ، الآن هو متاح في كل الصفحة
-        available_df = all_boards[~all_boards['رقم اللوحة'].isin(booked_boards)]
+        # إضافة حالة اللوحة (متاح/محجوز) بناءً على المقارنة
+        all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if str(x) in map(str, booked_ids) else 'متاح')
 
-        if available_df.empty:
-            st.warning("لا توجد مواقع متاحة في هذا النطاق الزمني.")
-        else:
-            st.info(f"إجمالي المواقع المتاحة حالياً: {len(available_df)}")
+        # --- الإحصائية العامة للشركة ---
+        st.subheader("🌍 ملخص الإشغال العام (سوريا)")
+        total_summary = all_boards.groupby('الحالة')['العدد'].sum().reset_index()
+        t_col1, t_col2, t_col3 = st.columns(3)
+        
+        m_val = total_summary[total_summary['الحالة']=='متاح']['العدد'].sum()
+        h_val = total_summary[total_summary['الحالة']=='محجوز']['العدد'].sum()
+        
+        t_col1.metric("✅ إجمالي المتاح", f"{int(m_val)}")
+        t_col2.metric("🔒 إجمالي المحجوز", f"{int(h_val)}")
+        t_col3.metric("📊 مجموع اللوحات", f"{int(m_val + h_val)}")
+
+        st.divider()
+
+        # --- تفاصيل المحافظات ---
+        for city in sorted(all_boards['المحافظة'].unique()):
+            with st.expander(f"📍 محافظة {city}", expanded=False):
+                city_df = all_boards[all_boards['المحافظة'] == city]
+                
+                # إنشاء جدول مقارنة (Pivot Table) يظهر المتاح والمحجوز جنباً إلى جنب
+                pivot_city = city_df.pivot_table(
+                    index=['الشبكة', 'الحجم', 'توصيف العمود'],
+                    columns='الحالة',
+                    values='العدد',
+                    aggfunc='sum',
+                    fill_value=0
+                ).reset_index()
+
+                # ضمان وجود الأعمدة حتى لو كانت الأصفار
+                if 'متاح' not in pivot_city: pivot_city['متاح'] = 0
+                if 'محجوز' not in pivot_city: pivot_city['محجوز'] = 0
+                
+                pivot_city['المجموع'] = pivot_city['متاح'] + pivot_city['محجوز']
+                
+                # عرض الجدول
+                st.table(pivot_city)
+                
+                # ملخص المحافظة الصغير
+                st.write(f"**خلاصة {city}:** متاح ({int(pivot_city['متاح'].sum())}) | محجوز ({int(pivot_city['محجوز'].sum())})")
+
+        # --- أزرار التصدير ---
+        if st.button("🌍 تصدير تقرير المتاح المجمع (Word)"):
+            available_only = all_boards[all_boards['الحالة'] == 'متاح']
+            full_cart = {}
+            for c in available_only['المحافظة'].unique():
+                c_df = available_only[available_only['المحافظة'] == c]
+                full_cart[c] = {net: c_df[c_df['الشبكة']==net].assign(
+                    fee_print=0, fee_ads=0, print_label="تقرير", ads_label="متاح", الموقع=c_df['المحافظة']
+                ) for net in c_df['الشبكة'].unique()}
             
-            # زر التصدير العام
-            if st.button("🌍 توليد ملف التقرير العام لجميع المحافظات"):
-                with st.spinner("جاري تحضير الملف..."):
-                    full_cart = {}
-                    for city in available_df['المحافظة'].unique():
-                        city_df = available_df[available_df['المحافظة'] == city]
-                        full_cart[city] = {net: city_df[city_df['الشبكة']==net].assign(
-                            fee_print=0, fee_ads=0, print_label="متاح", ads_label="تقرير"
-                        ) for net in city_df['الشبكة'].unique()}
-                    
-                    doc_io = export_word("تقرير المتاح العام", full_cart, start_p, end_p)
-                    st.success("✅ تم تجهيز التقرير")
-                    st.download_button("📥 اضغط هنا لتحميل التقرير الكامل", doc_io, "Full_Inventory.docx")
-
-            # عرض المحافظات
-            for city in sorted(available_df['المحافظة'].unique()):
-                with st.expander(f"📍 محافظة {city}"):
-                    city_df = available_df[available_df['المحافظة'] == city]
-                    summary = city_df.groupby(['الشبكة', 'الحجم', 'توصيف العمود']).agg({'العدد': 'sum', 'رقم اللوحة': 'count'}).rename(columns={'رقم اللوحة': 'عدد المواقع'})
-                    st.table(summary)
+            doc_io = export_word("تقرير المتاح المجمع", full_cart, start_p, end_p)
+            st.download_button("📥 تحميل ملف Word", doc_io, "Inventory_Report.docx")
 
 
 
