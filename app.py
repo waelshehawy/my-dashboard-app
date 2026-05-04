@@ -301,8 +301,7 @@ else:
                     if st.button("🔴 تفريغ السلة"):
                         st.session_state.cart = {}
                         st.rerun()
-    except Exception as e: st.error(f"خطأ فني: {e}")
-
+   except Exception as e: st.error(f"خطأ فني: {e}")
 
  # --- Page: Dashboard ---
     elif page == "📊 Dashboard":
