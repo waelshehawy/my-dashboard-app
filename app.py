@@ -391,14 +391,28 @@ else:
 
                 st.divider()
                 # زر لتصدير التقرير كاملاً لكل سوريا
-                if st.button("🌍 تصدير التقرير العام لجميع المحافظات"):
-                    full_cart = {}
-                    for city in available_df['المحافظة'].unique():
-                        city_df = available_df[available_df['المحافظة'] == city]
-                        full_cart[city] = {net: city_df[city_df['الشبكة']==net].assign(fee_print=0, fee_ads=0, print_label="متاح", ads_label="تقرير") for net in city_df['الشبكة'].unique()}
-                    
-                    doc_io = export_word("تقرير المتاح العام", full_cart, start_p, end_p)
-                    st.download_button("📥 تحميل التقرير الكامل", doc_io, "Full_Inventory_Report.docx")
+        # زر لتصدير التقرير كاملاً لكل سوريا
+        if st.button("🌍 توليد ملف التقرير العام لجميع المحافظات"):
+            with st.spinner("جاري تحضير الملف..."):
+                full_cart = {}
+                for city in available_df['المحافظة'].unique():
+                    city_df = available_df[available_df['المحافظة'] == city]
+                    full_cart[city] = {net: city_df[city_df['الشبكة']==net].assign(
+                        fee_print=0, fee_ads=0, print_label="متاح", ads_label="تقرير"
+                    ) for net in city_df['الشبكة'].unique()}
+                
+                # توليد الملف في الذاكرة
+                doc_io = export_word("تقرير المتاح العام", full_cart, start_p, end_p)
+                
+                # إظهار زر التحميل مباشرة بعد التوليد
+                st.success("✅ تم تجهيز التقرير بنجاح")
+                st.download_button(
+                    label="📥 اضغط هنا لتحميل التقرير الكامل (Word)",
+                    data=doc_io,
+                    file_name=f"Full_Inventory_{start_p}_to_{end_p}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
 
 
  # --- Page: Dashboard ---
