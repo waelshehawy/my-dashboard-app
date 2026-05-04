@@ -464,6 +464,52 @@ else:
 
 
 
+    elif page == "⚙️ الإعدادات":
+        st.title("⚙️ إدارة البيانات الأساسية")
+        st.info("من هنا يمكنك إضافة لوحات جديدة، تعديل الأسعار، أو حذف الحجوزات.")
+        
+        tab1, tab2, tab3 = st.tabs(["📍 اللوحات (أعمدة الإنارة)", "💰 الأسعار والمقاسات", "📅 إدارة الحجوزات"])
+        
+        with tab1:
+            st.subheader("إدارة بيانات اللوحات")
+            try:
+                df_all = pd.read_sql("SELECT * FROM [اعمدة انارة]", conn)
+                # محرر بيانات تفاعلي يسمح بالإضافة والحذف والتعديل
+                edited_df = st.data_editor(df_all, num_rows="dynamic", key="edit_all_boards", use_container_width=True)
+                
+                if st.button("💾 حفظ تغييرات اللوحات"):
+                    edited_df.to_sql("اعمدة انارة", conn, if_exists="replace", index=False)
+                    st.success("✅ تم تحديث بيانات اللوحات بنجاح!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"خطأ في تحميل بيانات اللوحات: {e}")
+
+        with tab2:
+            st.subheader("إدارة أجور الرسم والطباعة")
+            try:
+                df_prices = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
+                edited_prices = st.data_editor(df_prices, num_rows="dynamic", key="edit_prices", use_container_width=True)
+                
+                if st.button("💾 حفظ قائمة الأسعار"):
+                    edited_prices.to_sql("اسماء الرسم", conn, if_exists="replace", index=False)
+                    st.success("✅ تم تحديث قائمة الأسعار والمقاسات!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"خطأ في تحميل الأسعار: {e}")
+
+        with tab3:
+            st.subheader("إدارة سجل الحجوزات (حجوزات1)")
+            st.warning("⚠️ انتبه: حذف أو تعديل أي سطر هنا سيغير حالة اللوحات على الخريطة فوراً.")
+            try:
+                df_bookings = pd.read_sql("SELECT * FROM [حجوزات1]", conn)
+                edited_bookings = st.data_editor(df_bookings, num_rows="dynamic", key="edit_bookings", use_container_width=True)
+                
+                if st.button("💾 تحديث سجل الحجوزات"):
+                    edited_bookings.to_sql("حجوزات1", conn, if_exists="replace", index=False)
+                    st.success("✅ تم تحديث السجلات بنجاح!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"خطأ في تحميل الحجوزات: {e}")
 
 
 
