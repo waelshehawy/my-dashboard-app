@@ -49,34 +49,63 @@ def export_word(customer_name, cart_data, start_p, end_p):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     for section in doc.sections: section.top_margin = Cm(4.5) 
     
+    # عنوان العرض
     p_cust = doc.add_paragraph(); p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     
+    # فترة العرض
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم من فترة {start_p} ولغاية {end_p}")
+    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم من فترة ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
 
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph(f"■ محافظة {city}"); apply_rtl(p_city)
         for net, df in networks.items():
             if df.empty: continue
-            for size, group_df in df.groupby('الحجم'):
-                p_size = doc.add_paragraph(f"النوع والقياس: {group_df['توصيف العمود'].iloc[0]} - {size}"); apply_rtl(p_size)
+            
+            # تجميع حسب المقاس والتوصيف لضمان فصل الأجور
+            for (size, desc), group_df in df.groupby(['الحجم', 'توصيف العمود']):
+                p_size = doc.add_paragraph(f"النوع: {desc} | القياس: {size}"); apply_rtl(p_size)
+                
+                # إنشاء الجدول
                 table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
-                hdr = table.rows[0].cells; hdr[0].text = "الموقع"; hdr[1].text = "العدد"
+                hdr = table.rows[0].cells
+                hdr[0].text = f"الشبكة: {net}"
+                hdr[1].text = "العدد"
                 for cell in hdr: apply_rtl(cell)
+
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[0].text, row_cells[1].text = str(row['الموقع']), str(row['العدد'])
+                    row_cells[0].text = str(row['الموقع'])
+                    row_cells[1].text = str(row['العدد'])
                     for cell in row_cells: apply_rtl(cell)
-                
+
+                # --- إضافة تفاصيل الأجور أسفل الجدول ---
                 total_q = pd.to_numeric(group_df['العدد']).sum()
-                f_p, f_a = float(group_df['fee_print'].iloc[0]), float(group_df['fee_ads'].iloc[0])
+                f_p = float(group_df['fee_print'].iloc[0])
+                f_a = float(group_df['fee_ads'].iloc[0])
+                lbl_p = group_df['print_label'].iloc[0]
+                lbl_a = group_df['ads_label'].iloc[0]
+                
+                sum_print = total_q * f_p
+                sum_ads = total_q * f_a
+                total_all = sum_print + sum_ads
+                
                 p_sum = doc.add_paragraph()
-                txt = f"العدد: {int(total_q)} | الإجمالي: {(total_q*f_p)+(total_q*f_a):,.0f}$"
-                p_sum.add_run(txt).bold = True; apply_rtl(p_sum)
+                txt = (f"العدد الإجمالي: {int(total_q)} | "
+                       f"{lbl_p}: {sum_print:,.0f}$ | "
+                       f"{lbl_a}: {sum_ads:,.0f}$ | "
+                       f"الإجمالي: {total_all:,.0f}$")
+                
+                run = p_sum.add_run(txt)
+                run.bold = True
+                run.font.color.rgb = RGBColor(0, 51, 102) # لون أزرق غامق للتمييز
+                apply_rtl(p_sum)
     
-    target = io.BytesIO(); doc.save(target); target.seek(0); return target
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
+    return target
 
 # استمرار الكود في الدفعة الثانية...
 # --- 4. Main App Logic (Part 2) ---
