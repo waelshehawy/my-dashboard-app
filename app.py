@@ -451,8 +451,9 @@ else:
                 doc.add_paragraph("---")
 
             # المجموع النهائي العام
-            doc.add_heading("المجموع النهائي العام", level=1)
-            apply_rtl(h_final)
+            h_final = doc.add_heading("المجموع النهائي العام", level=1)
+            apply_rtl(h_final)  # <--- هذا هو السطر الناقص لضبط المحاذاة لليمين
+            
             p_final = doc.add_paragraph(f"إجمالي اللوحات: {grand_total_all} | المحجوز: {grand_total_booked} | المتاح: {grand_total_all - grand_total_booked}")
             apply_rtl(p_final)
 
@@ -460,6 +461,7 @@ else:
             doc.save(target)
             target.seek(0)
             st.download_button("📥 تحميل التقرير المنسق (RTL)", target, "Detailed_RTL_Report.docx")
+
 
 
 
