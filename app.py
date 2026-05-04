@@ -388,23 +388,55 @@ else:
 
         # 5. تصدير Word (إصلاح القيم الصفرية وتكرار الملاحظة)
         # زر التصدير (Excel هو الأفضل للتقارير المجمعة لأنه يحافظ على شكل الجداول)
-        if st.button("📊 تصدير الإحصائيات (Excel)"):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # 1. تصدير ملخص المحافظات
-                summary_stats.to_excel(writer, sheet_name='ملخص المحافظات')
+        # --- خيارات التصدير المحدثة ---
+        st.write("---")
+        ex_col1, ex_col2 = st.columns(2)
+
+        with ex_col1:
+            if st.button("📊 تصدير الإحصائيات (Excel)"):
+                try:
+                    output = io.BytesIO()
+                    # استخدام المحرك الافتراضي لضمان عدم حدوث خطأ ModuleNotFound
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        summary_stats.to_excel(writer, sheet_name='ملخص المحافظات')
+                        # إضافة تفاصيل إضافية في ورقة ثانية
+                        all_boards.to_excel(writer, sheet_name='تفاصيل اللوحات')
+                    
+                    st.download_button(
+                        label="📥 تحميل ملف Excel",
+                        data=output.getvalue(),
+                        file_name=f"Inventory_Report_{start_p}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                except Exception as e:
+                    st.error(f"خطأ في تصدير إكسل: {e}. يرجى التأكد من تثبيت openpyxl")
+
+        with ex_col2:
+            if st.button("📄 تصدير الإحصائيات (Word)"):
+                from docx import Document
+                doc = Document()
+                doc.add_heading(f"تقرير إحصائيات المتاح - {start_p}", 0)
                 
-                # 2. تصدير التفاصيل في ورقة منفصلة
-                all_boards.to_excel(writer, sheet_name='تفاصيل كافة اللوحات')
+                # إضافة جدول ملخص المحافظات الفعلي
+                doc.add_heading("ملخص المحافظات (تجميعي)", level=1)
+                table = doc.add_table(rows=summary_stats.shape[0] + 1, cols=summary_stats.shape[1] + 1)
+                table.style = 'Table Grid'
                 
-                # تنسيق الملف (RTL) يتم تلقائياً في اكسل عند فتحه بالعربية
-            
-            st.download_button(
-                label="📥 تحميل تقرير الإحصائيات (Excel)",
-                data=output.getvalue(),
-                file_name=f"Inventory_Stats_{start_p}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                # تعبئة العناوين
+                table.cell(0, 0).text = "المحافظة"
+                for j, col_name in enumerate(summary_stats.columns):
+                    table.cell(0, j+1).text = str(col_name)
+                
+                # تعبئة البيانات
+                for i, (idx, row) in enumerate(summary_stats.iterrows()):
+                    table.cell(i+1, 0).text = str(idx)
+                    for j, value in enumerate(row):
+                        table.cell(i+1, j+1).text = str(value)
+                
+                target = io.BytesIO()
+                doc.save(target)
+                target.seek(0)
+                st.download_button("📥 تحميل ملف Word", target, "Inventory_Summary.docx")
 
         # إذا كنت لا تزال تفضل Word، سننشئ دالة بسيطة جداً لا تتبع نموذج العرض:
         if st.button("📄 تصدير الإحصائيات (Word مبسط)"):
