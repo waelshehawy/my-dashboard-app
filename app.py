@@ -344,82 +344,78 @@ else:
 
 
     elif page == "📋 تقرير المتاح المجمع":
-        st.title("📋 إحصائيات الإشغال والتوفر (مجمع)")
+        st.title("📋 تقرير إحصائيات الإشغال والمتاح")
         
-        # 1. إعدادات الفترة
+        # 1. جلب البيانات الأساسية
         df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
         c1, c2, c3 = st.columns(3)
         with c1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist(), key="rep_s")
         with c2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1, key="rep_e")
         with c3: b_year = st.number_input("العام:", value=2026, key="rep_y")
 
-        # 2. جلب البيانات
+        # 2. منطق الحسابات
         s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
         e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
         target_period_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
 
-        # جلب المحجوزات
-        booked_query = f"SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1] WHERE [العام]={b_year} AND [فترة الحجز] IN ({str(target_period_names)[1:-1]})"
-        booked_ids = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
-
-        # جلب كل اللوحات
+        # جلب كافة اللوحات وكافة الحجوزات
         all_boards = pd.read_sql("SELECT [رقم اللوحة], [المحافظة], [الشبكة], [الحجم], [توصيف العمود], [العدد] FROM [اعمدة انارة]", conn)
-        
-        # إضافة حالة اللوحة (متاح/محجوز) بناءً على المقارنة
-        all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if str(x) in map(str, booked_ids) else 'متاح')
+        booked_query = f"SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1] WHERE [العام]={b_year} AND [فترة الحجز] IN ({str(target_period_names)[1:-1]})"
+        booked_list = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
 
-        # --- الإحصائية العامة للشركة ---
-        st.subheader("🌍 ملخص الإشغال العام (سوريا)")
-        total_summary = all_boards.groupby('الحالة')['العدد'].sum().reset_index()
-        t_col1, t_col2, t_col3 = st.columns(3)
+        # إضافة حالة الحجز لكل لوحة (1 إذا محجوزة، 0 إذا متاحة)
+        all_boards['حالة الحجز'] = all_boards['رقم اللوحة'].apply(lambda x: 1 if x in booked_list else 0)
         
-        m_val = total_summary[total_summary['الحالة']=='متاح']['العدد'].sum()
-        h_val = total_summary[total_summary['الحالة']=='محجوز']['العدد'].sum()
+        # 3. بناء الجدول التجميعي لكل المحافظات (سطر لكل محافظة)
+        st.subheader("📊 ملخص المحافظات (تجميعي)")
         
-        t_col1.metric("✅ إجمالي المتاح", f"{int(m_val)}")
-        t_col2.metric("🔒 إجمالي المحجوز", f"{int(h_val)}")
-        t_col3.metric("📊 مجموع اللوحات", f"{int(m_val + h_val)}")
+        # حساب الإحصائيات
+        stats = all_boards.groupby('المحافظة').agg(
+            العدد_الكلي=('رقم اللوحة', 'count'),
+            المحجوز=('حالة الحجز', 'sum')
+        )
+        stats['المتاح'] = stats['العدد_الكلي'] - stats['المحجوز']
+        
+        # عرض جدول المحافظات بشكل أنيق
+        st.table(stats[['العدد_الكلي', 'المحجوز', 'المتاح']])
 
+        # 4. المجموع النهائي (كافة سوريا)
         st.divider()
+        total_all = stats['العدد_الكلي'].sum()
+        total_booked = stats['المحجوز'].sum()
+        total_avail = stats['المتاح'].sum()
+        
+        st.subheader("🌍 الإجمالي العام (سوريا)")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("العدد الكلي للوحات", f"{total_all}")
+        c2.metric("إجمالي المحجوز", f"{total_booked}", delta=-int(total_booked), delta_color="inverse")
+        c3.metric("إجمالي المتاح حالياً", f"{total_avail}", delta=int(total_avail))
 
-        # --- تفاصيل المحافظات ---
-        for city in sorted(all_boards['المحافظة'].unique()):
-            with st.expander(f"📍 محافظة {city}", expanded=False):
+        # 5. تفاصيل المحافظات (اختياري - للتدقيق)
+        with st.expander("🔍 عرض التفاصيل حسب الشبكة والمقاس"):
+            for city in sorted(all_boards['المحافظة'].unique()):
+                st.write(f"📍 **تفاصيل محافظة {city}:**")
                 city_df = all_boards[all_boards['المحافظة'] == city]
-                
-                # إنشاء جدول مقارنة (Pivot Table) يظهر المتاح والمحجوز جنباً إلى جنب
-                pivot_city = city_df.pivot_table(
-                    index=['الشبكة', 'الحجم', 'توصيف العمود'],
-                    columns='الحالة',
-                    values='العدد',
-                    aggfunc='sum',
-                    fill_value=0
-                ).reset_index()
+                city_summary = city_df.groupby(['الشبكة', 'الحجم', 'توصيف العمود']).agg(
+                    العدد_الكلي=('رقم اللوحة', 'count'),
+                    المحجوز=('حالة الحجز', 'sum')
+                )
+                city_summary['المتاح'] = city_summary['العدد_الكلي'] - city_summary['المحجوز']
+                st.dataframe(city_summary, use_container_width=True)
 
-                # ضمان وجود الأعمدة حتى لو كانت الأصفار
-                if 'متاح' not in pivot_city: pivot_city['متاح'] = 0
-                if 'محجوز' not in pivot_city: pivot_city['محجوز'] = 0
-                
-                pivot_city['المجموع'] = pivot_city['متاح'] + pivot_city['محجوز']
-                
-                # عرض الجدول
-                st.table(pivot_city)
-                
-                # ملخص المحافظة الصغير
-                st.write(f"**خلاصة {city}:** متاح ({int(pivot_city['متاح'].sum())}) | محجوز ({int(pivot_city['محجوز'].sum())})")
-
-        # --- أزرار التصدير ---
-        if st.button("🌍 تصدير تقرير المتاح المجمع (Word)"):
-            available_only = all_boards[all_boards['الحالة'] == 'متاح']
+        # 6. زر التصدير للتقرير المجمع
+        if st.button("🌍 تصدير التقرير المتاح لـ Word"):
+            available_only = all_boards[all_boards['حالة الحجز'] == 0]
             full_cart = {}
-            for c in available_only['المحافظة'].unique():
-                c_df = available_only[available_only['المحافظة'] == c]
-                full_cart[c] = {net: c_df[c_df['الشبكة']==net].assign(
-                    fee_print=0, fee_ads=0, print_label="تقرير", ads_label="متاح", الموقع=c_df['المحافظة']
+            for city in available_only['المحافظة'].unique():
+                c_df = available_only[available_only['المحافظة'] == city]
+                full_cart[city] = {net: c_df[c_df['الشبكة']==net].assign(
+                    fee_print=0, fee_ads=0, print_label="متاح", ads_label="تقرير", الموقع=c_df['المحافظة']
                 ) for net in c_df['الشبكة'].unique()}
             
-            doc_io = export_word("تقرير المتاح المجمع", full_cart, start_p, end_p)
-            st.download_button("📥 تحميل ملف Word", doc_io, "Inventory_Report.docx")
+            doc_io = export_word("تقرير المتاح الإحصائي", full_cart, start_p, end_p)
+            st.download_button("📥 تحميل التقرير", doc_io, "Statistical_Report.docx")
+
 
 
 
