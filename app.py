@@ -344,7 +344,7 @@ else:
 
 
     elif page == "📋 تقرير المتاح المجمع":
-        st.title("📋 تقرير إحصائيات المتاح والإشغال")
+        st.title("📋 تقرير المتاح المفصل حسب المقاس")
         
         # 1. إعدادات الفترات
         df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
@@ -353,107 +353,87 @@ else:
         with c2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1, key="rep_e")
         with c3: b_year = st.number_input("العام:", value=2026, key="rep_y")
 
-        # 2. منطق الحسابات (إصلاح قيم المتاح)
-        s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
-        e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
+        # 2. منطق الحسابات
+        s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc)
+        e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc)
         target_period_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
 
-        all_boards = pd.read_sql("SELECT [رقم اللوحة], [اسم العمود] as الموقع, [المحافظة], [الشبكة], [الحجم], [توصيف العمود], [العدد] FROM [اعمدة انارة]", conn)
+        all_boards = pd.read_sql("SELECT [رقم اللوحة], [المحافظة], [الشبكة], [الحجم], [العدد] FROM [اعمدة انارة]", conn)
         booked_query = f"SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1] WHERE [العام]={b_year} AND [فترة الحجز] IN ({str(target_period_names)[1:-1]})"
         booked_list = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
 
-        # تحديد الحالة (1 محجوز، 0 متاح)
         all_boards['is_booked'] = all_boards['رقم اللوحة'].apply(lambda x: 1 if x in booked_list else 0)
 
-        # 3. جدول المحافظات التجميعي (4 أعمدة)
-        st.subheader("📊 ملخص إشغال المحافظات")
-        summary_stats = all_boards.groupby('المحافظة').agg(
-            العدد_الكلي=('رقم اللوحة', 'count'),
-            المحجوز=('is_booked', 'sum')
-        )
-        summary_stats['المتاح'] = summary_stats['العدد_الكلي'] - summary_stats['المحجوز']
-        st.table(summary_stats[['العدد_الكلي', 'المحجوز', 'المتاح']])
+        # 3. عرض التقارير لكل محافظة على حدة
+        grand_total_all = 0
+        grand_total_booked = 0
 
-        # 4. تفاصيل المحافظات (إضافة عمود الحجم)
         for city in sorted(all_boards['المحافظة'].unique()):
-            with st.expander(f"📍 تفاصيل محافظة {city}"):
-                city_df = all_boards[all_boards['المحافظة'] == city].copy()
-                # تجميع التفاصيل ليشمل الحجم
-                city_detail = city_df.groupby(['الشبكة', 'الحجم', 'توصيف العمود']).agg(
-                    العدد_الكلي=('رقم اللوحة', 'count'),
-                    المحجوز=('is_booked', 'sum')
-                )
-                city_detail['المتاح'] = city_detail['العدد_الكلي'] - city_detail['المحجوز']
-                st.dataframe(city_detail[['العدد_الكلي', 'المحجوز', 'المتاح']], use_container_width=True)
+            st.markdown(f"### 📍 محافظة {city}")
+            city_df = all_boards[all_boards['المحافظة'] == city]
+            
+            # --- جدول الإحصائيات حسب الحجم داخل المحافظة ---
+            size_stats = city_df.groupby('الحجم').agg(
+                العدد_الكلي=('رقم اللوحة', 'count'),
+                المحجوز=('is_booked', 'sum')
+            )
+            size_stats['المتاح'] = size_stats['العدد_الكلي'] - size_stats['المحجوز']
+            
+            st.table(size_stats) # عرض جدول المقاسات للمحافظة
+            
+            # حساب مجموع المحافظة للعرض السريع
+            city_all = size_stats['العدد_الكلي'].sum()
+            city_booked = size_stats['المحجوز'].sum()
+            city_avail = size_stats['المتاح'].sum()
+            
+            st.info(f" مجموع محافظة {city} ⮕ الكلي: {city_all} | المحجوز: {city_booked} | المتاح: {city_avail}")
+            
+            # تجميع للمجموع النهائي العام
+            grand_total_all += city_all
+            grand_total_booked += city_booked
+            st.write("---")
 
-        # 5. تصدير Word (إصلاح القيم الصفرية وتكرار الملاحظة)
-        # زر التصدير (Excel هو الأفضل للتقارير المجمعة لأنه يحافظ على شكل الجداول)
-        # --- خيارات التصدير المحدثة ---
-        st.write("---")
-        ex_col1, ex_col2 = st.columns(2)
+        # 4. المجموع النهائي العام لكافة المحافظات
+        st.subheader("🌍 المجموع النهائي العام (كافة القطر)")
+        final_avail = grand_total_all - grand_total_booked
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("إجمالي اللوحات", grand_total_all)
+        c2.metric("إجمالي المحجوز", grand_total_booked)
+        c3.metric("إجمالي المتاح", final_avail)
 
-        with ex_col1:
-            if st.button("📊 تصدير الإحصائيات (Excel)"):
-                try:
-                    output = io.BytesIO()
-                    # استخدام المحرك الافتراضي لضمان عدم حدوث خطأ ModuleNotFound
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        summary_stats.to_excel(writer, sheet_name='ملخص المحافظات')
-                        # إضافة تفاصيل إضافية في ورقة ثانية
-                        all_boards.to_excel(writer, sheet_name='تفاصيل اللوحات')
-                    
-                    st.download_button(
-                        label="📥 تحميل ملف Excel",
-                        data=output.getvalue(),
-                        file_name=f"Inventory_Report_{start_p}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                except Exception as e:
-                    st.error(f"خطأ في تصدير إكسل: {e}. يرجى التأكد من تثبيت openpyxl")
-
-        with ex_col2:
-            if st.button("📄 تصدير الإحصائيات (Word)"):
-                from docx import Document
-                doc = Document()
-                doc.add_heading(f"تقرير إحصائيات المتاح - {start_p}", 0)
-                
-                # إضافة جدول ملخص المحافظات الفعلي
-                doc.add_heading("ملخص المحافظات (تجميعي)", level=1)
-                table = doc.add_table(rows=summary_stats.shape[0] + 1, cols=summary_stats.shape[1] + 1)
-                table.style = 'Table Grid'
-                
-                # تعبئة العناوين
-                table.cell(0, 0).text = "المحافظة"
-                for j, col_name in enumerate(summary_stats.columns):
-                    table.cell(0, j+1).text = str(col_name)
-                
-                # تعبئة البيانات
-                for i, (idx, row) in enumerate(summary_stats.iterrows()):
-                    table.cell(i+1, 0).text = str(idx)
-                    for j, value in enumerate(row):
-                        table.cell(i+1, j+1).text = str(value)
-                
-                target = io.BytesIO()
-                doc.save(target)
-                target.seek(0)
-                st.download_button("📥 تحميل ملف Word", target, "Inventory_Summary.docx")
-
-        # إذا كنت لا تزال تفضل Word، سننشئ دالة بسيطة جداً لا تتبع نموذج العرض:
-        if st.button("📄 تصدير الإحصائيات (Word مبسط)"):
+        # 5. زر التصدير لملف Word (يتبع نفس الترتيب)
+        if st.button("📄 تصدير هذا التقرير التفصيلي لـ Word"):
             from docx import Document
-            simple_doc = Document()
-            simple_doc.add_heading(f"تقرير إحصائيات المتاح - فترة {start_p} إلى {end_p}", 0)
+            doc = Document()
+            doc.add_heading(f"تقرير الإشغال التفصيلي - {start_p}", 0)
             
-            # إضافة جدول ملخص المحافظات
-            simple_doc.add_heading("ملخص المحافظات", level=1)
-            t = simple_doc.add_table(summary_stats.shape[0]+1, summary_stats.shape[1]+1)
-            # (كود سريع لملء الجدول ببيانات summary_stats)
-            # ... 
-            
+            for city in sorted(all_boards['المحافظة'].unique()):
+                doc.add_heading(f"محافظة {city}", level=1)
+                city_df = all_boards[all_boards['المحافظة'] == city]
+                size_stats = city_df.groupby('الحجم').agg(العدد_الكلي=('رقم اللوحة', 'count'), المحجوز=('is_booked', 'sum'))
+                size_stats['المتاح'] = size_stats['العدد_الكلي'] - size_stats['المحجوز']
+                
+                # إنشاء جدول الوورد لكل محافظة
+                table = doc.add_table(rows=size_stats.shape[0]+1, cols=4)
+                table.style = 'Table Grid'
+                hdr_cells = table.rows[0].cells
+                hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = "الحجم", "الكلي", "المحجوز", "المتاح"
+                
+                for i, (idx, row) in enumerate(size_stats.iterrows()):
+                    row_cells = table.rows[i+1].cells
+                    row_cells[0].text = str(idx)
+                    row_cells[1].text = str(row['العدد_الكلي'])
+                    row_cells[2].text = str(row['المحجوز'])
+                    row_cells[3].text = str(row['المتاح'])
+                
+                doc.add_paragraph(f"إجمالي المحافظة: {size_stats['العدد_الكلي'].sum()} موقع")
+
             target = io.BytesIO()
-            simple_doc.save(target)
+            doc.save(target)
             target.seek(0)
-            st.download_button("📥 تحميل التقرير المبسط", target, "Simple_Report.docx")
+            st.download_button("📥 تحميل التقرير التفصيلي", target, "Detailed_Report.docx")
+
 
 
 
