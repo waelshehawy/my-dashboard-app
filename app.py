@@ -49,11 +49,12 @@ def export_word(customer_name, cart_data, start_p, end_p):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     for section in doc.sections: section.top_margin = Cm(4.5) 
     
-    # عنوان العرض
+    # لون الموف الخاص باللوجو (RGB: 102, 0, 153) - يمكنك تعديله لدرجة أدق إذا أردت
+    PURPLE_COLOR = "660099" 
+
     p_cust = doc.add_paragraph(); p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     
-    # فترة العرض
     p_stat = doc.add_paragraph()
     p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم من فترة ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
@@ -63,13 +64,22 @@ def export_word(customer_name, cart_data, start_p, end_p):
         for net, df in networks.items():
             if df.empty: continue
             
-            # تجميع حسب المقاس والتوصيف لضمان فصل الأجور
             for (size, desc), group_df in df.groupby(['الحجم', 'توصيف العمود']):
                 p_size = doc.add_paragraph(f"النوع: {desc} | القياس: {size}"); apply_rtl(p_size)
                 
-                # إنشاء الجدول
                 table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
                 hdr = table.rows[0].cells
+                
+                # --- تلوين صف العنوان باللون الموف ---
+                for cell in hdr:
+                    shading_elm = OxmlElement('w:shd')
+                    shading_elm.set(qn('w:fill'), PURPLE_COLOR)
+                    cell._element.get_or_add_tcPr().append(shading_elm)
+                    # تغيير لون الخط للأبيض ليتناسب مع الخلفية الموف
+                    p = cell.paragraphs[0]
+                    run = p.add_run()
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+                
                 hdr[0].text = f"الشبكة: {net}"
                 hdr[1].text = "العدد"
                 for cell in hdr: apply_rtl(cell)
@@ -80,7 +90,7 @@ def export_word(customer_name, cart_data, start_p, end_p):
                     row_cells[1].text = str(row['العدد'])
                     for cell in row_cells: apply_rtl(cell)
 
-                # --- إضافة تفاصيل الأجور أسفل الجدول ---
+                # --- حساب الأجور المحدثة (سكوتش / عادي) ---
                 total_q = pd.to_numeric(group_df['العدد']).sum()
                 f_p = float(group_df['fee_print'].iloc[0])
                 f_a = float(group_df['fee_ads'].iloc[0])
@@ -92,20 +102,19 @@ def export_word(customer_name, cart_data, start_p, end_p):
                 total_all = sum_print + sum_ads
                 
                 p_sum = doc.add_paragraph()
-                txt = (f"العدد الإجمالي: {int(total_q)} | "
-                       f"{lbl_p}: {sum_print:,.0f}$ | "
-                       f"{lbl_a}: {sum_ads:,.0f}$ | "
-                       f"الإجمالي: {total_all:,.0f}$")
+                txt = (f"العدد: {int(total_q)} | {lbl_p}: {sum_print:,.0f}$ | "
+                       f"{lbl_a}: {sum_ads:,.0f}$ | الإجمالي: {total_all:,.0f}$")
                 
                 run = p_sum.add_run(txt)
                 run.bold = True
-                run.font.color.rgb = RGBColor(0, 51, 102) # لون أزرق غامق للتمييز
+                run.font.color.rgb = RGBColor(102, 0, 153) # لون موف للنص الإجمالي
                 apply_rtl(p_sum)
     
     target = io.BytesIO()
     doc.save(target)
     target.seek(0)
     return target
+
 
 # استمرار الكود في الدفعة الثانية...
 # --- 4. Main App Logic (Part 2) ---
