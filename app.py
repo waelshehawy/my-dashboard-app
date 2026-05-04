@@ -179,7 +179,7 @@ if not st.session_state.auth:
     st.title("🔒 تسجيل الدخول")
     u, p = st.text_input("User"), st.text_input("Pass", type="password")
     if st.button("Login"):
-        if u == "admin" and p == "preview2026": st.session_state.auth = True; st.rerun()
+        if u == "a" and p == "3900": st.session_state.auth = True; st.rerun()
 else:
     conn = get_connection()
     if 'cart' not in st.session_state: st.session_state.cart = {}
