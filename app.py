@@ -186,7 +186,7 @@ else:
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation"])
+        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير المتاح المجمع"])
         if st.button("تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
         # --- Page: Quotation (نسخة مستقرة وشاملة لمنطق الإتاحة والأجور) ---
@@ -343,6 +343,62 @@ else:
             st.error(f"خطأ فني: {e}")
 
 
+    elif page == "📋 تقرير المتاح المجمع":
+        st.title("📋 تقرير المواقع المتاحة (مجمع)")
+        
+        # 1. إعدادات التقرير
+        df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist(), key="rep_s")
+        with c2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1, key="rep_e")
+        with c3: b_year = st.number_input("العام:", value=2026, key="rep_y")
+
+        # 2. منطق استخراج المتاح
+        s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
+        e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
+        target_period_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
+
+        if st.button("🔍 توليد التقرير المجمع"):
+            # جلب كل اللوحات المحجوزة في هذا النطاق الزمني
+            booked_query = f"SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1] WHERE [العام]={b_year} AND [فترة الحجز] IN ({str(target_period_names)[1:-1]})"
+            booked_boards = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
+
+            # جلب كل اللوحات من قاعدة البيانات
+            all_boards = pd.read_sql("SELECT [رقم اللوحة], [اسم العمود] as الموقع, [المحافظة], [الشبكة], [الحجم], [توصيف العمود], [العدد] FROM [اعمدة انارة]", conn)
+            
+            # فلترة المتاح فقط
+            available_df = all_boards[~all_boards['رقم اللوحة'].isin(booked_boards)]
+
+            if available_df.empty:
+                st.warning("لا توجد مواقع متاحة في هذا النطاق الزمني.")
+            else:
+                # 3. عرض النتائج مجمعة حسب المحافظة ثم الشبكة ثم المقاس
+                for city in sorted(available_df['المحافظة'].unique()):
+                    with st.expander(f"📍 محافظة {city}", expanded=True):
+                        city_df = available_df[available_df['المحافظة'] == city]
+                        
+                        # تجميع مجمع (Pivot) للعرض السريع
+                        summary = city_df.groupby(['الشبكة', 'الحجم', 'توصيف العمود']).agg({'العدد': 'sum', 'الموقع': 'count'}).rename(columns={'الموقع': 'عدد المواقع'})
+                        st.table(summary)
+                        
+                        # زر لتصدير متاح هذه المحافظة فقط لـ Word (اختياري)
+                        if st.button(f"🚀 تصدير متاح {city} (Word)", key=f"exp_{city}"):
+                            # تحويل البيانات لشكل متوافق مع دالة export_word
+                            temp_cart = {city: {net: city_df[city_df['الشبكة']==net].assign(fee_print=0, fee_ads=0, print_label="متاح", ads_label="تقرير") for net in city_df['الشبكة'].unique()}}
+                            doc_io = export_word("تقرير مجمع", temp_cart, start_p, end_p)
+                            st.download_button(f"📥 تحميل ملف {city}", doc_io, f"Available_{city}.docx")
+
+                st.divider()
+                # زر لتصدير التقرير كاملاً لكل سوريا
+                if st.button("🌍 تصدير التقرير العام لجميع المحافظات"):
+                    full_cart = {}
+                    for city in available_df['المحافظة'].unique():
+                        city_df = available_df[available_df['المحافظة'] == city]
+                        full_cart[city] = {net: city_df[city_df['الشبكة']==net].assign(fee_print=0, fee_ads=0, print_label="متاح", ads_label="تقرير") for net in city_df['الشبكة'].unique()}
+                    
+                    doc_io = export_word("تقرير المتاح العام", full_cart, start_p, end_p)
+                    st.download_button("📥 تحميل التقرير الكامل", doc_io, "Full_Inventory_Report.docx")
 
 
  # --- Page: Dashboard ---
