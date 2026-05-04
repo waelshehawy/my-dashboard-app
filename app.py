@@ -974,7 +974,7 @@ else:
 
 
 
-    elif page == "⚙️ الإعدادات":
+        elif page == "⚙️ الإعدادات":
         st.title("⚙️ إدارة البيانات الأساسية")
         
         tab1, tab2, tab3 = st.tabs(["📍 اللوحات (أعمدة الإنارة)", "💰 الأسعار والمقاسات", "📅 إدارة الحجوزات"])
@@ -1007,6 +1007,7 @@ else:
             if st.button("💾 تحديث سجل الحجوزات"):
                 edited_bookings.to_sql("حجوزات1", conn, if_exists="replace", index=False)
                 st.success("تم تحديث السجلات بنجاح!")
+
 
 
 
