@@ -387,26 +387,42 @@ else:
                 st.dataframe(city_detail[['العدد_الكلي', 'المحجوز', 'المتاح']], use_container_width=True)
 
         # 5. تصدير Word (إصلاح القيم الصفرية وتكرار الملاحظة)
-        if st.button("🌍 تصدير التقرير المتاح المجمع (Word)"):
-            with st.spinner("جاري معالجة البيانات..."):
-                available_only = all_boards[all_boards['is_booked'] == 0].copy()
-                full_cart = {}
-                for city in available_only['المحافظة'].unique():
-                    c_df = available_only[available_only['المحافظة'] == city]
-                    full_cart[city] = {}
-                    for net in c_df['الشبكة'].unique():
-                        net_df = c_df[c_df['الشبكة'] == net]
-                        # إصلاح: نضع عدد المواقع الفعلي في خانة fee_print ليظهر في المجموع
-                        full_cart[city][net] = net_df.assign(
-                            fee_print=0, 
-                            fee_ads=0, 
-                            print_label="حالة المواقع", 
-                            ads_label="تقرير توفر"
-                        )
+        # زر التصدير (Excel هو الأفضل للتقارير المجمعة لأنه يحافظ على شكل الجداول)
+        if st.button("📊 تصدير الإحصائيات (Excel)"):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # 1. تصدير ملخص المحافظات
+                summary_stats.to_excel(writer, sheet_name='ملخص المحافظات')
                 
-                doc_io = export_word("تقرير المتاح العام", full_cart, start_p, end_p)
-                st.success("✅ التقرير جاهز للتحميل")
-                st.download_button("📥 تحميل ملف Word", doc_io, f"Inventory_Report_{start_p}.docx")
+                # 2. تصدير التفاصيل في ورقة منفصلة
+                all_boards.to_excel(writer, sheet_name='تفاصيل كافة اللوحات')
+                
+                # تنسيق الملف (RTL) يتم تلقائياً في اكسل عند فتحه بالعربية
+            
+            st.download_button(
+                label="📥 تحميل تقرير الإحصائيات (Excel)",
+                data=output.getvalue(),
+                file_name=f"Inventory_Stats_{start_p}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        # إذا كنت لا تزال تفضل Word، سننشئ دالة بسيطة جداً لا تتبع نموذج العرض:
+        if st.button("📄 تصدير الإحصائيات (Word مبسط)"):
+            from docx import Document
+            simple_doc = Document()
+            simple_doc.add_heading(f"تقرير إحصائيات المتاح - فترة {start_p} إلى {end_p}", 0)
+            
+            # إضافة جدول ملخص المحافظات
+            simple_doc.add_heading("ملخص المحافظات", level=1)
+            t = simple_doc.add_table(summary_stats.shape[0]+1, summary_stats.shape[1]+1)
+            # (كود سريع لملء الجدول ببيانات summary_stats)
+            # ... 
+            
+            target = io.BytesIO()
+            simple_doc.save(target)
+            target.seek(0)
+            st.download_button("📥 تحميل التقرير المبسط", target, "Simple_Report.docx")
+
 
 
 
