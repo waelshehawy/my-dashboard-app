@@ -354,8 +354,10 @@ else:
         with c3: b_year = st.number_input("العام:", value=2026, key="rep_y")
 
         # 2. منطق الحسابات
-        s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc)
-        e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc)
+        s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
+
+        # السطر الصحيح لـ e_no
+        e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
         target_period_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
 
         all_boards = pd.read_sql("SELECT [رقم اللوحة], [المحافظة], [الشبكة], [الحجم], [العدد] FROM [اعمدة انارة]", conn)
