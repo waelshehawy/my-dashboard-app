@@ -125,11 +125,11 @@ else:
         page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation"])
         if st.button("تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
-    # --- Page: Quotation (المستعادة بالكامل مع الإضافات) ---
+        # --- Page: Quotation (نسخة مستقرة وشاملة لمنطق الإتاحة والأجور) ---
     if page == "📄 Quotation":
         st.title("📄 بناء عرض سعر وتثبيت حجز")
         try:
-            # جلب البيانات الأساسية
+            # 1. جلب البيانات الأساسية من قاعدة البيانات
             draw_df = pd.read_sql("SELECT * FROM [اسماء الرسم]", conn)
             df_periods = pd.read_sql("SELECT [no], [namee] FROM [الفترة] ORDER BY [no]", conn)
             sizes = draw_df['الحجم'].unique().tolist()
@@ -141,7 +141,19 @@ else:
             with c2: print_type = st.radio("نوع الطباعة:", ["عادي", "سكوتش"], horizontal=True)
             with c3: b_year = st.number_input("العام:", value=2026)
 
-            # --- استعادة حساب الأجور التفصيلي ---
+            # 2. تحديد الفترات الزمنية (لفحص الإتاحة)
+            st.write("---")
+            st.subheader("🗓️ تحديد فترة الحجز المطلوب")
+            cp1, cp2 = st.columns(2)
+            with cp1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist())
+            with cp2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1)
+
+            # استخراج أرقام الفترات المستهدفة
+            s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
+            e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
+            target_period_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
+
+            # 3. حساب الأجور (طباعة وعرض)
             subset = draw_df[draw_df['الحجم'] == sel_size]
             f_print, f_ads = 0.0, 0.0
             for _, row in subset.iterrows():
@@ -153,26 +165,34 @@ else:
                     if "طباعة" in name and "عادي" not in name: f_print = val
                     elif "عرض" in name and "عادي" not in name: f_ads = val
 
-            p_label = f"أجور طباعة وتركيب {'عادي' if print_type=='عادي' else ''}"
-            a_label = f"أجور عرض {'عادي' if print_type=='عادي' else ''}"
+            p_label = f"أجور طباعة وتركيب {'عادي' if print_type=='عادي' else 'سكوتش'}"
+            a_label = f"أجور عرض {'عادي' if print_type=='عادي' else 'سكوتش'}"
             st.info(f"💰 {p_label}: {f_print}$ | {a_label}: {f_ads}$")
 
-            # --- الفلترة المتقدمة (المحافظة + التوصيف) ---
+            # 4. فلترة المواقع المتاحة فقط (التي ليست محجوزة في الفترات المختارة)
             city_l = pd.read_sql("SELECT DISTINCT المحافظة FROM [اعمدة انارة]", conn)['المحافظة'].tolist()
             sel_city = st.selectbox("المحافظة:", city_l)
             
             type_l = pd.read_sql(f"SELECT DISTINCT [توصيف العمود] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}'", conn)['توصيف العمود'].tolist()
             sel_types = st.multiselect("توصيف المواقع:", type_l)
 
-            query = f"SELECT [رقم اللوحة], [اسم العمود] as الموقع, [العدد], [الشبكة], [توصيف العمود] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'"
+            # استعلام لجلب اللوحات المحجوزة في هذه الفترة
+            booked_boards_query = f"SELECT DISTINCT [رقم اللوحة] FROM [حجوزات1] WHERE [العام]={b_year} AND [فترة الحجز] IN ({str(target_period_names)[1:-1]})"
+            booked_boards = pd.read_sql(booked_boards_query, conn)['رقم اللوحة'].tolist()
+
+            # استعلام جلب المواقع مع استثناء المحجوز
+            main_query = f"SELECT [رقم اللوحة], [اسم العمود] as الموقع, [العدد], [الشبكة], [توصيف العمود] FROM [اعمدة انارة] WHERE المحافظة='{sel_city}' AND [الحجم]='{sel_size}'"
+            if booked_boards:
+                main_query += f" AND [رقم اللوحة] NOT IN ({str(booked_boards)[1:-1]})"
             if sel_types:
-                query += f" AND [توصيف العمود] IN ({str(sel_types)[1:-1]})"
+                main_query += f" AND [توصيف العمود] IN ({str(sel_types)[1:-1]})"
             
-            raw = pd.read_sql(query, conn)
+            raw = pd.read_sql(main_query, conn)
             
             if not raw.empty:
-                nets = st.multiselect("الشبكات:", raw['الشبكة'].unique().tolist())
-                if st.button("➕ إضافة للسلة"):
+                st.success(f"تم العثور على {len(raw)} موقع متاح")
+                nets = st.multiselect("اختر الشبكات للإضافة:", raw['الشبكة'].unique().tolist())
+                if st.button("➕ إضافة المتاحة للسلة"):
                     if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                     for n in nets:
                         st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(**{
@@ -180,62 +200,57 @@ else:
                             'print_label': p_label, 'ads_label': a_label, 'year': b_year
                         })
                     st.rerun()
+            else:
+                st.warning("⚠️ لا توجد مواقع متاحة لهذا المقاس في الفترات المختارة.")
 
-            # --- استعادة منطق إدارة السلة بالكامل (تعديل، حذف، تفريغ) ---
+            # 5. إدارة السلة وتثبيت الحجز
             if st.session_state.cart:
-                st.subheader("🛒 تعديل العرض")
-                
-                # اختيار الفترات قبل التثبيت
-                st.write("---")
-                cp1, cp2 = st.columns(2)
-                with cp1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist())
-                with cp2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1)
-
+                st.divider()
+                st.subheader("🛒 المواقع المختارة في العرض")
                 for c_n in list(st.session_state.cart.keys()):
                     for n_n in list(st.session_state.cart[c_n].keys()):
                         with st.expander(f"📍 {c_n} - {n_n}", expanded=True):
-                            col_table, col_del = st.columns([4, 1])
+                            col_table, col_del = st.columns([5, 1])
                             with col_table:
-                                # محرر البيانات مع الحفاظ على كافة الأعمدة
                                 st.session_state.cart[c_n][n_n] = st.data_editor(st.session_state.cart[c_n][n_n], key=f"ed_{c_n}_{n_n}", num_rows="dynamic")
                             with col_del:
-                                if st.button("🗑️ حذف الشبكة", key=f"btn_{c_n}_{n_n}"):
+                                if st.button("🗑️ حذف", key=f"btn_{c_n}_{n_n}"):
                                     del st.session_state.cart[c_n][n_n]
                                     if not st.session_state.cart[c_n]: del st.session_state.cart[c_n]
                                     st.rerun()
-                
-                # أزرار العمليات النهائية
+
+                # العمليات النهائية
                 st.write("---")
                 b1, b2, b3 = st.columns(3)
                 with b1:
-                    if st.button("🚀 تصدير Word"):
-                        doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
-                        st.download_button("📥 تحميل ملف Word", doc_io, f"Quotation_{cust}.docx")
+                    if st.button("🚀 تصدير ملف Word"):
+                        if not cust: st.error("أدخل اسم الزبون")
+                        else:
+                            doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
+                            st.download_button("📥 تحميل العرض المطبوع", doc_io, f"Quotation_{cust}.docx")
                 with b2:
                     if st.button("✅ تثبيت الحجز النهائي"):
-                        # منطق الحجز التلقائي للفترات
-                        s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
-                        e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
-                        new_recs = []
-                        for city, nets in st.session_state.cart.items():
-                            for net, df in nets.items():
-                                for _, row in df.iterrows():
-                                    for p_num in range(s_no, e_no + 1):
-                                        p_name = df_periods[df_periods['no'] == p_num]['namee'].iloc[0]
-                                        new_recs.append((str(row['رقم اللوحة']), cust, p_name, b_year))
-                        
-                        cursor = conn.cursor()
-                        cursor.executemany("INSERT INTO حجوزات1 ([رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام]) VALUES (?,?,?,?)", new_recs)
-                        conn.commit()
-                        st.success(f"تم تثبيت {len(new_recs)} سجل حجز!")
-                        st.session_state.cart = {}
-                        st.rerun()
+                        if not cust: st.error("أدخل اسم الزبون أولاً")
+                        else:
+                            new_recs = []
+                            for city, nets in st.session_state.cart.items():
+                                for net, df in nets.items():
+                                    for _, row in df.iterrows():
+                                        for p_name in target_period_names:
+                                            new_recs.append((str(row['رقم اللوحة']), cust, p_name, b_year))
+                            
+                            cursor = conn.cursor()
+                            cursor.executemany("INSERT INTO حجوزات1 ([رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام]) VALUES (?,?,?,?)", new_recs)
+                            conn.commit()
+                            st.success(f"تم تثبيت {len(new_recs)} سجل حجز في قاعدة البيانات!")
+                            st.session_state.cart = {}
+                            st.rerun()
                 with b3:
-                    if st.button("🔴 تفريغ السلة بالكامل"):
+                    if st.button("🔴 تفريغ السلة"):
                         st.session_state.cart = {}
                         st.rerun()
 
-        except Exception as e: st.error(f"Error: {e}")
+        except Exception as e: st.error(f"خطأ فني: {e}")
 
 
  # --- Page: Dashboard ---
