@@ -152,16 +152,16 @@ def export_word(customer_name, cart_data, start_p, end_p):
                 run.font.color.rgb = RGBColor(0, 0, 0) # لون موف للنص الإجمالي
                 apply_rtl(p_sum)
                     # --- إضافة ملاحظة الصلاحية في نهاية المستند ---
-                doc.add_paragraph() # سطر فارغ للتباعد
-                p_note = doc.add_paragraph()
-                p_note.alignment = WD_ALIGN_PARAGRAPH.LEFT # لضمان الظهور من اليمين في التنسيق العربي
+    doc.add_paragraph() # سطر فارغ للتباعد
+    p_note = doc.add_paragraph()
+    p_note.alignment = WD_ALIGN_PARAGRAPH.LEFT # لضمان الظهور من اليمين في التنسيق العربي
     
-                run_note = p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية حتى 48 ساعة من تاريخ إرسالها للشركة.")
-                run_note.bold = True
-                run_note.font.size = Pt(12)
-                run_note.font.color.rgb = RGBColor(0, 0, 0) # لون أحمر هادئ للتنبيه
+    run_note = p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية حتى 48 ساعة من تاريخ إرسالها للشركة.")
+    run_note.bold = True
+    run_note.font.size = Pt(12)
+    run_note.font.color.rgb = RGBColor(0, 0, 0) # لون أحمر هادئ للتنبيه
     
-                apply_rtl(p_note) # تطبيق اتجاه النص العربي
+    apply_rtl(p_note) # تطبيق اتجاه النص العربي
     
     # حفظ الملف
 
