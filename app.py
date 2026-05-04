@@ -284,20 +284,28 @@ else:
                             st.download_button("📥 تحميل العرض", doc_io, f"Quotation_{cust}.docx")
 
                 with b2:
-                    if st.button("💾 حفظ كمسودة"):
-                        if not cust:
-                            st.error("أدخل اسم الزبون أولاً")
-                        else:
-                            import json
-                            cart_json = json.dumps({c: {n: df.to_dict() for n, df in nets.items()} 
-                                                 for c, nets in st.session_state.cart.items()}, ensure_ascii=False)
-                            cursor = conn.cursor()
-                            cursor.execute('''CREATE TABLE IF NOT EXISTS offers_history 
-                                (client_name TEXT, offer_date TIMESTAMP, cart_data TEXT, start_p TEXT, end_p TEXT, year INTEGER)''')
-                            cursor.execute("INSERT INTO offers_history VALUES (?, datetime('now'), ?, ?, ?, ?)", 
-                                           (cust, cart_json, start_p, end_p, b_year))
-                            conn.commit()
-                            st.success(f"✅ تم حفظ عرض {cust} في المسودات.")
+    if st.button("💾 حفظ كمسودة"):
+        if not cust:
+            st.error("أدخل اسم الزبون أولاً")
+        else:
+            import json
+            # تحويل السلة لنص JSON
+            cart_json = json.dumps({c: {n: df.to_dict() for n, df in nets.items()} 
+                                 for c, nets in st.session_state.cart.items()}, ensure_ascii=False)
+            
+            cursor = conn.cursor()
+            
+            # التصحيح: تحديد أسماء الأعمدة الستة التي سنرسلها بوضوح
+            query = """INSERT INTO offers_history 
+                       (client_name, cart_json, start_p, end_p, year, status) 
+                       VALUES (?, ?, ?, ?, ?, ?)"""
+            
+            # إرسال 6 قيم مطابقة للأعمدة المحددة أعلاه
+            cursor.execute(query, (cust, cart_json, start_p, end_p, b_year, 'Pending'))
+            
+            conn.commit()
+            st.success(f"✅ تم حفظ عرض {cust} في المسودات بنجاح.")
+
 
                 with b3:
                     if st.button("✅ تثبيت نهائي"):
