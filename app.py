@@ -408,33 +408,58 @@ else:
         if st.button("📄 تصدير هذا التقرير التفصيلي لـ Word"):
             from docx import Document
             doc = Document()
+            # ضبط هوامش الصفحة واتجاهها العام (اختياري)
+            for section in doc.sections:
+                section.header_distance = Cm(1.27)
+
             doc.add_heading(f"تقرير الإشغال التفصيلي - {start_p}", 0)
             
             for city in sorted(all_boards['المحافظة'].unique()):
-                doc.add_heading(f"محافظة {city}", level=1)
+                # عنوان المحافظة محاذى لليمين
+                h = doc.add_heading(f"محافظة {city}", level=1)
+                apply_rtl(h)
+                
                 city_df = all_boards[all_boards['المحافظة'] == city]
                 size_stats = city_df.groupby('الحجم').agg(العدد_الكلي=('رقم اللوحة', 'count'), المحجوز=('is_booked', 'sum'))
                 size_stats['المتاح'] = size_stats['العدد_الكلي'] - size_stats['المحجوز']
                 
-                # إنشاء جدول الوورد لكل محافظة
+                # إنشاء الجدول وضبطه لليمين
                 table = doc.add_table(rows=size_stats.shape[0]+1, cols=4)
                 table.style = 'Table Grid'
-                hdr_cells = table.rows[0].cells
-                hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = "الحجم", "الكلي", "المحجوز", "المتاح"
+                set_table_rtl(table) # الوظيفة التي أنشأناها سابقاً لقلب الجدول
                 
+                # تعبئة العناوين مع المحاذاة
+                hdr_cells = table.rows[0].cells
+                hdr_texts = ["الحجم", "الكلي", "المحجوز", "المتاح"]
+                for i, text in enumerate(hdr_texts):
+                    hdr_cells[i].text = text
+                    apply_rtl(hdr_cells[i]) # يمين
+
+                # تعبئة البيانات مع المحاذاة
                 for i, (idx, row) in enumerate(size_stats.iterrows()):
                     row_cells = table.rows[i+1].cells
                     row_cells[0].text = str(idx)
                     row_cells[1].text = str(row['العدد_الكلي'])
                     row_cells[2].text = str(row['المحجوز'])
                     row_cells[3].text = str(row['المتاح'])
+                    for cell in row_cells:
+                        apply_rtl(cell) # يمين
                 
-                doc.add_paragraph(f"إجمالي المحافظة: {size_stats['العدد_الكلي'].sum()} موقع")
+                # إجمالي المحافظة محاذى لليمين
+                p_city_total = doc.add_paragraph(f"إجمالي محافظة {city}: {size_stats['العدد_الكلي'].sum()} موقع")
+                apply_rtl(p_city_total)
+                doc.add_paragraph("---")
+
+            # المجموع النهائي العام
+            doc.add_heading("المجموع النهائي العام", level=1)
+            p_final = doc.add_paragraph(f"إجمالي اللوحات: {grand_total_all} | المحجوز: {grand_total_booked} | المتاح: {grand_total_all - grand_total_booked}")
+            apply_rtl(p_final)
 
             target = io.BytesIO()
             doc.save(target)
             target.seek(0)
-            st.download_button("📥 تحميل التقرير التفصيلي", target, "Detailed_Report.docx")
+            st.download_button("📥 تحميل التقرير المنسق (RTL)", target, "Detailed_RTL_Report.docx")
+
 
 
 
