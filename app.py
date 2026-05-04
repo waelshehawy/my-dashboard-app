@@ -452,6 +452,7 @@ else:
 
             # المجموع النهائي العام
             doc.add_heading("المجموع النهائي العام", level=1)
+            apply_rtl(h_final)
             p_final = doc.add_paragraph(f"إجمالي اللوحات: {grand_total_all} | المحجوز: {grand_total_booked} | المتاح: {grand_total_all - grand_total_booked}")
             apply_rtl(p_final)
 
