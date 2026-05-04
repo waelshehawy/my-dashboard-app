@@ -245,17 +245,38 @@ else:
                                     if not st.session_state.cart[c_n]: del st.session_state.cart[c_n]
                                     st.rerun()
 
-                # العمليات النهائية
+                # العمليات النهائية المحدثة (4 أزرار بدلاً من 3)
                 st.write("---")
-                b1, b2, b3 = st.columns(3)
+                b1, b2, b3, b4 = st.columns(4)
+                
                 with b1:
                     if st.button("🚀 تصدير ملف Word"):
                         if not cust: st.error("أدخل اسم الزبون")
                         else:
                             doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
-                            st.download_button("📥 تحميل العرض المطبوع", doc_io, f"Quotation_{cust}.docx")
+                            st.download_button("📥 تحميل العرض", doc_io, f"Quotation_{cust}.docx")
+
                 with b2:
-                    if st.button("✅ تثبيت الحجز النهائي"):
+                    if st.button("💾 حفظ كمسودة"):
+                        if not cust: st.error("أدخل اسم الزبون أولاً")
+                        else:
+                            # تحويل السلة لنص JSON لحفظها بشكل دائم
+                            import json
+                            cart_json = json.dumps({c: {n: df.to_dict() for n, df in nets.items()} 
+                                                 for c, nets in st.session_state.cart.items()}, ensure_ascii=False)
+                            
+                            cursor = conn.cursor()
+                            # إنشاء الجدول إذا لم يوجد
+                            cursor.execute('''CREATE TABLE IF NOT EXISTS offers_history 
+                                (client_name TEXT, offer_date TIMESTAMP, cart_data TEXT, start_p TEXT, end_p TEXT, year INTEGER)''')
+                            
+                            cursor.execute("INSERT INTO offers_history VALUES (?, datetime('now'), ?, ?, ?, ?)", 
+                                           (cust, cart_json, start_p, end_p, b_year))
+                            conn.commit()
+                            st.success(f"✅ تم حفظ عرض {cust} في المسودات.")
+
+                with b3:
+                    if st.button("✅ تثبيت نهائي"):
                         if not cust: st.error("أدخل اسم الزبون أولاً")
                         else:
                             new_recs = []
@@ -268,15 +289,19 @@ else:
                             cursor = conn.cursor()
                             cursor.executemany("INSERT INTO حجوزات1 ([رقم اللوحة], [اسم الزبون], [فترة الحجز], [العام]) VALUES (?,?,?,?)", new_recs)
                             conn.commit()
-                            st.success(f"تم تثبيت {len(new_recs)} سجل حجز في قاعدة البيانات!")
+                            # حذف المسودة بعد التثبيت (اختياري)
+                            cursor.execute("DELETE FROM offers_history WHERE client_name=?", (cust,))
+                            conn.commit()
+                            
+                            st.success(f"تم التثبيت النهائي لـ {len(new_recs)} سجل!")
                             st.session_state.cart = {}
                             st.rerun()
-                with b3:
+
+                with b4:
                     if st.button("🔴 تفريغ السلة"):
                         st.session_state.cart = {}
                         st.rerun()
 
-        except Exception as e: st.error(f"خطأ فني: {e}")
 
 
  # --- Page: Dashboard ---
