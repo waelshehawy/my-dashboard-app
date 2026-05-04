@@ -21,6 +21,23 @@ SYRIA_CITIES_COORDS = {
     "حمص": [34.7324, 36.7137], "حماة": [35.1318, 36.7578], "الالاذقية": [35.5312, 35.7908],
     "طرطوس": [34.8890, 35.8864], "سوريا": [34.80, 38.99]
 }
+def init_offers_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS offers_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_name TEXT,
+        offer_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        cart_json TEXT,  -- تخزين السلة بالكامل هنا
+        start_p TEXT,
+        end_p TEXT,
+        year INTEGER,
+        status TEXT DEFAULT 'Pending' -- 'Pending' أو 'Confirmed'
+    )''')
+    conn.commit()
+    conn.close()
+
+init_offers_db()
 
 def get_connection():
     return sqlite3.connect('billboards_data.db')
