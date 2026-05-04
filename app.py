@@ -12,6 +12,31 @@ from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+# --- Database Helpers ---
+def get_connection():
+    return sqlite3.connect('billboards_data.db')
+
+def init_offers_db():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS offers_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_name TEXT,
+            offer_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            cart_json TEXT,
+            start_p TEXT,
+            end_p TEXT,
+            year INTEGER,
+            status TEXT DEFAULT 'Pending'
+        )''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Database Init Error: {e}")
+
+# استدعاء الدالة الآن أصبح آمناً لأن get_connection معرفة فوقها
+init_offers_db()
 
 # --- 1. Constants & Configuration ---
 st.set_page_config(page_title="PreView Ads ERP - Phase 2", layout="wide")
