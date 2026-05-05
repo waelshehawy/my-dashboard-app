@@ -15,15 +15,16 @@ from docx.oxml import OxmlElement
 
 # --- 1. Database Helpers (تعديل للربط مع Supabase) ---
 def get_connection():
-    # استخدام نظام المعاملات المنفصلة لضمان استقرار الاتصال وتجاوز الرموز الخاصة
+    # تأكد من أن host هو العنوان التقني للسيرفر وليس رابط موقع
     return psycopg2.connect(
-        host="://supabase.com",
+        host="aws-1-eu-north-1.pooler.supabase.com", 
         port="6543",
         database="postgres",
         user="postgres.ncuofpvbaglwbdqnpman",
         password="w@EL!@#123$", 
         sslmode="require"
     )
+
 
 def init_offers_db():
     try:
