@@ -7,4 +7,4 @@ python-docx
 arabic-reshaper
 python-bidi
 openpyxl
-psycopg2-binary
+psycopg2
