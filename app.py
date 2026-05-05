@@ -78,48 +78,106 @@ def set_table_rtl(table):
     bidi = OxmlElement('w:bidiVisual'); tblPr.append(bidi)
 # --- 3. Word Export Logic (Updated with Purple Style) ---
 def export_word(customer_name, cart_data, start_p, end_p):
+    # إنشاء المستند (أو استخدام قالب إذا وجد)
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-    for section in doc.sections: section.top_margin = Cm(4.5) 
     
+    # ضبط الهوامش لتناسب ترويسة الشركة (Head Letter)
+    for section in doc.sections:
+        section.top_margin = Cm(4.5) 
+        section.bottom_margin = Cm(2.0)
+        section.right_margin = Cm(2.0)
+        section.left_margin = Cm(2.0)
+
+    # لون التمييز (الموف الخاص باللوجو)
     PURPLE_COLOR = "660099" 
 
-    p_cust = doc.add_paragraph(); p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+    # --- الفقرة الافتتاحية ---
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_cust = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
+    run_cust.bold = True
+    run_cust.font.size = Pt(16)
     
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم من فترة ({start_p}) ولغاية ({end_p})")
+    p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
 
+    # --- عرض المواقع حسب المحافظة ---
     for city, networks in cart_data.items():
-        p_city = doc.add_paragraph(f"■ محافظة {city}"); apply_rtl(p_city)
+        # عنوان المحافظة
+        p_city = doc.add_paragraph()
+        run_city = p_city.add_run(f"■ محافظة {city}")
+        run_city.bold = True
+        run_city.font.size = Pt(14)
+        run_city.font.color.rgb = RGBColor(102, 0, 153) # لون موف
+        apply_rtl(p_city)
+
         for net, df in networks.items():
             if df.empty: continue
+            
+            # تجميع حسب الحجم ونوع الموقع
             for (size, desc), group_df in df.groupby(['الحجم', 'توصيف العمود']):
-                p_size = doc.add_paragraph(f"النوع: {desc} | القياس: {size}"); apply_rtl(p_size)
-                table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
+                p_size = doc.add_paragraph()
+                p_size.add_run(f"النوع: {desc} | القياس: {size}")
+                apply_rtl(p_size)
+                
+                # إنشاء الجدول الفني والمالي
+                table = doc.add_table(rows=1, cols=2)
+                table.style = 'Table Grid'
+                set_table_rtl(table)
+                
+                # تنسيق رأس الجدول (Header)
                 hdr = table.rows[0].cells
+                hdr[0].text = f"المواقع التابعة لشبكة: {net}"
+                hdr[1].text = "العدد"
+                
                 for cell in hdr:
                     shading_elm = OxmlElement('w:shd')
                     shading_elm.set(qn('w:fill'), PURPLE_COLOR)
                     cell._element.get_or_add_tcPr().append(shading_elm)
-                    p = cell.paragraphs[0]; run = p.add_run()
-                    run.font.color.rgb = RGBColor(255, 255, 255)
-                
-                hdr[0].text = f"الشبكة: {net}"; hdr[1].text = "العدد"
-                for cell in hdr: apply_rtl(cell)
+                    p = cell.paragraphs[0]
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    run = p.runs[0] if p.runs else p.add_run()
+                    run.font.color.rgb = RGBColor(255, 255, 255) # نص أبيض
+                    run.bold = True
+                    apply_rtl(cell)
 
+                # إضافة المواقع والكميات
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
+                    row_cells[0].text = str(row['الموقع'])
+                    row_cells[1].text = str(row['العدد'])
+                    row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                     for cell in row_cells: apply_rtl(cell)
 
-                # Summary calculation for each group
+                # --- حساب الأجور المالية لهذا القسم ---
                 total_q = pd.to_numeric(group_df['العدد']).sum()
-                f_p = float(group_df['fee_print'].iloc[0]); f_a = float(group_df['fee_ads'].iloc[0])
-                sum_total = (total_q * f_p) + (total_q * f_a)
-                p_sum = doc.add_paragraph(f"الإجمالي: {sum_total:,.0f}$"); p_sum.runs[0].bold = True; apply_rtl(p_sum)
+                f_p = float(group_df['fee_print'].iloc[0])
+                f_a = float(group_df['fee_ads'].iloc[0])
+                
+                sum_print = total_q * f_p
+                sum_ads = total_q * f_a
+                total_section = sum_print + sum_ads
+                
+                p_sum = doc.add_paragraph()
+                txt = (f"إجمالي القسم: {total_section:,.0f}$ "
+                       f"(طباعة: {sum_print:,.0f}$ | عرض: {sum_ads:,.0f}$)")
+                run_sum = p_sum.add_run(txt)
+                run_sum.bold = True
+                apply_rtl(p_sum)
 
-    target = io.BytesIO(); doc.save(target); target.seek(0)
+    # --- التذييل والملاحظات ---
+    doc.add_paragraph()
+    p_note = doc.add_paragraph()
+    run_note = p_note.add_run("• ملاحظة: المواقع المتاحة سارية لمدة 48 ساعة من تاريخ هذا العرض.")
+    run_note.italic = True
+    run_note.font.color.rgb = RGBColor(200, 0, 0) # لون أحمر هادئ
+    apply_rtl(p_note)
+
+    # حفظ الملف في الذاكرة للتحميل
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
     return target
 
 # --- 4. Main App & Auth ---
