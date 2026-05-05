@@ -25,21 +25,16 @@ def get_connection():
     )
 
 
-def init_offers_db():
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        # تعديل Syntax ليتوافق مع PostgreSQL
-        cursor.execute('''CREATE TABLE IF NOT EXISTS offers_history (
-            id SERIAL PRIMARY KEY,
-            client_name TEXT,
-            offer_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            cart_json TEXT,
-            start_p TEXT,
-            end_p TEXT,
-            year INTEGER,
-            status TEXT DEFAULT 'Pending'
-        )''')
+def get_connection():
+    return psycopg2.connect(
+        host="aws-1-eu-north-1.pooler.supabase.com", # هذا هو العنوان الصحيح
+        port="6543",
+        database="postgres",
+        user="postgres.ncuofpvbaglwbdqnpman",
+        password="w@EL!@#123$",
+        sslmode="require"
+    )
+
         conn.commit()
         conn.close()
     except Exception as e:
