@@ -129,7 +129,7 @@ else:
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", ⚙️ الإعدادات"])
+        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
         if st.button("تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
     if page == "📄 Quotation":
