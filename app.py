@@ -15,16 +15,25 @@ from docx.oxml import OxmlElement
 
 # --- Database Connection (Supabase) ---
 def get_connection():
-    return psycopg2.connect(
-        host="://supabase.com",
-        port="6543",
-        database="postgres",
-        user="postgres.ncuofpvbaglwbdqnpman",
-        password="w@EL!@#123$", # ضع كلمة المرور الأصلية هنا بدون تشفير
-        sslmode="require"
-    )
+    # الرابط الذي نجح في النقل (المحول Session Pooler)
+    conn_str = "postgresql://postgres.ncuofpvbaglwbdqnpman:w%40EL%21%40%23123%24@://supabase.com"
+    return psycopg2.connect(conn_str)
 
-
+def init_offers_db():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        # تعديل Syntax ليتوافق مع PostgreSQL
+        cursor.execute('''CREATE TABLE IF NOT EXISTS offers_history (
+            id SERIAL PRIMARY KEY,
+            client_name TEXT,
+            offer_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            cart_json TEXT,
+            start_p TEXT,
+            end_p TEXT,
+            year INTEGER,
+            status TEXT DEFAULT 'Pending'
+        )''')
         conn.commit()
         conn.close()
     except Exception as e:
@@ -120,7 +129,7 @@ else:
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
+        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", ⚙️ الإعدادات"])
         if st.button("تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
     if page == "📄 Quotation":
@@ -172,8 +181,6 @@ else:
                         if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                         st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(الحجم=sel_size, fee_print=f_print, fee_ads=f_ads)
                     st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
 
             # أزرار الحفظ النهائي
             if st.session_state.cart:
@@ -213,7 +220,7 @@ else:
         except Exception as e: st.error(f"خطأ في الخريطة: {e}")
 
     # --- Page: الإعدادات ---
-    elif page == "⚙️ الإعدادات":
+    elif page == ⚙️ الإعدادات":
         st.title("⚙️ الإدارة المركزية")
         if st.button("تحديث أسعار الطباعة"):
             # مثال للتحديث
