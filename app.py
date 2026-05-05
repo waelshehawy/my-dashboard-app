@@ -271,7 +271,7 @@ def export_word(customer_name, cart_data, start_p, end_p):
     target.seek(0)
     return target
         except Exception as e:
-             st.error(f"خطأ فني: {e}")
+            st.error(f"خطأ فني: {e}")
 
     # --- Page: تقرير الجرد (تعديل الاستعلامات) ---
     elif page == "📋 تقرير المتاح المجمع":
