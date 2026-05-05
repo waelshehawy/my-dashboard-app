@@ -246,8 +246,9 @@ else:
                         if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                         st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(الحجم=sel_size, fee_print=f_print, fee_ads=f_ads)
                     st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
+            
+        except Exception as e: # Line 344 - Must be aligned with 'try'
+            st.error(f"خطأ: {e}")
 
             # أزرار الحفظ النهائي
             # 5. إدارة السلة وتثبيت الحجز (توضع بعد كود الإضافة للسلة)
