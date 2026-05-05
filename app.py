@@ -187,6 +187,8 @@ else:
                         if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                         st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(الحجم=sel_size, fee_print=f_print, fee_ads=f_ads)
                     st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
 
             # أزرار الحفظ النهائي
             if st.session_state.cart:
