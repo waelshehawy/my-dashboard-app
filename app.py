@@ -129,7 +129,7 @@ else:
     
     with st.sidebar:
         if os.path.exists('logo_full.png'): st.image('logo_full.png', width=180)
-        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", ⚙️ الإعدادات"])
+        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
         if st.button("تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
     if page == "📄 Quotation":
@@ -220,7 +220,7 @@ else:
         except Exception as e: st.error(f"خطأ في الخريطة: {e}")
 
     # --- Page: الإعدادات ---
-    elif page == ⚙️ الإعدادات":
+    elif page == "⚙️ الإعدادات":
         st.title("⚙️ الإدارة المركزية")
         if st.button("تحديث أسعار الطباعة"):
             # مثال للتحديث
