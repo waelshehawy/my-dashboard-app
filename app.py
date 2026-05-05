@@ -270,7 +270,7 @@ def export_word(customer_name, cart_data, start_p, end_p):
     doc.save(target)
     target.seek(0)
     return target
-        except Exception as e:
+    except Exception as e:
             st.error(f"خطأ فني: {e}")
 
     # --- Page: تقرير الجرد (تعديل الاستعلامات) ---
