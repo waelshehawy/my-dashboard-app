@@ -227,6 +227,51 @@ else:
         except Exception as e:
             st.error(f"خطأ فني: {e}")
 
+    # --- دالة تصدير Word (يجب أن توضع في أعلى الملف) ---
+def export_word(customer_name, cart_data, start_p, end_p):
+    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+    for section in doc.sections: section.top_margin = Cm(4.5) 
+    
+    PURPLE_COLOR = "660099" 
+
+    p_cust = doc.add_paragraph(); p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+    
+    p_stat = doc.add_paragraph()
+    p_stat.add_run(f"نقدم لكم المواقع المتاحة للفترة من ({start_p}) ولغاية ({end_p})")
+    apply_rtl(p_stat)
+
+    for city, networks in cart_data.items():
+        p_city = doc.add_paragraph(f"■ محافظة {city}"); apply_rtl(p_city)
+        for net, df in networks.items():
+            if df.empty: continue
+            for (size, desc), group_df in df.groupby(['الحجم', 'توصيف العمود']):
+                p_size = doc.add_paragraph(f"النوع: {desc} | القياس: {size}"); apply_rtl(p_size)
+                table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
+                hdr = table.rows[0].cells
+                for cell in hdr:
+                    shading_elm = OxmlElement('w:shd')
+                    shading_elm.set(qn('w:fill'), PURPLE_COLOR)
+                    cell._element.get_or_add_tcPr().append(shading_elm)
+                    run = cell.paragraphs[0].add_run()
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+                
+                hdr[0].text = f"الشبكة: {net}"
+                hdr[1].text = "العدد"
+                for cell in hdr: apply_rtl(cell)
+
+                for _, row in group_df.iterrows():
+                    row_cells = table.add_row().cells
+                    row_cells[0].text = str(row['الموقع'])
+                    row_cells[1].text = str(row['العدد'])
+                    for cell in row_cells: apply_rtl(cell)
+                    
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
+    return target
+
+
     # --- Page: تقرير الجرد (تعديل الاستعلامات) ---
     elif page == "📋 تقرير المتاح المجمع":
         st.title("📋 تقرير المتاح المفصل")
