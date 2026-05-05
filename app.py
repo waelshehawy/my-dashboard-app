@@ -12,9 +12,15 @@ from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+import psycopg2
 # --- Database Helpers ---
+import psycopg2
+
 def get_connection():
-    return sqlite3.connect('billboards_data.db')
+    # استخدم نفس الرابط الذي نجح في عملية النقل
+    conn_str = "postgresql://postgres.ncuofpvbaglwbdqnpman:w%40EL%21%40%23123%24@://supabase.com"
+    return psycopg2.connect(conn_str)
+
 
 def init_offers_db():
     try:
