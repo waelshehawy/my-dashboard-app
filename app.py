@@ -220,7 +220,7 @@ else:
         except Exception as e: st.error(f"خطأ في الخريطة: {e}")
 
     # --- Page: الإعدادات ---
-    elif page == ⚙️ الإعدادات":
+    elif page == "⚙️ الإعدادات":
         st.title("⚙️ الإدارة المركزية")
         if st.button("تحديث أسعار الطباعة"):
             # مثال للتحديث
