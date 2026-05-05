@@ -25,16 +25,6 @@ def get_connection():
     )
 
 
-def get_connection():
-    return psycopg2.connect(
-        host="aws-1-eu-north-1.pooler.supabase.com", # هذا هو العنوان الصحيح
-        port="6543",
-        database="postgres",
-        user="postgres.ncuofpvbaglwbdqnpman",
-        password="w@EL!@#123$",
-        sslmode="require"
-    )
-
         conn.commit()
         conn.close()
     except Exception as e:
