@@ -15,9 +15,15 @@ from docx.oxml import OxmlElement
 
 # --- Database Connection (Supabase) ---
 def get_connection():
-    # الرابط الذي نجح في النقل (المحول Session Pooler)
-    conn_str = "postgresql://postgres.ncuofpvbaglwbdqnpman:w%40EL%21%40%23123%24@://supabase.com"
-    return psycopg2.connect(conn_str)
+    return psycopg2.connect(
+        host="aws-1-eu-north-1.pooler.supabase.com", # هذا هو العنوان الصحيح
+        port="6543",
+        database="postgres",
+        user="postgres.ncuofpvbaglwbdqnpman",
+        password="w@EL!@#123$",
+        sslmode="require"
+    )
+
 
 def init_offers_db():
     try:
