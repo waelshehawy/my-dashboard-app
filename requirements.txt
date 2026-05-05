@@ -1,10 +1,7 @@
 streamlit
 pandas
-plotly
+psycopg2-binary
 folium
 streamlit-folium
 python-docx
-arabic-reshaper
-python-bidi
-openpyxl
-psycopg2
+sqlalchemy
