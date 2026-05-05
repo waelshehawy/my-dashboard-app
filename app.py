@@ -16,13 +16,14 @@ from docx.oxml import OxmlElement
 # --- Database Connection (Supabase) ---
 def get_connection():
     return psycopg2.connect(
-        host="://supabase.com",
+        host="aws-1-eu-north-1.pooler.supabase.com",
         port="6543",
         database="postgres",
         user="postgres.ncuofpvbaglwbdqnpman",
-        password="w@EL!@#123$", # Use the original password here without encoding
+        password="w@EL!@#123$", 
         sslmode="require"
     )
+
 
 
 def init_offers_db():
