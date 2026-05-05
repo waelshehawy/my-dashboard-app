@@ -189,20 +189,95 @@ else:
                     st.rerun()
 
             # أزرار الحفظ النهائي
-            if st.session_state.cart:
-                if st.button("✅ تثبيت نهائي في السحابة"):
-                    cursor = conn.cursor()
-                    for city, nets in st.session_state.cart.items():
-                        for net, df in nets.items():
-                            for _, row in df.iterrows():
-                                for p_name in target_period_names:
-                                    cursor.execute('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s,%s,%s,%s)', 
-                                                 (str(row['رقم اللوحة']), cust, p_name, b_year))
-                    conn.commit()
-                    st.success("تم الحفظ الدائم في Supabase!")
-                    st.session_state.cart = {}; st.rerun()
+# 5. إدارة السلة وتثبيت الحجز (توضع بعد كود الإضافة للسلة)
+if st.session_state.cart:
+    st.divider()
+    st.subheader("🛒 المواقع المختارة في العرض")
+    
+    # عرض الجداول المضافة للسلة
+    for c_n in list(st.session_state.cart.keys()):
+        for n_n in list(st.session_state.cart[c_n].keys()):
+            with st.expander(f"📍 {c_n} - {n_n}", expanded=True):
+                col_table, col_del = st.columns([5, 1])
+                with col_table:
+                    # محرر بيانات للسماح بتعديل العدد أو الموقع قبل الحفظ
+                    st.session_state.cart[c_n][n_n] = st.data_editor(
+                        st.session_state.cart[c_n][n_n], 
+                        key=f"ed_{c_n}_{n_n}"
+                    )
+                with col_del:
+                    if st.button("🗑️ حذف", key=f"btn_{c_n}_{n_n}"):
+                        del st.session_state.cart[c_n][n_n]
+                        if not st.session_state.cart[c_n]: del st.session_state.cart[c_n]
+                        st.rerun()
 
-        except Exception as e: st.error(f"خطأ: {e}")
+    st.write("---")
+    # ترتيب الأزرار في صف واحد أسفل الجداول
+    b1, b2, b3, b4 = st.columns(4)
+    
+    with b1:
+        # زر التصدير (يولد الملف في الذاكرة أولاً)
+        if st.button("🚀 1. تصدير Word"):
+            if not cust:
+                st.error("الرجاء إدخال اسم الزبون")
+            else:
+                doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
+                st.session_state.doc_ready = doc_io # تخزين الملف مؤقتاً
+                st.success("تم تجهيز الملف!")
+
+        # زر التحميل (يظهر فقط بعد الضغط على تصدير)
+        if "doc_ready" in st.session_state:
+            st.download_button(
+                label="📥 2. تحميل الملف الآن",
+                data=st.session_state.doc_ready,
+                file_name=f"Quotation_{cust}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+    with b2:
+        # زر الحفظ في الجدول المؤقت (offers_history)
+        if st.button("💾 3. حفظ كمسودة"):
+            if not cust:
+                st.error("أدخل اسم الزبون أولاً")
+            else:
+                import json
+                # تحويل السلة لنص JSON للحفظ في Supabase
+                cart_json = json.dumps({c: {n: df.to_dict() for n, df in nets.items()} 
+                                     for c, nets in st.session_state.cart.items()}, ensure_ascii=False)
+                cursor = conn.cursor()
+                query = 'INSERT INTO "offers_history" (client_name, cart_json, start_p, end_p, year, status) VALUES (%s, %s, %s, %s, %s, %s)'
+                cursor.execute(query, (cust, cart_json, start_p, end_p, b_year, 'Pending'))
+                conn.commit()
+                st.success(f"✅ تم حفظ المسودة للزبون {cust}")
+
+    with b3:
+        # زر التثبيت في الجداول الرئيسية (حجوزات1)
+        if st.button("🏛️ 4. تثبيت نهائي"):
+            if not cust:
+                st.error("أدخل اسم الزبون أولاً")
+            else:
+                cursor = conn.cursor()
+                for city, nets in st.session_state.cart.items():
+                    for net, df in nets.items():
+                        for _, row in df.iterrows():
+                            for p_name in target_period_names:
+                                # التثبيت في جدول الحجوزات السحابي
+                                cursor.execute(
+                                    'INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)',
+                                    (str(row['رقم اللوحة']), cust, p_name, b_year)
+                                )
+                conn.commit()
+                st.balloons()
+                st.success("✨ تم التثبيت النهائي وتحديث الخريطة!")
+                st.session_state.cart = {} # تفريغ السلة بعد التثبيت
+                if "doc_ready" in st.session_state: del st.session_state.doc_ready
+                st.rerun()
+
+    with b4:
+        if st.button("🔴 تفريغ السلة"):
+            st.session_state.cart = {}
+            if "doc_ready" in st.session_state: del st.session_state.doc_ready
+            st.rerun()
 
     # --- Page: تقرير الجرد ---
     elif page == "📋 تقرير الجرد":
