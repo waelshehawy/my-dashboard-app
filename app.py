@@ -15,14 +15,20 @@ from docx.oxml import OxmlElement
 
 # --- 1. Database Connection (Supabase) ---
 def get_connection():
-    return psycopg2.connect(
-        host="://supabase.com",
-        port="6543",
-        database="postgres",
-        user="postgres.ncuofpvbaglwbdqnpman",
-        password="w@EL!@#123$", 
-        sslmode="require"
-    )
+    try:
+        return psycopg2.connect(
+            host="://supabase.com", # المضيف الخاص بك
+            port="6543",                                 # منفذ الـ Pooler الضروري لـ IPv4
+            database="postgres",
+            user="postgres.ncuofpvbaglwbdqnpman",
+            password="w@EL!@#123$",                      # ضع كلمة مرورك الأصلية هنا
+            sslmode="require",
+            connect_timeout=10                           # مهلة زمنية للاتصال
+        )
+    except Exception as e:
+        st.error(f"خطأ في الاتصال بالسحابة: {e}")
+        return None
+
 
 # --- 2. Word & RTL Helpers ---
 def _force_rtl_style(p):
