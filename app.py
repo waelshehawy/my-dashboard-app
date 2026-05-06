@@ -177,7 +177,6 @@ else:
                     st.rerun()
 
             # --- عرض السلة والحسابات (الميزة المستعادة) ---
-    conn.close()
 
     # --- Page: Dashboard (استعادة الخريطة الملونة والمعلومات) ---
     elif page == "📊 Dashboard":
