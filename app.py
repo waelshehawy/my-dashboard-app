@@ -51,18 +51,22 @@ def set_table_rtl(table):
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual'); tblPr.append(bidi)
 
-def export_word(customer_name, cart_data, start_p, end_p):
+def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-    for section in doc.sections: section.top_margin = Cm(4.5) 
+    for section in doc.sections: 
+        section.top_margin = Cm(4.5) 
+    
     PURPLE_COLOR = "660099" 
 
+    # السطر الافتتاحي
     p_cust = doc.add_paragraph(); p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم من فترة ({start_p}) ولغاية ({end_p})")
+    p_stat.add_run(f"نقدم لكم المواقع المتاحة للفترة من ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
 
+    # بناء الجداول
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph(f"■ محافظة {city}"); apply_rtl(p_city)
         for net, df in networks.items():
@@ -76,7 +80,8 @@ def export_word(customer_name, cart_data, start_p, end_p):
                     cell._element.get_or_add_tcPr().append(shading_elm)
                     run = cell.paragraphs[0].add_run(); run.font.color.rgb = RGBColor(255, 255, 255)
                 
-                hdr[0].text = f"الشبكة: {net}"; hdr[1].text = "العدد"
+                hdr[0].text = f"الشبكة: {net}"
+                hdr[1].text = "العدد"
                 for cell in hdr: apply_rtl(cell)
 
                 for _, row in group_df.iterrows():
@@ -84,20 +89,29 @@ def export_word(customer_name, cart_data, start_p, end_p):
                     row_cells[0].text = str(row['الموقع'])
                     row_cells[1].text = str(row['العدد'])
                     for cell in row_cells: apply_rtl(cell)
-
-                # --- حساب الأجور في الوورد ---
-                total_q = pd.to_numeric(group_df['العدد']).sum()
-                f_p, f_a = float(group_df['fee_print'].iloc[0]), float(group_df['fee_ads'].iloc[0])
-                total_all = (total_q * f_p) + (total_q * f_a)
-                p_sum = doc.add_paragraph()
-                txt = f"العدد: {int(total_q)} | إجمالي التكلفة: {total_all:,.0f}$"
-                run = p_sum.add_run(txt); run.bold = True; apply_rtl(p_sum)
                     
+    # --- إضافة المجموع العام قبل النهاية (الميزة الجديدة) ---
+    doc.add_paragraph() # سطر فارغ
+    p_total = doc.add_paragraph()
+    p_total.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_total = p_total.add_run(f"إجمالي القيمة المالية للعرض: {grand_total:,.0f} $")
+    run_total.bold = True
+    run_total.font.size = Pt(14)
+    run_total.font.color.rgb = RGBColor(102, 0, 153) # لون موف
+    apply_rtl(p_total)
+
+    # الملاحظة النهائية
     doc.add_paragraph()
-    p_note = doc.add_paragraph(); p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.").bold = True; apply_rtl(p_note)
+    p_note = doc.add_paragraph()
+    run_note = p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية لمدة 48 ساعة من تاريخ إرسال العرض.")
+    run_note.bold = True
+    apply_rtl(p_note)
     
-    target = io.BytesIO(); doc.save(target); target.seek(0)
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
     return target
+
 # --- 4. Main App & Logic (Part 2/2) ---
 st.set_page_config(page_title="PreView Ads ERP - Cloud", layout="wide")
 SYRIA_CITIES_COORDS = {
