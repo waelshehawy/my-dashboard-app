@@ -242,7 +242,9 @@ else:
 
                 st.markdown(f"### 💰 إجمالي العرض الكلي: **{grand_total:,.0f} $**")
 
+                # تقسيم الأزرار إلى 4 أعمدة (تأكد أن هذا السطر تحت مستوى 'if st.session_state.cart')
                 b1, b2, b3, b4 = st.columns(4)
+                
                 with b1:
                     if st.button("🚀 تصدير Word"):
                         if not cust: st.error("أدخل اسم الزبون")
@@ -254,25 +256,41 @@ else:
                     if st.button("💾 حفظ كمسودة"):
                         if not cust: st.error("أدخل اسم الزبون")
                         else:
+                            import json
                             c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
                             cur = conn.cursor()
                             cur.execute('INSERT INTO "offers_history" (client_name, cart_json, status) VALUES (%s, %s, %s)', (cust, c_json, 'Pending'))
-                            conn.commit(); st.success("تم حفظ المسودة.")
+                            conn.commit()
+                            st.success("✅ تم حفظ المسودة.")
 
                 with b3:
                     if st.button("✅ تثبيت نهائي"):
                         if not cust: st.error("أدخل اسم الزبون")
                         else:
-                            cur = conn.cursor()
-                            # منطق التثبيت النهائي (Insert into حجوزات1)
-                            st.success("تم التثبيت النهائي وتحديث الخريطة!")
+                            try:
+                                new_recs = []
+                                for city, nets in st.session_state.cart.items():
+                                    for net, df in nets.items():
+                                        for _, row in df.iterrows():
+                                            for p_name in target_periods:
+                                                new_recs.append((str(row['رقم اللوحة']), str(cust), str(p_name), int(b_year)))
+                                
+                                if new_recs:
+                                    cursor = conn.cursor()
+                                    sql_ins = 'INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)'
+                                    cursor.executemany(sql_ins, new_recs)
+                                    conn.commit()
+                                    st.balloons()
+                                    st.success(f"✨ تم تثبيت {len(new_recs)} سجل في السحابة!")
+                                    st.session_state.cart = {}
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"خطأ في التثبيت: {e}")
                 
                 with b4:
                     if st.button("🔴 تفريغ السلة"):
-                        st.session_state.cart = {}; st.rerun()
-
-        except Exception as e:
-            st.error(f"خطأ فني: {e}")
+                        st.session_state.cart = {}
+                        st.rerun()
 
 
 
