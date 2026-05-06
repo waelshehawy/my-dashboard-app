@@ -183,28 +183,59 @@ else:
                 for city, nets in st.session_state.cart.items():
                     for net, df in nets.items():
                         with st.expander(f"📍 {city} - شبكة {net}", expanded=True):
-                            st.session_state.cart[city][net] = st.data_editor(df, key=f"ed_{city}_{net}")
-                            # حساب أجور هذه الشبكة
-                            t_q = pd.to_numeric(df['العدد']).sum()
-                            st.write(f"العدد: {t_q} | التكلفة: {(t_q*f_print)+(t_q*f_ads):,.0f}$")
+                            # السماح بحذف الأسطر أو تعديلها وإعادة الحسابات فوراً
+                            st.session_state.cart[city][net] = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
+                            # حساب أجور هذه الشبكة المحدثة بعد التعديل أو الحذف
+                            t_q = pd.to_numeric(st.session_state.cart[city][net]['العدد']).sum()
+                            st.write(f"العدد الحالي: {t_q} | التكلفة: {(t_q*f_print)+(t_q*f_ads):,.0f}$")
 
-                b1, b2, b3 = st.columns(3)
+                # تقسيم الأزرار إلى 4 أعمدة
+                b1, b2, b3, b4 = st.columns(4)
+                
                 with b1:
                     if st.button("🚀 تصدير Word"):
-                        doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
-                        st.download_button("📥 تحميل الآن", doc_io, f"Offer_{cust}.docx")
+                        if not cust: st.error("أدخل اسم الزبون أولاً")
+                        else:
+                            doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
+                            st.download_button("📥 تحميل الآن", doc_io, f"Offer_{cust}.docx")
+                
                 with b2:
-                    if st.button("✅ تثبيت نهائي في السحابة"):
-                        cursor = conn.cursor()
-                        for city, nets in st.session_state.cart.items():
-                            for net, df in nets.items():
-                                for _, row in df.iterrows():
-                                    for p_name in target_periods:
-                                        cursor.execute('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s,%s,%s,%s)', (str(row['رقم اللوحة']), cust, p_name, b_year))
-                        conn.commit(); st.success("تم التثبيت!"); st.session_state.cart = {}; st.rerun()
+                    # الميزة المطلوبة: الحفظ في جدول offers_history قبل التثبيت النهائي
+                    if st.button("💾 حفظ كمسودة"):
+                        if not cust: st.error("أدخل اسم الزبون")
+                        else:
+                            import json
+                            cart_json = json.dumps({c: {n: df.to_dict() for n, df in nets.items()} 
+                                                 for c, nets in st.session_state.cart.items()}, ensure_ascii=False)
+                            cursor = conn.cursor()
+                            query = 'INSERT INTO "offers_history" (client_name, cart_json, start_p, end_p, year, status) VALUES (%s, %s, %s, %s, %s, %s)'
+                            cursor.execute(query, (cust, cart_json, start_p, end_p, b_year, 'Pending'))
+                            conn.commit()
+                            st.success(f"✅ تم حفظ المسودة لـ {cust} في السحابة.")
+
                 with b3:
-                    if st.button("🔴 تفريغ السلة"): st.session_state.cart = {}; st.rerun()
-        except Exception as e: st.error(f"خطأ: {e}")
+                    if st.button("✅ تثبيت نهائي"):
+                        if not cust: st.error("أدخل اسم الزبون")
+                        else:
+                            cursor = conn.cursor()
+                            for city, nets in st.session_state.cart.items():
+                                for net, df in nets.items():
+                                    for _, row in df.iterrows():
+                                        for p_name in target_periods:
+                                            cursor.execute('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s,%s,%s,%s)', (str(row['رقم اللوحة']), cust, p_name, b_year))
+                            conn.commit()
+                            st.success("✨ تم التثبيت النهائي وتحديث الخريطة!")
+                            st.session_state.cart = {}
+                            st.rerun()
+                
+                with b4:
+                    if st.button("🔴 تفريغ السلة"):
+                        st.session_state.cart = {}
+                        st.rerun()
+                        
+        except Exception as e: 
+            st.error(f"خطأ فني: {e}")
+
 
     # --- Page: Dashboard (استعادة الخريطة الملونة والمعلومات) ---
     elif page == "📊 Dashboard":
