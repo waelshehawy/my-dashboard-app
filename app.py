@@ -16,18 +16,20 @@ from docx.oxml import OxmlElement
 # --- 1. Database Connection (Supabase) ---
 def get_connection():
     try:
+        # تأكد من أن الـ host هو العنوان التقني وليس رابط موقع
         return psycopg2.connect(
-            host="://supabase.com", # المضيف الخاص بك
-            port="6543",                                 # منفذ الـ Pooler الضروري لـ IPv4
+            host="aws-1-eu-north-1.pooler.supabase.com", # العنوان الصحيح لسيرفرك
+            port="6543",                                 # المنفذ الخاص بالـ Pooler
             database="postgres",
             user="postgres.ncuofpvbaglwbdqnpman",
-            password="WaelPreview2026",                      # ضع كلمة مرورك الأصلية هنا
+            password="WaelPreview2026",
             sslmode="require",
-            connect_timeout=10                           # مهلة زمنية للاتصال
+            connect_timeout=10
         )
     except Exception as e:
-        st.error(f"خطأ في الاتصال بالسحابة: {e}")
+        st.error(f"فشل الاتصال التقني: {e}")
         return None
+
 
 
 # --- 2. Word & RTL Helpers ---
