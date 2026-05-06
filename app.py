@@ -267,6 +267,83 @@ else:
         except Exception as e:
             st.error(f"خطأ فني: {e}")
 
+    elif page == "📋 تقرير الجرد":
+        st.title("📋 تقرير الإشغال والجرد السحابي")
+        try:
+            df_periods = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
+            c1, c2, c3 = st.columns(3)
+            with c1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist(), key="rep_s")
+            with c2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1, key="rep_e")
+            with c3: b_year = st.number_input("العام:", value=2026, key="rep_y")
+
+            s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
+            e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
+            target_p_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
+
+            all_boards = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"', conn)
+            p_str = ", ".join([f"'{p}'" for p in target_p_names])
+            booked_list = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={b_year} AND "فترة الحجز" IN ({p_str})', conn)['رقم اللوحة'].tolist()
+
+            all_boards['is_booked'] = all_boards['رقم اللوحة'].apply(lambda x: 1 if x in booked_list else 0)
+
+            grand_total_all = 0
+            grand_total_booked = 0
+
+            for city in sorted(all_boards['المحافظة'].unique()):
+                st.markdown(f"### 📍 محافظة {city}")
+                city_df = all_boards[all_boards['المحافظة'] == city]
+                size_stats = city_df.groupby('الحجم').agg(العدد_الكلي=('رقم اللوحة', 'count'), المحجوز=('is_booked', 'sum'))
+                size_stats['المتاح'] = size_stats['العدد_الكلي'] - size_stats['المحجوز']
+                st.table(size_stats)
+                
+                grand_total_all += size_stats['العدد_الكلي'].sum()
+                grand_total_booked += size_stats['المحجوز'].sum()
+
+            st.divider()
+            st.subheader("🌍 المجموع النهائي العام")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("إجمالي اللوحات", grand_total_all)
+            c2.metric("إجمالي المحجوز", grand_total_booked)
+            c3.metric("إجمالي المتاح", grand_total_all - grand_total_booked)
+        except Exception as e:
+            st.error(f"خطأ في الجرد: {e}")
+
+    elif page == "⚙️ الإعدادات":
+        st.title("⚙️ إدارة البيانات الأساسية (السحابة)")
+        st.warning("⚠️ أي تعديل هنا سيتم حفظه فوراً في Supabase.")
+        
+        tab1, tab2, tab3 = st.tabs(["📍 اللوحات", "💰 الأسعار", "📅 سجل الحجوزات"])
+        
+        with tab1:
+            df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+            edited_df = st.data_editor(df_all, num_rows="dynamic", key="set_boards")
+            if st.button("💾 حفظ اللوحات"):
+                from sqlalchemy import create_engine
+                engine = create_engine("postgresql://postgres.ncuofpvbaglwbdqnpman:w%40EL%21%40%23123%24@://supabase.com")
+                edited_df.to_sql("اعمدة انارة", engine, if_exists="replace", index=False)
+                st.success("✅ تم التحديث!")
+
+        with tab2:
+            df_prices = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+            edited_prices = st.data_editor(df_prices, num_rows="dynamic", key="set_prices")
+            if st.button("💾 حفظ الأسعار"):
+                from sqlalchemy import create_engine
+                engine = create_engine("postgresql://postgres.ncuofpvbaglwbdqnpman:w%40EL%21%40%23123%24@://supabase.com")
+                edited_prices.to_sql("اسماء الرسم", engine, if_exists="replace", index=False)
+                st.success("✅ تم تحديث الأسعار!")
+
+        with tab3:
+            df_bookings = pd.read_sql('SELECT * FROM "حجوزات1"', conn)
+            edited_bookings = st.data_editor(df_bookings, num_rows="dynamic", key="set_bookings")
+            if st.button("💾 تحديث السجلات"):
+                from sqlalchemy import create_engine
+                engine = create_engine("postgresql://postgres.ncuofpvbaglwbdqnpman:w%40EL%21%40%23123%24@://supabase.com")
+                edited_bookings.to_sql("حجوزات1", engine, if_exists="replace", index=False)
+                st.success("✅ تمت المزامنة!")
+
+    # إغلاق الاتصال في نهاية السكريبت تماماً
+    if 'conn' in locals():
+        conn.close()
 
 
     # --- Page: Dashboard (استعادة الخريطة الملونة والمعلومات) ---
