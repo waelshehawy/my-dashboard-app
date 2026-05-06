@@ -291,7 +291,7 @@ else:
                     if st.button("🔴 تفريغ السلة"):
                         st.session_state.cart = {}
                         st.rerun()
-                            except Exception as e:
+                             except Exception as e:
                                  st.error(f"خطأ في التثبيت: {e}")
 
 
