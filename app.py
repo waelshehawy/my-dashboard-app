@@ -201,7 +201,7 @@ else:
             sel_city = st.selectbox("المحافظة:", city_l)
             
             # جلب المتاح (بعد استثناء المحجوز)
-            raw = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة" FROM "اعمدة انارة" WHERE "المحافظة"=\'{sel_city}\' AND "الحجم"=\'{sel_size}\'', conn)
+            raw = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "توصيف العمود" FROM "اعمدة انارة" WHERE "المحافظة"=\'{sel_city}\' AND "الحجم"=\'{sel_size}\'', conn)
             
             if not raw.empty:
                 nets = st.multiselect("اختر الشبكات:", raw['الشبكة'].unique().tolist())
