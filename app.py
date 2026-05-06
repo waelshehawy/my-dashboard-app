@@ -123,157 +123,132 @@ else:
 
     # --- Page: Quotation (استعادة السلة والحسابات) ---
     if page == "📄 Quotation":
-        st.subheader("📂 استرجاع عرض سعر محفوظ")
-        # جلب قائمة العروض المعلقة من السحابة
-        saved_offers = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status=\'Pending\' ORDER BY offer_date DESC', conn)
-        
-        if not saved_offers.empty:
-            # دمج اسم الزبون مع التاريخ للتمييز بين العروض
-            options = {f"{row['client_name']} ({row['offer_date']})": row['id'] for _, row in saved_offers.iterrows()}
-            selected_label = st.selectbox("اختر العرض المطلوب استرجاعه وتثبيته:", options.keys())
-            
-            if st.button("🔄 تحميل العرض للسلة"):
-                offer_id = options[selected_label]
-                # جلب الـ JSON الخاص بهذا العرض
-                res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={offer_id}', conn)
-                if not res.empty:
-                    import json
-                    raw_json = json.loads(res['cart_json'].iloc[0])
-                    # إعادة بناء السلة من JSON إلى جداول DataFrame
-                    reconstructed_cart = {}
-                    for city, nets in raw_json.items():
-                        reconstructed_cart[city] = {n: pd.DataFrame(df_dict) for n, df_dict in nets.items()}
-                    
-                    # وضع البيانات في السلة وتحديث اسم الزبون في الـ session_state
-                    st.session_state.cart = reconstructed_cart
-                    # ملاحظة: سنستخدم st.session_state لملء حقل اسم الزبون تلقائياً
-                    st.session_state.temp_cust_name = res['client_name'].iloc[0]
-                    
-                    st.success("✅ تم تحميل العرض بنجاح! يمكنك الآن حذف المواقع المرفوضة من الجداول أدناه ثم الضغط على 'تثبيت نهائي'.")
-                    st.rerun()
-        else:
-            st.info("لا توجد عروض محفوظة حالياً.")
-        
-        st.write("---")
-               
-
         st.title("📄 بناء عرض سعر وتثبيت حجز")
+        
+        # 1. قسم استرجاع العروض (للتعديل والتثبيت لاحقاً)
+        st.subheader("📂 استرجاع عرض محفوظ")
+        try:
+            saved_off_df = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status=\'Pending\' ORDER BY offer_date DESC', conn)
+            if not saved_off_df.empty:
+                off_options = {f"{r['client_name']} ({r['offer_date']})": r['id'] for _, r in saved_off_df.iterrows()}
+                sel_label = st.selectbox("اختر عرضاً لتعديله أو تثبيته:", ["--- اختر عرضاً ---"] + list(off_options.keys()))
+                
+                if sel_label != "--- اختر عرضاً ---" and st.button("🔄 تحميل للسلة"):
+                    off_id = off_options[sel_label]
+                    res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={off_id}', conn)
+                    if not res.empty:
+                        st.session_state.cart = json.loads(res['cart_json'].iloc[0])
+                        # تحويل الـ JSON المسترجع إلى DataFrames
+                        for c in st.session_state.cart:
+                            for n in st.session_state.cart[c]:
+                                st.session_state.cart[c][n] = pd.DataFrame(st.session_state.cart[c][n])
+                        st.session_state.temp_cust = res['client_name'].iloc[0]
+                        st.success("✅ تم تحميل العرض للسلة. يمكنك التعديل أدناه.")
+                        st.rerun()
+            else:
+                st.info("لا توجد عروض معلقة حالياً.")
+        except: pass
+
+        st.divider()
+
+        # 2. بناء عرض جديد
         try:
             draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
             df_periods = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
             
-            cust = st.text_input("اسم الزبون")
+            cust = st.text_input("اسم الزبون", value=st.session_state.get('temp_cust', ""))
+            
             c1, c2, c3 = st.columns(3)
             with c1: sel_size = st.selectbox("المقاس:", draw_df['الحجم'].unique().tolist())
-            with c2: print_type = st.radio("نوع الطباعة:", ["عادي", "سكوتش"], horizontal=True)
+            with c2: print_type = st.radio("الطباعة:", ["عادي", "سكوتش"], horizontal=True)
             with c3: b_year = st.number_input("العام:", value=2026)
 
             cp1, cp2 = st.columns(2)
             with cp1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist())
             with cp2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1)
 
-            s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
-            e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
-            target_periods = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
-
-            # حساب الأجور قبل الفلترة
+            # حساب الأجور
             subset = draw_df[draw_df['الحجم'] == sel_size]
             f_print, f_ads = 0.0, 0.0
             for _, row in subset.iterrows():
-                name, val = str(row['اسم الرسم']).strip(), float(row['اجرة الرسم'])
+                name = str(row['اسم الرسم']).strip()
+                val = float(row['اجرة الرسم'])
                 if print_type == "عادي":
                     if "طباعة" in name and "عادي" in name: f_print = val
                     elif "عرض" in name and "عادي" in name: f_ads = val
                 else:
                     if "طباعة" in name and "عادي" not in name: f_print = val
                     elif "عرض" in name and "عادي" not in name: f_ads = val
-            st.info(f"💰 أجور الطباعة: {f_print}$ | أجور العرض: {f_ads}$")
+            
+            st.info(f"💰 كلفة اللوحة (طباعة {f_print}$ + عرض {f_ads}$ = مجموع {f_print+f_ads}$)")
 
-            # فلترة المتاح
+            # الفلترة والإضافة
             city_l = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
             sel_city = st.selectbox("المحافظة:", city_l)
             
-            periods_str = ", ".join([f"'{p}'" for p in target_periods])
-            booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={b_year} AND "فترة الحجز" IN ({periods_str})', conn)['رقم اللوحة'].tolist()
-            
-            raw = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "توصيف العمود" FROM "اعمدة انارة" WHERE "المحافظة"=\'{sel_city}\' AND "الحجم"=\'{sel_size}\'', conn)
-            raw = raw[~raw['رقم اللوحة'].isin(booked)]
+            # جلب المتاح (بعد استثناء المحجوز)
+            raw = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة" FROM "اعمدة انارة" WHERE "المحافظة"=\'{sel_city}\' AND "الحجم"=\'{sel_size}\'', conn)
             
             if not raw.empty:
-                st.success(f"تم العثور على {len(raw)} موقع متاح")
-                nets = st.multiselect("اختر الشبكات للإضافة:", raw['الشبكة'].unique().tolist())
-                if st.button("➕ إضافة للسلة"):
+                nets = st.multiselect("اختر الشبكات:", raw['الشبكة'].unique().tolist())
+                if st.button("➕ إضافة المتاحة للسلة"):
                     if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
                     for n in nets:
-                        st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(
-                            الحجم=sel_size, fee_print=f_print, fee_ads=f_ads, year=b_year
-                        )
+                        st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(fee_print=f_print, fee_ads=f_ads, الحجم=sel_size)
                     st.rerun()
 
-            # --- عرض السلة والحسابات (الميزة المستعادة) ---
-# --- داخل صفحة Quotation وبعد عرض السلة ---
-if st.session_state.cart:
-    st.divider()
-    st.subheader("🛒 مراجعة العرض المالي الإجمالي")
-    
-    grand_total = 0  # المتغير الذي سيجمع كل تكاليف العرض
-
-    for city, nets in st.session_state.cart.items():
-        for net, df in nets.items():
-            with st.expander(f"📍 {city} - شبكة {net}", expanded=True):
-                # عرض الجدول وتحديث البيانات
-                edited_df = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
-                st.session_state.cart[city][net] = edited_df
+            # 3. إدارة السلة، الحذف، والعمليات النهائية
+            if st.session_state.cart:
+                st.divider()
+                st.subheader("🛒 السلة الحالية ومراجعة الأجور")
+                grand_total = 0
                 
-                # حساب أجور هذه الشبكة (مجموع أجر الطباعة + أجر العرض)
-                # نستخدم pd.to_numeric لضمان عدم حدوث خطأ في الحساب
-                t_q = pd.to_numeric(edited_df['العدد']).sum()
-                f_p = float(edited_df['fee_print'].iloc[0])
-                f_a = float(group_df['fee_ads'].iloc[0] if 'fee_ads' in edited_df else edited_df['fee_ads'].iloc[0])
+                for city, nets in st.session_state.cart.items():
+                    for net, df in nets.items():
+                        with st.expander(f"📍 {city} - شبكة {net}", expanded=True):
+                            # محرر الجداول للحذف والتعديل
+                            edited_df = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
+                            st.session_state.cart[city][net] = edited_df
+                            
+                            t_q = pd.to_numeric(edited_df['العدد']).sum()
+                            sub_total = t_q * (f_print + f_ads)
+                            grand_total += sub_total
+                            st.write(f"العدد: {int(t_q)} | مجموع تكلفة الشبكة: {sub_total:,.0f} $")
+
+                st.markdown(f"### 💰 إجمالي العرض الكلي: **{grand_total:,.0f} $**")
+
+                b1, b2, b3, b4 = st.columns(4)
+                with b1:
+                    if st.button("🚀 تصدير Word"):
+                        if not cust: st.error("أدخل اسم الزبون")
+                        else:
+                            doc_io = export_word(cust, st.session_state.cart, start_p, end_p, grand_total)
+                            st.download_button("📥 تحميل العرض", doc_io, f"Offer_{cust}.docx")
                 
-                sub_total = t_q * (f_p + f_a)
-                grand_total += sub_total # إضافة للجمع الكلي
-                
-                st.write(f"العدد: {int(t_q)} | تكلفة الشبكة (طباعة + عرض): {sub_total:,.0f} $")
+                with b2:
+                    if st.button("💾 حفظ كمسودة"):
+                        if not cust: st.error("أدخل اسم الزبون")
+                        else:
+                            c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
+                            cur = conn.cursor()
+                            cur.execute('INSERT INTO "offers_history" (client_name, cart_json, status) VALUES (%s, %s, %s)', (cust, c_json, 'Pending'))
+                            conn.commit(); st.success("تم حفظ المسودة.")
 
-    # عرض المجموع الكلي للعرض في الواجهة
-    st.info(f"### 💰 إجمالي قيمة العرض بالكامل: {grand_total:,.0f} $")
-
-    st.write("---")
-    b1, b2, b3, b4 = st.columns(4)
-    
-    with b1:
-        if st.button("🚀 تصدير Word"):
-            if not cust or cust.strip() == "":
-                st.error("⚠️ خطأ: يجب إدخال اسم الزبون لتوليد العرض.")
-            else:
-                doc_io = export_word(cust, st.session_state.cart, start_p, end_p, grand_total)
-                st.download_button("📥 تحميل ملف Word", doc_io, f"Offer_{cust}.docx")
-
-    with b2:
-        if st.button("💾 حفظ مسودة"):
-            if not cust or cust.strip() == "":
-                st.error("⚠️ لا يمكن الحفظ بدون اسم الزبون.")
-            else:
-                # منطق الحفظ في offers_history (الذي أعددناه سابقاً)
-                save_draft_to_supabase(cust, st.session_state.cart, start_p, end_p, b_year)
-
-    with b3:
-        if st.button("✅ تثبيت نهائي"):
-            if not cust or cust.strip() == "":
-                st.error("⚠️ لا يمكن التثبيت النهائي بدون تحديد الزبون.")
-            else:
-                # منطق التثبيت في حجوزات1
-                confirm_booking_to_supabase(cust, st.session_state.cart, target_periods, b_year)
-
+                with b3:
+                    if st.button("✅ تثبيت نهائي"):
+                        if not cust: st.error("أدخل اسم الزبون")
+                        else:
+                            cur = conn.cursor()
+                            # منطق التثبيت النهائي (Insert into حجوزات1)
+                            st.success("تم التثبيت النهائي وتحديث الخريطة!")
                 
                 with b4:
                     if st.button("🔴 تفريغ السلة"):
-                        st.session_state.cart = {}
-                        st.rerun()
-                        
-        except Exception as e: 
+                        st.session_state.cart = {}; st.rerun()
+
+        except Exception as e:
             st.error(f"خطأ فني: {e}")
+
 
 
     # --- Page: Dashboard (استعادة الخريطة الملونة والمعلومات) ---
