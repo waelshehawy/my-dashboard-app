@@ -285,13 +285,14 @@ else:
                                     st.session_state.cart = {}
                                     st.rerun()
 
-                
+                            except Exception as e:
+                                st.error(f"خطأ في التثبيت: {e}")               
                 with b4:
                     if st.button("🔴 تفريغ السلة"):
                         st.session_state.cart = {}
                         st.rerun()
-                           except Exception as e:
-                                st.error(f"خطأ في التثبيت: {e}")
+                            except Exception as e:
+                                 st.error(f"خطأ في التثبيت: {e}")
 
 
     # --- Page: Dashboard (استعادة الخريطة الملونة والمعلومات) ---
