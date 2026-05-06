@@ -53,9 +53,7 @@ def set_table_rtl(table):
 
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-    for section in doc.sections: 
-        section.top_margin = Cm(4.5) 
-    
+    for section in doc.sections: section.top_margin = Cm(4.5) 
     PURPLE_COLOR = "660099" 
 
     # السطر الافتتاحي
@@ -63,53 +61,66 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة للفترة من ({start_p}) ولغاية ({end_p})")
+    p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
 
-    # بناء الجداول
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph(f"■ محافظة {city}"); apply_rtl(p_city)
         for net, df in networks.items():
             if df.empty: continue
-            for (size, desc), group_df in df.groupby(['الحجم', 'توصيف العمود']):
+            
+            # نجمع حسب الحجم والتوصيف لضمان ظهور كل فئة بجدولها
+            group_cols = ['الحجم', 'توصيف العمود'] if 'توصيف العمود' in df.columns else ['الحجم']
+            for size_info, group_df in df.groupby(group_cols):
+                # عرض معلومات النوع والقياس
+                desc = size_info[1] if isinstance(size_info, tuple) else "مواقع إعلانية"
+                size = size_info[0] if isinstance(size_info, tuple) else size_info
+                
                 p_size = doc.add_paragraph(f"النوع: {desc} | القياس: {size}"); apply_rtl(p_size)
+                
                 table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
                 hdr = table.rows[0].cells
                 for cell in hdr:
                     shading_elm = OxmlElement('w:shd'); shading_elm.set(qn('w:fill'), PURPLE_COLOR)
                     cell._element.get_or_add_tcPr().append(shading_elm)
-                    run = cell.paragraphs[0].add_run(); run.font.color.rgb = RGBColor(255, 255, 255)
+                    run = cell.paragraphs[0].add_run(); run.font.color.rgb = RGBColor(255, 255, 255); run.bold = True
                 
-                hdr[0].text = f"الشبكة: {net}"
-                hdr[1].text = "العدد"
+                hdr[0].text = f"الشبكة: {net}"; hdr[1].text = "العدد"
                 for cell in hdr: apply_rtl(cell)
 
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[0].text = str(row['الموقع'])
-                    row_cells[1].text = str(row['العدد'])
+                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
                     for cell in row_cells: apply_rtl(cell)
-                    
-    # --- إضافة المجموع العام قبل النهاية (الميزة الجديدة) ---
-    doc.add_paragraph() # سطر فارغ
-    p_total = doc.add_paragraph()
-    p_total.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_total = p_total.add_run(f"إجمالي القيمة المالية للعرض: {grand_total:,.0f} $")
-    run_total.bold = True
-    run_total.font.size = Pt(14)
-    run_total.font.color.rgb = RGBColor(102, 0, 153) # لون موف
-    apply_rtl(p_total)
+
+                # --- الجزء المالي التفصيلي لكل جدول (الذي كان مفقوداً) ---
+                total_q = pd.to_numeric(group_df['العدد']).sum()
+                f_p = float(group_df['fee_print'].iloc[0])
+                f_a = float(group_df['fee_ads'].iloc[0])
+                sum_print = total_q * f_p
+                sum_ads = total_q * f_a
+                
+                p_sum = doc.add_paragraph()
+                txt = (f"إجمالي العدد: {int(total_q)} | "
+                       f"أجور الطباعة: {sum_print:,.0f}$ | "
+                       f"أجور العرض: {sum_ads:,.0f}$ | "
+                       f"المجموع للقسم: {sum_print + sum_ads:,.0f}$")
+                run_sum = p_sum.add_run(txt); run_sum.bold = True; apply_rtl(p_sum)
+
+    # --- المجموع النهائي العام في نهاية الملف ---
+    doc.add_paragraph() 
+    p_grand = doc.add_paragraph()
+    p_grand.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_grand = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
+    run_grand.bold = True; run_grand.font.size = Pt(14); run_grand.font.color.rgb = RGBColor(102, 0, 153)
+    apply_rtl(p_grand)
 
     # الملاحظة النهائية
-    doc.add_paragraph()
     p_note = doc.add_paragraph()
-    run_note = p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية لمدة 48 ساعة من تاريخ إرسال العرض.")
-    run_note.bold = True
+    p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية لمدة 48 ساعة من تاريخ العرض.").bold = True
     apply_rtl(p_note)
     
-    target = io.BytesIO()
-    doc.save(target)
-    target.seek(0)
+    target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
 
 # --- 4. Main App & Logic (Part 2/2) ---
