@@ -211,56 +211,61 @@ else:
                     st.rerun()
 
             # --- عرض السلة والحسابات (الميزة المستعادة) ---
-            if st.session_state.cart:
-                st.divider()
-                st.subheader("🛒 محتويات العرض الحالي")
-                for city, nets in st.session_state.cart.items():
-                    for net, df in nets.items():
-                        with st.expander(f"📍 {city} - شبكة {net}", expanded=True):
-                            # السماح بحذف الأسطر أو تعديلها وإعادة الحسابات فوراً
-                            st.session_state.cart[city][net] = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
-                            # حساب أجور هذه الشبكة المحدثة بعد التعديل أو الحذف
-                            t_q = pd.to_numeric(st.session_state.cart[city][net]['العدد']).sum()
-                            st.write(f"العدد الحالي: {t_q} | التكلفة: {(t_q*f_print)+(t_q*f_ads):,.0f}$")
+# --- داخل صفحة Quotation وبعد عرض السلة ---
+if st.session_state.cart:
+    st.divider()
+    st.subheader("🛒 مراجعة العرض المالي الإجمالي")
+    
+    grand_total = 0  # المتغير الذي سيجمع كل تكاليف العرض
 
-                # تقسيم الأزرار إلى 4 أعمدة
-                b1, b2, b3, b4 = st.columns(4)
+    for city, nets in st.session_state.cart.items():
+        for net, df in nets.items():
+            with st.expander(f"📍 {city} - شبكة {net}", expanded=True):
+                # عرض الجدول وتحديث البيانات
+                edited_df = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
+                st.session_state.cart[city][net] = edited_df
                 
-                with b1:
-                    if st.button("🚀 تصدير Word"):
-                        if not cust: st.error("أدخل اسم الزبون أولاً")
-                        else:
-                            doc_io = export_word(cust, st.session_state.cart, start_p, end_p)
-                            st.download_button("📥 تحميل الآن", doc_io, f"Offer_{cust}.docx")
+                # حساب أجور هذه الشبكة (مجموع أجر الطباعة + أجر العرض)
+                # نستخدم pd.to_numeric لضمان عدم حدوث خطأ في الحساب
+                t_q = pd.to_numeric(edited_df['العدد']).sum()
+                f_p = float(edited_df['fee_print'].iloc[0])
+                f_a = float(group_df['fee_ads'].iloc[0] if 'fee_ads' in edited_df else edited_df['fee_ads'].iloc[0])
                 
-                with b2:
-                    # الميزة المطلوبة: الحفظ في جدول offers_history قبل التثبيت النهائي
-                    if st.button("💾 حفظ كمسودة"):
-                        if not cust: st.error("أدخل اسم الزبون")
-                        else:
-                            import json
-                            cart_json = json.dumps({c: {n: df.to_dict() for n, df in nets.items()} 
-                                                 for c, nets in st.session_state.cart.items()}, ensure_ascii=False)
-                            cursor = conn.cursor()
-                            query = 'INSERT INTO "offers_history" (client_name, cart_json, start_p, end_p, year, status) VALUES (%s, %s, %s, %s, %s, %s)'
-                            cursor.execute(query, (cust, cart_json, start_p, end_p, b_year, 'Pending'))
-                            conn.commit()
-                            st.success(f"✅ تم حفظ المسودة لـ {cust} في السحابة.")
+                sub_total = t_q * (f_p + f_a)
+                grand_total += sub_total # إضافة للجمع الكلي
+                
+                st.write(f"العدد: {int(t_q)} | تكلفة الشبكة (طباعة + عرض): {sub_total:,.0f} $")
 
-                with b3:
-                    if st.button("✅ تثبيت نهائي"):
-                        if not cust: st.error("أدخل اسم الزبون")
-                        else:
-                            cursor = conn.cursor()
-                            for city, nets in st.session_state.cart.items():
-                                for net, df in nets.items():
-                                    for _, row in df.iterrows():
-                                        for p_name in target_periods:
-                                            cursor.execute('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s,%s,%s,%s)', (str(row['رقم اللوحة']), cust, p_name, b_year))
-                            conn.commit()
-                            st.success("✨ تم التثبيت النهائي وتحديث الخريطة!")
-                            st.session_state.cart = {}
-                            st.rerun()
+    # عرض المجموع الكلي للعرض في الواجهة
+    st.info(f"### 💰 إجمالي قيمة العرض بالكامل: {grand_total:,.0f} $")
+
+    st.write("---")
+    b1, b2, b3, b4 = st.columns(4)
+    
+    with b1:
+        if st.button("🚀 تصدير Word"):
+            if not cust or cust.strip() == "":
+                st.error("⚠️ خطأ: يجب إدخال اسم الزبون لتوليد العرض.")
+            else:
+                doc_io = export_word(cust, st.session_state.cart, start_p, end_p, grand_total)
+                st.download_button("📥 تحميل ملف Word", doc_io, f"Offer_{cust}.docx")
+
+    with b2:
+        if st.button("💾 حفظ مسودة"):
+            if not cust or cust.strip() == "":
+                st.error("⚠️ لا يمكن الحفظ بدون اسم الزبون.")
+            else:
+                # منطق الحفظ في offers_history (الذي أعددناه سابقاً)
+                save_draft_to_supabase(cust, st.session_state.cart, start_p, end_p, b_year)
+
+    with b3:
+        if st.button("✅ تثبيت نهائي"):
+            if not cust or cust.strip() == "":
+                st.error("⚠️ لا يمكن التثبيت النهائي بدون تحديد الزبون.")
+            else:
+                # منطق التثبيت في حجوزات1
+                confirm_booking_to_supabase(cust, st.session_state.cart, target_periods, b_year)
+
                 
                 with b4:
                     if st.button("🔴 تفريغ السلة"):
