@@ -188,7 +188,7 @@ else:
                             t_q = pd.to_numeric(df['العدد']).sum()
                             st.write(f"العدد: {t_q} | التكلفة: {(t_q*f_print)+(t_q*f_ads):,.0f}$")
 
-
+st.write("---")
 b1, b2, b3, b4 = st.columns(4)
 
 with b1:
