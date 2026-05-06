@@ -21,7 +21,7 @@ def get_connection():
             port="6543",                                 # منفذ الـ Pooler الضروري لـ IPv4
             database="postgres",
             user="postgres.ncuofpvbaglwbdqnpman",
-            password="w@EL!@#123$",                      # ضع كلمة مرورك الأصلية هنا
+            password="WaelPreview2026",                      # ضع كلمة مرورك الأصلية هنا
             sslmode="require",
             connect_timeout=10                           # مهلة زمنية للاتصال
         )
