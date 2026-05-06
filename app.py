@@ -90,7 +90,7 @@ def export_word(customer_name, cart_data, start_p, end_p):
                 for cell in hdr: apply_rtl(cell)
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
+                    row_cells[0].text = str(row['اسم العمود']); row_cells[1].text = str(row['العدد'])
                     for cell in row_cells: apply_rtl(cell)
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
