@@ -123,6 +123,39 @@ else:
 
     # --- Page: Quotation (استعادة السلة والحسابات) ---
     if page == "📄 Quotation":
+                st.subheader("📂 استرجاع عرض سعر محفوظ")
+        # جلب قائمة العروض المعلقة من السحابة
+        saved_offers = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status=\'Pending\' ORDER BY offer_date DESC', conn)
+        
+        if not saved_offers.empty:
+            # دمج اسم الزبون مع التاريخ للتمييز بين العروض
+            options = {f"{row['client_name']} ({row['offer_date']})": row['id'] for _, row in saved_offers.iterrows()}
+            selected_label = st.selectbox("اختر العرض المطلوب استرجاعه وتثبيته:", options.keys())
+            
+            if st.button("🔄 تحميل العرض للسلة"):
+                offer_id = options[selected_label]
+                # جلب الـ JSON الخاص بهذا العرض
+                res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={offer_id}', conn)
+                if not res.empty:
+                    import json
+                    raw_json = json.loads(res['cart_json'].iloc[0])
+                    # إعادة بناء السلة من JSON إلى جداول DataFrame
+                    reconstructed_cart = {}
+                    for city, nets in raw_json.items():
+                        reconstructed_cart[city] = {n: pd.DataFrame(df_dict) for n, df_dict in nets.items()}
+                    
+                    # وضع البيانات في السلة وتحديث اسم الزبون في الـ session_state
+                    st.session_state.cart = reconstructed_cart
+                    # ملاحظة: سنستخدم st.session_state لملء حقل اسم الزبون تلقائياً
+                    st.session_state.temp_cust_name = res['client_name'].iloc[0]
+                    
+                    st.success("✅ تم تحميل العرض بنجاح! يمكنك الآن حذف المواقع المرفوضة من الجداول أدناه ثم الضغط على 'تثبيت نهائي'.")
+                    st.rerun()
+        else:
+            st.info("لا توجد عروض محفوظة حالياً.")
+        
+        st.write("---")
+
         st.title("📄 بناء عرض سعر وتثبيت حجز")
         try:
             draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
