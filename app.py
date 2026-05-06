@@ -123,7 +123,7 @@ else:
 
     # --- Page: Quotation (استعادة السلة والحسابات) ---
     if page == "📄 Quotation":
-                st.subheader("📂 استرجاع عرض سعر محفوظ")
+        st.subheader("📂 استرجاع عرض سعر محفوظ")
         # جلب قائمة العروض المعلقة من السحابة
         saved_offers = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status=\'Pending\' ORDER BY offer_date DESC', conn)
         
@@ -155,6 +155,7 @@ else:
             st.info("لا توجد عروض محفوظة حالياً.")
         
         st.write("---")
+               
 
         st.title("📄 بناء عرض سعر وتثبيت حجز")
         try:
