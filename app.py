@@ -38,14 +38,7 @@ def get_engine():
     return create_engine(uri)
 
 # --- 2. Word & RTL Helpers ---
-def _force_rtl_style(p):
-    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    pPr = p._element.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
-    for run in p.runs:
-        rPr = run._element.get_or_add_rPr()
-        rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
-        rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
+
 
 def apply_rtl(obj):
     if hasattr(obj, 'paragraphs'):
