@@ -160,15 +160,15 @@ else:
     if 'cart' not in st.session_state: st.session_state.cart = {}
     
     with st.sidebar:
-        st.image("https://placeholder.com", use_column_width=True) # استبدلها بلوغو شركتك
-        page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
-        st.divider()
-        if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
+        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
+        if st.button("تسجيل الخروج"): 
+            st.session_state.auth = False
+            st.rerun()
 
     # --- Page: Dashboard ---
 
-    elif page == "📊 Dashboard":
-        st.title("📊 الخريطة التفاعلية وحالة الإشغال")
+    if page == "📊 Dashboard":
+        st.title("📊 الخريطة التفاعلية")
         
         # التأكد من وجود اتصال فعال
         if conn is None:
