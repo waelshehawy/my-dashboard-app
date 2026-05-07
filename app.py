@@ -65,7 +65,9 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     p_cust = doc.add_paragraph()
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     _force_rtl_style(p_cust)
-    
+        # --- إضافة مسافة سطرين بين العنوان وبداية العرض ---
+    doc.add_paragraph()
+    doc.add_paragraph()
     p_stat = doc.add_paragraph()
     p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
