@@ -180,33 +180,45 @@ else:
         page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
         if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
-        if conn:
-        # --- Page: Dashboard (المسافات هنا حاسمة) ---
+    if conn:
+        # --- Page: Dashboard ---
         if page == "📊 Dashboard":
             st.title("📊 الخريطة التفاعلية وحالة الإشغال")
             
-            # تأكد أن كل الكود التالي مزاح بـ 8 مسافات عن بداية الملف
+            # 1. Fetch data based on CURRENT YEAR
             current_year = datetime.now().year
             df_booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
             df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
             
+            # 2. Merge and remove duplicates to get exactly 623 points
             df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left').drop_duplicates(subset=['رقم اللوحة'])
             
+            # 3. Display Metrics
             c1, c2, c3 = st.columns(3)
             c1.metric("إجمالي اللوحات", len(df_map))
-            c2.metric("محجوز حالياً", df_map['اسم الزبون'].notnull().sum())
-            c3.metric("متاح حالياً", df_map['اسم الزبون'].isnull().sum())
+            c2.metric("محجوز حالياً", int(df_map['اسم الزبون'].notnull().sum()))
+            c3.metric("متاح حالياً", int(df_map['اسم الزبون'].isnull().sum()))
 
+            # 4. Map Logic
             m = folium.Map(location=SYRIA_CITIES_COORDS["سوريا"], zoom_start=7)
             cluster = MarkerCluster().add_to(m)
             for _, r in df_map.iterrows():
                 if pd.notnull(r.get('Latitude')):
                     is_booked = pd.notnull(r['اسم الزبون'])
                     color = 'red' if is_booked else 'purple'
-                    folium.Marker([r['Latitude'], r['Longitude']], 
-                                  popup=f"الموقع: {r['اسم العمود']}", 
-                                  icon=folium.Icon(color=color)).add_to(cluster)
+                    popup_text = f"الموقع: {r['اسم العمود']}<br>الحالة: {'محجوز' if is_booked else 'متاح'}"
+                    folium.Marker(
+                        [r['Latitude'], r['Longitude']], 
+                        popup=folium.Popup(popup_text, max_width=200), 
+                        icon=folium.Icon(color=color)
+                    ).add_to(cluster)
             st_folium(m, width="100%", height=600)
+
+        # --- Page: Quotation ---
+        elif page == "📄 Quotation":
+            # (Insert your Quotation code here, MUST be at the same indentation level as 'if page == "📊 Dashboard"')
+            st.title("📄 بناء عرض سعر وتثبيت حجز")
+            # ... rest of your quotation logic
 
     
 
