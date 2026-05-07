@@ -180,9 +180,9 @@ else:
         page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
         if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
-    if conn:
-    # --- Page: Dashboard (المصحح لإظهار الحالة الحالية فقط) ---
-if page == "📊 Dashboard":
+        if conn:
+        # --- Page: Dashboard (المسافات هنا حاسمة) ---
+        if page == "📊 Dashboard":
             st.title("📊 الخريطة التفاعلية وحالة الإشغال")
             
             # تأكد أن كل الكود التالي مزاح بـ 8 مسافات عن بداية الملف
@@ -206,7 +206,12 @@ if page == "📊 Dashboard":
                     folium.Marker([r['Latitude'], r['Longitude']], 
                                   popup=f"الموقع: {r['اسم العمود']}", 
                                   icon=folium.Icon(color=color)).add_to(cluster)
-            st_folium(m, width="100%", height=600)    
+            st_folium(m, width="100%", height=600)
+
+        # --- Page: Quotation (يجب أن تبدأ بنفس مستوى إزاحة Dashboard) ---
+        elif page == "📄 Quotation":
+            st.title("📄 بناء عرض سعر")
+    
 
 
 
