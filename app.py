@@ -260,21 +260,29 @@ else:
 
             # 5. إدارة السلة وعرض المالي
             if st.session_state.cart:
-                st.divider()
-                grand_total = 0
-                for city, nets in list(st.session_state.cart.items()):
-                    for net, df in list(nets.items()):
-                        with st.expander(f"📍 {city} - {net}", expanded=True):
-                            ed_df = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
-                            st.session_state.cart[city][net] = ed_df
-                            # حساب المجموع بناءً على القيم المخزنة في السلة لكل سطر
-                            total_q = pd.to_numeric(ed_df['العدد']).sum()
-                            grand_total += total_q * (f_print + f_ads)
-                            if st.button("حذف الشبكة", key=f"del_{city}_{net}"):
-                                del st.session_state.cart[city][net]
-                                st.rerun()
+    st.divider()
+    grand_total = 0
+    for city, nets in list(st.session_state.cart.items()):
+        for net, df in list(nets.items()):
+            with st.expander(f"📍 {city} - {net}", expanded=True):
+                ed_df = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
+                st.session_state.cart[city][net] = ed_df
                 
-                st.info(f"### 💰 إجمالي العرض المالي: {grand_total:,.0f} $")
+                # --- التعديل الجوهري هنا ---
+                # نأخذ الأجور من الأعمدة المخزنة في السلة نفسها لضمان عدم ضياعها عند الاسترجاع
+                total_q = pd.to_numeric(ed_df['العدد']).sum()
+                # نستخدم .max() للحصول على القيمة المخزنة في العمود لهذا الجدول
+                row_f_print = float(ed_df['fee_print'].max()) if 'fee_print' in ed_df.columns else 0
+                row_f_ads = float(ed_df['fee_ads'].max()) if 'fee_ads' in ed_df.columns else 0
+                
+                grand_total += total_q * (row_f_print + row_f_ads)
+                
+                if st.button("حذف الشبكة", key=f"del_{city}_{net}"):
+                    del st.session_state.cart[city][net]
+                    st.rerun()
+    
+    st.info(f"### 💰 إجمالي القيمة المالية للعرض: {grand_total:,.0f} $")
+
                 
                 b1, b2, b3, b4 = st.columns(4)
                 with b1:
