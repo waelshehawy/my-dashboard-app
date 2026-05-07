@@ -334,30 +334,7 @@ else:
 
 
                 
-                b1, b2, b3, b4 = st.columns(4)
-                with b1:
-                    if st.button("💾 حفظ مسودة (48س)"):
-                        if not cust: st.error("أدخل اسم الزبون")
-                        else:
-                            c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
-                            cur = conn.cursor()
-                            cur.execute('INSERT INTO "offers_history" (client_name, cart_json, start_p, end_p, year, status) VALUES (%s, %s, %s, %s, %s, %s)', (cust, c_json, start_p, end_p, b_year, 'Pending'))
-                            conn.commit(); st.success("تم حفظ المسودة بنجاح.")
-                with b2:
-                    if st.button("✅ تثبيت حجز نهائي"):
-                        if not cust: st.error("أدخل اسم الزبون")
-                        else:
-                            recs = [(str(r['رقم اللوحة']), str(cust), str(p), int(b_year)) for city, ns in st.session_state.cart.items() for n, df in ns.items() for _, r in df.iterrows() for p in target_p_names]
-                            cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs)
-                            conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت نهائياً!"); st.rerun()
-                with b3:
-                    if st.button("📝 تصدير Word الرسمي"):
-                        # استدعاء دالة التصدير التي تستخدم القالب (Template)
-                        doc_io = export_word(cust, st.session_state.cart, start_p, end_p, grand_total)
-                        st.download_button("📥 تحميل ملف العرض", doc_io, f"Offer_{cust}.docx")
-                with b4:
-                    if st.button("🔴 تفريغ السلة"):
-                        st.session_state.cart = {}; st.rerun()
+                
 
         # --- Page: تقرير الجرد ---
         elif page == "📋 تقرير الجرد":
