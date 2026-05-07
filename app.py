@@ -57,90 +57,107 @@ def set_table_rtl(table):
     bidi = OxmlElement('w:bidiVisual'); tblPr.append(bidi)
 
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
-    # تحميل القالب للحفاظ على السمة واللوغو
-    if os.path.exists('template.docx'):
-        doc = Document('template.docx')
-    else:
-        doc = Document()
-        st.warning("⚠️ ملف template.docx غير موجود، سيتم التصدير بدون لوغو.")
+    # تحميل القالب للحفاظ على اللوجو والسمة
+    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+    
+    # ضبط الهوامش لتناسب الترويسة
+    for section in doc.sections:
+        section.top_margin = Cm(4.5)
+        section.right_margin = Cm(2.0)
+        section.left_margin = Cm(2.0)
 
-    for section in doc.sections: 
-        section.top_margin = Cm(4.5) # ترك مساحة للترويسة (Logo)
+    PURPLE_COLOR = "660099"
 
-    # --- بداية النص الرسمي ---
+    # 1. السطر الافتتاحي (محاذاة يمين)
     p_cust = doc.add_paragraph()
-    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
-    run_c.bold = True; run_c.font.size = Pt(14)
+    run_c.bold = True; run_c.font.size = Pt(14); run_c.font.name = 'Arial'
     apply_rtl(p_cust)
     
     p_stat = doc.add_paragraph()
+    p_stat.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
 
+    # 2. تفاصيل المواقع والجداول
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph()
-        p_city.add_run(f"■ محافظة {city}").bold = True
+        p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        p_city.add_run(f"■ محافظة {city}").bold = True; p_city.runs[0].font.size = Pt(13)
         apply_rtl(p_city)
         
         for net, df in networks.items():
             if df.empty: continue
-            # تجميع حسب الحجم والتوصيف لضمان دقة العرض
             for size_info, group_df in df.groupby(['الحجم']):
                 p_size = doc.add_paragraph()
+                p_size.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
                 apply_rtl(p_size)
                 
+                # إنشاء الجدول
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
-                set_table_rtl(table)
+                table.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                set_table_rtl(table) # تفعيل اتجاه الجدول من اليمين
                 
                 hdr = table.rows[0].cells
                 hdr[0].text = "اسم الموقع (العمود)"
                 hdr[1].text = "العدد"
+                
                 for cell in hdr:
                     apply_rtl(cell)
-                    # تلوين الهيدر بالبنفسجي كما طلبت
                     tc_pr = cell._element.get_or_add_tcPr()
                     shd = OxmlElement('w:shd')
-                    shd.set(qn('w:fill'), "660099")
+                    shd.set(qn('w:fill'), PURPLE_COLOR)
                     tc_pr.append(shd)
                     cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
                     row_cells[0].text = str(row['الموقع'])
                     row_cells[1].text = str(row['العدد'])
-                    for cell in row_cells: apply_rtl(cell)
+                    for cell in row_cells: 
+                        apply_rtl(cell)
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-                # --- حساب الأجور لكل قسم ---
-                q = pd.to_numeric(group_df['العدد']).sum()
-                # التأكد من سحب القيم الصحيحة من السلة
-                p_fee = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
-                a_fee = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
+                # --- الجزء المالي لكل جدول (طباعة + عرض) ---
+                total_q = pd.to_numeric(group_df['العدد']).sum()
+                f_print = float(group_df['fee_print'].iloc[0])
+                f_ads = float(group_df['fee_ads'].iloc[0])
                 
-                p_sum = doc.add_paragraph()
-                p_sum.add_run(f"إجمالي العدد: {int(q)} | المجموع المالي للقسم: {q * (p_fee + a_fee):,.0f} $").bold = True
-                apply_rtl(p_sum)
+                total_print = total_q * f_print
+                total_ads = total_q * f_ads
+                sub_total = total_print + total_ads
 
-    # المجموع النهائي الملون
+                p_finance = doc.add_paragraph()
+                p_finance.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                fin_text = (f"إجمالي العدد: {int(total_q)}  |  "
+                            f"أجور الطباعة: {total_print:,.0f} $  |  "
+                            f"أجور العرض: {total_ads:,.0f} $  |  "
+                            f"المجموع للقسم: {sub_total:,.0f} $")
+                run_fin = p_finance.add_run(fin_text)
+                run_fin.bold = True; run_fin.font.size = Pt(11)
+                apply_rtl(p_finance)
+
+    # 3. المجموع النهائي العام
+    doc.add_paragraph() # سطر فارغ
     p_grand = doc.add_paragraph()
     p_grand.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_grand = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
-    run_grand.bold = True
-    run_grand.font.size = Pt(16)
-    run_grand.font.color.rgb = RGBColor(102, 0, 153)
+    run_grand.bold = True; run_grand.font.size = Pt(16); run_grand.font.color.rgb = RGBColor(102, 0, 153)
     apply_rtl(p_grand)
 
-    # ملاحظة الـ 48 ساعة
+    # 4. الملاحظة الختامية
     p_note = doc.add_paragraph()
-    p_note.add_run("• ملاحظة: المواقع المتاحة أعلاه سارية لمدة 48 ساعة فقط من تاريخ هذا العرض.").italic = True
+    p_note.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_note.add_run("• ملاحظة هامة: هذا العرض والمواقع المتاحة فيه سارية لمدة 48 ساعة فقط من تاريخه.").italic = True
     apply_rtl(p_note)
 
-    target = io.BytesIO()
-    doc.save(target)
-    target.seek(0)
+    target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
+
 
 
 # --- 3. Manage Expired Offers Logic ---
