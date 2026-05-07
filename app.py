@@ -57,40 +57,91 @@ def set_table_rtl(table):
     bidi = OxmlElement('w:bidiVisual'); tblPr.append(bidi)
 
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
-    doc = Document()
-    for section in doc.sections: section.top_margin = Cm(2.0)
-    PURPLE_COLOR = "660099"
+    # تحميل القالب للحفاظ على السمة واللوغو
+    if os.path.exists('template.docx'):
+        doc = Document('template.docx')
+    else:
+        doc = Document()
+        st.warning("⚠️ ملف template.docx غير موجود، سيتم التصدير بدون لوغو.")
 
-    p_cust = doc.add_paragraph(); p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+    for section in doc.sections: 
+        section.top_margin = Cm(4.5) # ترك مساحة للترويسة (Logo)
+
+    # --- بداية النص الرسمي ---
+    p_cust = doc.add_paragraph()
+    p_cust.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
+    run_c.bold = True; run_c.font.size = Pt(14)
+    apply_rtl(p_cust)
     
     p_stat = doc.add_paragraph()
     p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
     apply_rtl(p_stat)
 
     for city, networks in cart_data.items():
-        p_city = doc.add_paragraph(f"■ محافظة {city}"); apply_rtl(p_city)
+        p_city = doc.add_paragraph()
+        p_city.add_run(f"■ محافظة {city}").bold = True
+        apply_rtl(p_city)
+        
         for net, df in networks.items():
             if df.empty: continue
+            # تجميع حسب الحجم والتوصيف لضمان دقة العرض
             for size_info, group_df in df.groupby(['الحجم']):
-                p_size = doc.add_paragraph(f"الشبكة: {net} | القياس: {size_info}"); apply_rtl(p_size)
-                table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
+                p_size = doc.add_paragraph()
+                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
+                apply_rtl(p_size)
+                
+                table = doc.add_table(rows=1, cols=2)
+                table.style = 'Table Grid'
+                set_table_rtl(table)
+                
                 hdr = table.rows[0].cells
-                hdr[0].text = "الموقع"; hdr[1].text = "العدد"
-                for cell in hdr: apply_rtl(cell)
+                hdr[0].text = "اسم الموقع (العمود)"
+                hdr[1].text = "العدد"
+                for cell in hdr:
+                    apply_rtl(cell)
+                    # تلوين الهيدر بالبنفسجي كما طلبت
+                    tc_pr = cell._element.get_or_add_tcPr()
+                    shd = OxmlElement('w:shd')
+                    shd.set(qn('w:fill'), "660099")
+                    tc_pr.append(shd)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
+                    row_cells[0].text = str(row['الموقع'])
+                    row_cells[1].text = str(row['العدد'])
                     for cell in row_cells: apply_rtl(cell)
-    
+
+                # --- حساب الأجور لكل قسم ---
+                q = pd.to_numeric(group_df['العدد']).sum()
+                # التأكد من سحب القيم الصحيحة من السلة
+                p_fee = float(group_df['fee_print'].iloc[0]) if 'fee_print' in group_df.columns else 0
+                a_fee = float(group_df['fee_ads'].iloc[0]) if 'fee_ads' in group_df.columns else 0
+                
+                p_sum = doc.add_paragraph()
+                p_sum.add_run(f"إجمالي العدد: {int(q)} | المجموع المالي للقسم: {q * (p_fee + a_fee):,.0f} $").bold = True
+                apply_rtl(p_sum)
+
+    # المجموع النهائي الملون
     p_grand = doc.add_paragraph()
     p_grand.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_grand = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
-    run_grand.bold = True; run_grand.font.size = Pt(14); run_grand.font.color.rgb = RGBColor(102, 0, 153)
+    run_grand.bold = True
+    run_grand.font.size = Pt(16)
+    run_grand.font.color.rgb = RGBColor(102, 0, 153)
     apply_rtl(p_grand)
 
-    target = io.BytesIO(); doc.save(target); target.seek(0)
+    # ملاحظة الـ 48 ساعة
+    p_note = doc.add_paragraph()
+    p_note.add_run("• ملاحظة: المواقع المتاحة أعلاه سارية لمدة 48 ساعة فقط من تاريخ هذا العرض.").italic = True
+    apply_rtl(p_note)
+
+    target = io.BytesIO()
+    doc.save(target)
+    target.seek(0)
     return target
+
 
 # --- 3. Manage Expired Offers Logic ---
 def manage_expired_offers(conn):
