@@ -5,3 +5,4 @@ folium
 streamlit-folium
 python-docx
 sqlalchemy
+xlsxwriter
