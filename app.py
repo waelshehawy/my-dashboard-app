@@ -67,7 +67,7 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     _force_rtl_style(p_cust)
     
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
+    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
 
     for city, networks in cart_data.items():
