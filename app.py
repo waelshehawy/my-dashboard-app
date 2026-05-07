@@ -181,6 +181,7 @@ else:
         if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
     if conn:
+   
     # --- Page: Dashboard (المصحح لإظهار الحالة الحالية فقط) ---
     elif page == "📊 Dashboard":
         st.title("📊 الخريطة التفاعلية - الحالة الحالية")
