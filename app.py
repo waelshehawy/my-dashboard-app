@@ -45,55 +45,29 @@ def apply_rtl(obj):
         for p in obj.paragraphs: _force_rtl_style(p)
     else: _force_rtl_style(obj)
 def _force_rtl_style(p):
-    # 1. ضبط المحاذاة الأفقية لليمين
-    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    
-    # 2. الوصول إلى الخصائص العميقة للفقرة (XML) لضبط اتجاه RTL
+    # استخدام LEFT هنا مع bidi=1 يعني اليمين في منطق الملفات العربية
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
     pPr = p._element.get_or_add_pPr()
-    
-    # ضبط اتجاه الفقرة من اليمين لليسار
-    bidi = OxmlElement('w:bidi')
-    bidi.set(qn('w:val'), '1')
-    pPr.append(bidi)
-    
-    # 3. ضبط اتجاه النص داخل الـ Runs (الكلمات)
+    bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
     for run in p.runs:
         rPr = run._element.get_or_add_rPr()
-        # تفعيل خاصية النصوص المعقدة (للغة العربية)
-        rtl = OxmlElement('w:rtl')
-        rtl.set(qn('w:val'), '1')
-        rPr.append(rtl)
-        
-        # إجبار نوع الخط العربي لضمان عدم انقلابه
-        rFonts = OxmlElement('w:rFonts')
-        rFonts.set(qn('w:cs'), 'Arial')
-        rPr.append(rFonts)
-
-
-def set_table_rtl(table):
-    # جعل الجدول نفسه يبدأ من اليمين
-    tblPr = table._element.xpath('w:tblPr')[0]
-    bidi = OxmlElement('w:bidiVisual')
-    tblPr.append(bidi)
+        rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
 
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-    
-    # ضبط الهوامش (مهم جداً لعدم قص النص اليميني)
-    for section in doc.sections:
-        section.right_margin = Cm(2.0)
-        section.left_margin = Cm(2.0)
+    PURPLE_COLOR = "660099" 
 
-    # إضافة الفقرات مع تطبيق دالة الـ RTL فوراً
+    # 1. السطر الافتتاحي
     p_cust = doc.add_paragraph()
-    run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
-    run_c.bold = True; run_c.font.size = Pt(14)
-    _force_rtl_style(p_cust) # تطبيق الإجبار هنا
+    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+    _force_rtl_style(p_cust)
     
     p_stat = doc.add_paragraph()
     p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
 
+    # 2. الجداول والتفاصيل المالية
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph()
         p_city.add_run(f"■ محافظة {city}").bold = True
@@ -103,47 +77,58 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
             if df.empty: continue
             for size_info, group_df in df.groupby(['الحجم']):
                 p_size = doc.add_paragraph()
-                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}")
+                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
                 _force_rtl_style(p_size)
                 
-                table = doc.add_table(rows=1, cols=2)
-                table.style = 'Table Grid'
-                set_table_rtl(table) # إجبار الجدول لليمين
+                table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'
+                set_table_rtl(table)
                 
                 hdr = table.rows[0].cells
-                hdr[0].text = "الموقع"
-                hdr[1].text = "العدد"
+                hdr[0].text = "اسم الموقع (العمود)"; hdr[1].text = "العدد"
                 for cell in hdr:
                     for p in cell.paragraphs: _force_rtl_style(p)
-                    # تلوين الخلية بالبنفسجي
                     tc_pr = cell._element.get_or_add_tcPr()
-                    shd = OxmlElement('w:shd')
-                    shd.set(qn('w:fill'), "660099")
-                    tc_pr.append(shd)
+                    shd = OxmlElement('w:shd'); shd.set(qn('w:fill'), PURPLE_COLOR); tc_pr.append(shd)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
 
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
-                    row_cells[0].text = str(row['الموقع'])
-                    row_cells[1].text = str(row['العدد'])
+                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
                     for cell in row_cells:
                         for p in cell.paragraphs: _force_rtl_style(p)
 
-                # إضافة الأجور التفصيلية لكل جدول
+                # --- الحساب المالي لكل جدول (إضافة المجموع الكلي للقسم) ---
                 total_q = pd.to_numeric(group_df['العدد']).sum()
-                f_p, f_a = float(group_df['fee_print'].iloc[0]), float(group_df['fee_ads'].iloc[0])
+                f_p = float(group_df['fee_print'].iloc[0])
+                f_a = float(group_df['fee_ads'].iloc[0])
+                
+                sum_print = total_q * f_p
+                sum_ads = total_q * f_a
+                sum_combined = sum_print + sum_ads # مجموع الطباعة والعرض معاً
+                
                 p_fin = doc.add_paragraph()
-                p_fin.add_run(f"أجور الطباعة: {total_q*f_p:,.0f}$ | أجور العرض: {total_q*f_a:,.0f}$")
+                txt = (f"إجمالي العدد: {int(total_q)} | "
+                       f"أجور الطباعة: {sum_print:,.0f}$ | "
+                       f"أجور العرض: {sum_ads:,.0f}$ | "
+                       f"المجموع للقسم: {sum_combined:,.0f}$")
+                run_fin = p_fin.add_run(txt); run_fin.bold = True
                 _force_rtl_style(p_fin)
 
-    # المجموع النهائي العام
+    # 3. المجموع النهائي العام
+    doc.add_paragraph() 
     p_grand = doc.add_paragraph()
-    p_grand.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_g = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
-    run_g.bold = True; run_g.font.size = Pt(16); run_g.font.color.rgb = RGBColor(102, 0, 153)
+    run_g.bold = True; run_g.font.size = Pt(14); run_g.font.color.rgb = RGBColor(102, 0, 153)
     _force_rtl_style(p_grand)
+
+    # 4. الملاحظة الختامية
+    p_note = doc.add_paragraph()
+    p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية لمدة 48 ساعة من تاريخ العرض.").italic = True
+    _force_rtl_style(p_note)
 
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
+
 
 
 
