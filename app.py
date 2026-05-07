@@ -349,99 +349,75 @@ else:
                 
                 
 
-        # --- Page: تقرير الجرد ---
                 # --- Page: تقرير الجرد (مع أزرار التصدير) ---
+                # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
             try:
+                # 1. جلب البيانات الأساسية
                 df_p = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
                 c1, c2, c3 = st.columns(3)
                 with c1: s_p = st.selectbox("من فترة:", df_p['namee'].tolist(), key="s1")
                 with c2: e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="s2")
                 with c3: yr = st.number_input("العام:", value=2026, key="s3")
                 
-                # حساب الفترات المستهدفة
-                s_no_val = df_p[df_p['namee'] == s_p]['no']
-                e_no_val = df_p[df_p['namee'] == e_p]['no']
-
-                if not s_no_val.empty and not e_no_val.empty:
-                    s_no = int(s_no_val.iloc[0]) # إضافة [0] لحل المشكلة
-                    e_no = int(e_no_val.iloc[0]) # إضافة [0] لحل المشكلة
-                    
-                    target_list = df_p[(df_p['no'] >= s_no) & (df_p['no'] <= e_no)]['namee'].tolist()
-                else:
-                    target_list = []
+                # تصحيح سحب الفترات
+                s_no = int(df_p[df_p['namee'] == s_p]['no'].iloc[0])
+                e_no = int(df_p[df_p['namee'] == e_p]['no'].iloc[0])
+                target_list = df_p[(df_p['no'] >= s_no) & (df_p['no'] <= e_no)]['namee'].tolist()
                 
-                # جلب البيانات
+                # جلب كافة اللوحات دون استثناء
                 all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم", "الشبكة" FROM "اعمدة انارة"', conn)
-                p_str_j = ", ".join([f"'{p}'" for p in target_list])
-                booked_j = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_str_j})', conn)['رقم اللوحة'].tolist()
+                
+                # جلب الحجوزات
+                p_placeholders = ", ".join([f"'{p}'" for p in target_list])
+                booked_j = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_placeholders})', conn)['رقم اللوحة'].tolist()
                 
                 all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_j else 'متاح')
                 
-                # عرض الجداول في الواجهة
-                full_report_data = [] # لتجميع البيانات للتصدير
-                for city in all_b['المحافظة'].unique():
+                # عرض البيانات في الواجهة (لضمان وجود دمشق)
+                for city in sorted(all_b['المحافظة'].unique()):
                     st.write(f"### 📍 محافظة {city}")
-                    city_df = all_b[all_b['المحافظة']==city]
+                    city_df = all_b[all_b['المحافظة'] == city]
                     stats = city_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
                     if 'محجوز' not in stats.columns: stats['محجوز'] = 0
                     if 'متاح' not in stats.columns: stats['متاح'] = 0
-                    stats['الإجمالي'] = stats['محجوز'] + stats['متاح']
                     st.table(stats)
-                    full_report_data.append(city_df)
 
                 st.divider()
-                
-                # --- أزرار التصدير ---
-                st.subheader("📥 تصدير التقرير")
+                st.subheader("📥 تصدير التقارير")
                 exp_col1, exp_col2 = st.columns(2)
                 
-                # 1. تصدير Excel
+                # تصحيح ملف الإكسل (CSV مع BOM للغة العربية)
                 with exp_col1:
-                    output_excel = io.BytesIO()
-                    with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-                        all_b.to_excel(writer, index=False, sheet_name='الجرد التفصيلي')
-                    st.download_button(
-                        label="Excel تحميل تقرير الجرد التفصيلي",
-                        data=output_excel.getvalue(),
-                        file_name=f"Inventory_Report_{yr}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    # إضافة BOM (Byte Order Mark) ليتمكن إكسل من التعرف على ترميز UTF-8 للعربية
+                    csv_data = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+                    st.download_button("Excel تحميل تقرير الجرد التفصيلي", csv_data, f"Inventory_{yr}.csv", "text/csv")
 
-                # 2. تصدير Word (تقرير ملخص)
+                # تصحيح ملف الوورد (إضافة كافة المحافظات)
                 with exp_col2:
                     rep_doc = Document()
                     rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
-                    rep_doc.add_paragraph(f"الفترة من: {s_p} إلى: {e_p}")
-                    
-                    for city in all_b['المحافظة'].unique():
+                    for city in sorted(all_b['المحافظة'].unique()):
                         rep_doc.add_heading(f"محافظة {city}", level=1)
-                        # إضافة جدول البيانات للوورد (تبسيطاً للتقرير)
                         city_stats = all_b[all_b['المحافظة']==city].groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
                         table = rep_doc.add_table(rows=1, cols=3)
                         table.style = 'Table Grid'
-                        hdr_cells = table.rows[0].cells
-                        hdr_cells[0].text = 'المقاس'
-                        hdr_cells[1].text = 'المحجوز'
-                        hdr_cells[2].text = 'المتاح'
+                        # تفعيل RTL للجدول في تقرير الجرد أيضاً
+                        set_table_rtl(table)
+                        hdr = table.rows[0].cells
+                        hdr[0].text, hdr[1].text, hdr[2].text = "المقاس", "المحجوز", "المتاح"
                         for size, row in city_stats.iterrows():
-                            row_cells = table.add_row().cells
-                            row_cells[0].text = str(size)
-                            row_cells[1].text = str(row.get('محجوز', 0))
-                            row_cells[2].text = str(row.get('متاح', 0))
-
-                    output_word = io.BytesIO()
-                    rep_doc.save(output_word)
-                    st.download_button(
-                        label="Word تحميل التقرير بصيغة",
-                        data=output_word.getvalue(),
-                        file_name=f"Inventory_Summary_{yr}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                            r_cells = table.add_row().cells
+                            r_cells[0].text, r_cells[1].text, r_cells[2].text = str(size), str(row.get('محجوز', 0)), str(row.get('متاح', 0))
+                    
+                    word_out = io.BytesIO()
+                    rep_doc.save(word_out)
+                    st.download_button("Word تحميل التقرير الرسمي", word_out.getvalue(), f"Report_{yr}.docx")
 
             except Exception as e:
-                st.error(f"حدث خطأ أثناء إعداد التقرير: {e}")
+                st.error(f"⚠️ خطأ في الجرد: {e}")
+
 
 
         conn.close()
