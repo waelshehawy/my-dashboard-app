@@ -18,7 +18,8 @@ from sqlalchemy import create_engine, text
 def get_connection():
     try:
         return psycopg2.connect(
-            host="://supabase.com",
+            # الـ host يجب أن يكون العنوان التقني المباشر بدون http أو ://
+            host="aws-1-eu-north-1.pooler.supabase.com", 
             port="6543",
             database="postgres",
             user="postgres.ncuofpvbaglwbdqnpman",
@@ -30,8 +31,10 @@ def get_connection():
         st.error(f"⚠️ فشل الاتصال بالقاعدة: {e}")
         return None
 
+# --- 2. تصحيح دالة المحرك (SQLAlchemy) لصفحة الإعدادات ---
 def get_engine():
-    uri = "postgresql://postgres.ncuofpvbaglwbdqnpman:WaelPreview2026@://supabase.com:6543/postgres"
+    # الرابط الكامل والمصحح للإدخال المباشر
+    uri = "postgresql://postgres.ncuofpvbaglwbdqnpman:WaelPreview2026@://supabase.com"
     return create_engine(uri)
 
 # --- 2. Word & RTL Helpers ---
