@@ -208,9 +208,6 @@ else:
                                   icon=folium.Icon(color=color)).add_to(cluster)
             st_folium(m, width="100%", height=600)
 
-        # --- Page: Quotation (يجب أن تبدأ بنفس مستوى إزاحة Dashboard) ---
-        elif page == "📄 Quotation":
-            st.title("📄 بناء عرض سعر")
     
 
 
