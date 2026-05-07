@@ -53,110 +53,80 @@ def apply_rtl(obj):
     else: _force_rtl_style(obj)
 
 def set_table_rtl(table):
+    # جعل الجدول نفسه يبدأ من اليمين
     tblPr = table._element.xpath('w:tblPr')[0]
-    bidi = OxmlElement('w:bidiVisual'); tblPr.append(bidi)
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
 
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
-    # تحميل القالب للحفاظ على اللوجو والسمة
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     
-    # ضبط الهوامش لتناسب الترويسة
+    # ضبط الهوامش (مهم جداً لعدم قص النص اليميني)
     for section in doc.sections:
-        section.top_margin = Cm(4.5)
         section.right_margin = Cm(2.0)
         section.left_margin = Cm(2.0)
 
-    PURPLE_COLOR = "660099"
-
-    # 1. السطر الافتتاحي (محاذاة يمين)
+    # إضافة الفقرات مع تطبيق دالة الـ RTL فوراً
     p_cust = doc.add_paragraph()
-    p_cust.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     run_c = p_cust.add_run(f"السادة شركة {customer_name} المحترمين")
-    run_c.bold = True; run_c.font.size = Pt(14); run_c.font.name = 'Arial'
-    apply_rtl(p_cust)
+    run_c.bold = True; run_c.font.size = Pt(14)
+    _force_rtl_style(p_cust) # تطبيق الإجبار هنا
     
     p_stat = doc.add_paragraph()
-    p_stat.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
-    apply_rtl(p_stat)
+    _force_rtl_style(p_stat)
 
-    # 2. تفاصيل المواقع والجداول
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph()
-        p_city.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_city.add_run(f"■ محافظة {city}").bold = True; p_city.runs[0].font.size = Pt(13)
-        apply_rtl(p_city)
+        p_city.add_run(f"■ محافظة {city}").bold = True
+        _force_rtl_style(p_city)
         
         for net, df in networks.items():
             if df.empty: continue
             for size_info, group_df in df.groupby(['الحجم']):
                 p_size = doc.add_paragraph()
-                p_size.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
-                apply_rtl(p_size)
+                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}")
+                _force_rtl_style(p_size)
                 
-                # إنشاء الجدول
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
-                table.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                set_table_rtl(table) # تفعيل اتجاه الجدول من اليمين
+                set_table_rtl(table) # إجبار الجدول لليمين
                 
                 hdr = table.rows[0].cells
-                hdr[0].text = "اسم الموقع (العمود)"
+                hdr[0].text = "الموقع"
                 hdr[1].text = "العدد"
-                
                 for cell in hdr:
-                    apply_rtl(cell)
+                    for p in cell.paragraphs: _force_rtl_style(p)
+                    # تلوين الخلية بالبنفسجي
                     tc_pr = cell._element.get_or_add_tcPr()
                     shd = OxmlElement('w:shd')
-                    shd.set(qn('w:fill'), PURPLE_COLOR)
+                    shd.set(qn('w:fill'), "660099")
                     tc_pr.append(shd)
-                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
-                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
                     row_cells[0].text = str(row['الموقع'])
                     row_cells[1].text = str(row['العدد'])
-                    for cell in row_cells: 
-                        apply_rtl(cell)
-                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for cell in row_cells:
+                        for p in cell.paragraphs: _force_rtl_style(p)
 
-                # --- الجزء المالي لكل جدول (طباعة + عرض) ---
+                # إضافة الأجور التفصيلية لكل جدول
                 total_q = pd.to_numeric(group_df['العدد']).sum()
-                f_print = float(group_df['fee_print'].iloc[0])
-                f_ads = float(group_df['fee_ads'].iloc[0])
-                
-                total_print = total_q * f_print
-                total_ads = total_q * f_ads
-                sub_total = total_print + total_ads
+                f_p, f_a = float(group_df['fee_print'].iloc[0]), float(group_df['fee_ads'].iloc[0])
+                p_fin = doc.add_paragraph()
+                p_fin.add_run(f"أجور الطباعة: {total_q*f_p:,.0f}$ | أجور العرض: {total_q*f_a:,.0f}$")
+                _force_rtl_style(p_fin)
 
-                p_finance = doc.add_paragraph()
-                p_finance.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                fin_text = (f"إجمالي العدد: {int(total_q)}  |  "
-                            f"أجور الطباعة: {total_print:,.0f} $  |  "
-                            f"أجور العرض: {total_ads:,.0f} $  |  "
-                            f"المجموع للقسم: {sub_total:,.0f} $")
-                run_fin = p_finance.add_run(fin_text)
-                run_fin.bold = True; run_fin.font.size = Pt(11)
-                apply_rtl(p_finance)
-
-    # 3. المجموع النهائي العام
-    doc.add_paragraph() # سطر فارغ
+    # المجموع النهائي العام
     p_grand = doc.add_paragraph()
     p_grand.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_grand = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
-    run_grand.bold = True; run_grand.font.size = Pt(16); run_grand.font.color.rgb = RGBColor(102, 0, 153)
-    apply_rtl(p_grand)
-
-    # 4. الملاحظة الختامية
-    p_note = doc.add_paragraph()
-    p_note.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_note.add_run("• ملاحظة هامة: هذا العرض والمواقع المتاحة فيه سارية لمدة 48 ساعة فقط من تاريخه.").italic = True
-    apply_rtl(p_note)
+    run_g = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
+    run_g.bold = True; run_g.font.size = Pt(16); run_g.font.color.rgb = RGBColor(102, 0, 153)
+    _force_rtl_style(p_grand)
 
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
+
 
 
 
