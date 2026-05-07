@@ -259,7 +259,7 @@ else:
                     st.rerun()
 
             # 5. إدارة السلة وعرض المالي
-            if st.session_state.cart:
+if st.session_state.cart:
     st.divider()
     grand_total = 0
     for city, nets in list(st.session_state.cart.items()):
@@ -282,6 +282,7 @@ else:
                     st.rerun()
     
     st.info(f"### 💰 إجمالي القيمة المالية للعرض: {grand_total:,.0f} $")
+
 
                 
                 b1, b2, b3, b4 = st.columns(4)
