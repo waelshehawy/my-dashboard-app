@@ -350,42 +350,90 @@ else:
                 
 
         # --- Page: تقرير الجرد ---
+                # --- Page: تقرير الجرد (مع أزرار التصدير) ---
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
-            df_p = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
-            s_p = st.selectbox("من فترة:", df_p['namee'].tolist(), key="s1")
-            e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="s2")
-            yr = st.number_input("العام:", value=2026, key="s3")
-            
-            target_list = df_p[(df_p['no'] >= int(df_p[df_p['namee']==s_p]['no'].iloc[0])) & (df_p['no'] <= int(df_p[df_p['namee']==e_p]['no'].iloc[0]))]['namee'].tolist()
-            all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
-            p_str_j = ", ".join([f"'{p}'" for p in target_list])
-            booked_j = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_str_j})', conn)['رقم اللوحة'].tolist()
-            all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_j else 'متاح')
-            for city in all_b['المحافظة'].unique():
-                st.write(f"### 📍 {city}")
-                st.table(all_b[all_b['المحافظة']==city].groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0))
+            try:
+                df_p = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
+                c1, c2, c3 = st.columns(3)
+                with c1: s_p = st.selectbox("من فترة:", df_p['namee'].tolist(), key="s1")
+                with c2: e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="s2")
+                with c3: yr = st.number_input("العام:", value=2026, key="s3")
+                
+                # حساب الفترات المستهدفة
+                target_list = df_p[(df_p['no'] >= int(df_p[df_p['namee']==s_p]['no'].iloc)) & 
+                                   (df_p['no'] <= int(df_p[df_p['namee']==e_p]['no'].iloc))]['namee'].tolist()
+                
+                # جلب البيانات
+                all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم", "الشبكة" FROM "اعمدة انارة"', conn)
+                p_str_j = ", ".join([f"'{p}'" for p in target_list])
+                booked_j = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_str_j})', conn)['رقم اللوحة'].tolist()
+                
+                all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_j else 'متاح')
+                
+                # عرض الجداول في الواجهة
+                full_report_data = [] # لتجميع البيانات للتصدير
+                for city in all_b['المحافظة'].unique():
+                    st.write(f"### 📍 محافظة {city}")
+                    city_df = all_b[all_b['المحافظة']==city]
+                    stats = city_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
+                    if 'محجوز' not in stats.columns: stats['محجوز'] = 0
+                    if 'متاح' not in stats.columns: stats['متاح'] = 0
+                    stats['الإجمالي'] = stats['محجوز'] + stats['متاح']
+                    st.table(stats)
+                    full_report_data.append(city_df)
 
-        # --- Page: الإعدادات ---
-        elif page == "⚙️ الإعدادات":
-            st.title("⚙️ إدارة البيانات")
-            engine = get_engine()
-            tab1, tab2 = st.tabs(["📍 اللوحات", "📅 الحجوزات"])
-            with tab1:
-                df_set = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-                new_set = st.data_editor(df_set, num_rows="dynamic", key="set_b")
-                if st.button("حفظ اللوحات"):
-                    with engine.begin() as cn:
-                        cn.execute(text('DELETE FROM "اعمدة انارة"'))
-                        new_set.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
-                    st.success("تم التحديث")
-            with tab2:
-                df_h = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 200', conn)
-                new_h = st.data_editor(df_h, num_rows="dynamic", key="set_h")
-                if st.button("تحديث السجل"):
-                    with engine.begin() as cn:
-                        cn.execute(text('DELETE FROM "حجوزات1"'))
-                        new_h.to_sql("حجوزات1", cn, if_exists="append", index=False)
-                    st.success("تمت المزامنة")
+                st.divider()
+                
+                # --- أزرار التصدير ---
+                st.subheader("📥 تصدير التقرير")
+                exp_col1, exp_col2 = st.columns(2)
+                
+                # 1. تصدير Excel
+                with exp_col1:
+                    output_excel = io.BytesIO()
+                    with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+                        all_b.to_excel(writer, index=False, sheet_name='الجرد التفصيلي')
+                    st.download_button(
+                        label="Excel تحميل تقرير الجرد التفصيلي",
+                        data=output_excel.getvalue(),
+                        file_name=f"Inventory_Report_{yr}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                # 2. تصدير Word (تقرير ملخص)
+                with exp_col2:
+                    rep_doc = Document()
+                    rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
+                    rep_doc.add_paragraph(f"الفترة من: {s_p} إلى: {e_p}")
+                    
+                    for city in all_b['المحافظة'].unique():
+                        rep_doc.add_heading(f"محافظة {city}", level=1)
+                        # إضافة جدول البيانات للوورد (تبسيطاً للتقرير)
+                        city_stats = all_b[all_b['المحافظة']==city].groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
+                        table = rep_doc.add_table(rows=1, cols=3)
+                        table.style = 'Table Grid'
+                        hdr_cells = table.rows[0].cells
+                        hdr_cells[0].text = 'المقاس'
+                        hdr_cells[1].text = 'المحجوز'
+                        hdr_cells[2].text = 'المتاح'
+                        for size, row in city_stats.iterrows():
+                            row_cells = table.add_row().cells
+                            row_cells[0].text = str(size)
+                            row_cells[1].text = str(row.get('محجوز', 0))
+                            row_cells[2].text = str(row.get('متاح', 0))
+
+                    output_word = io.BytesIO()
+                    rep_doc.save(output_word)
+                    st.download_button(
+                        label="Word تحميل التقرير بصيغة",
+                        data=output_word.getvalue(),
+                        file_name=f"Inventory_Summary_{yr}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+
+            except Exception as e:
+                st.error(f"حدث خطأ أثناء إعداد التقرير: {e}")
+
 
         conn.close()
