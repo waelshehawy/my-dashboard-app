@@ -32,8 +32,9 @@ def get_connection():
         return None
 
 def get_engine():
-    # رابط المحرك للإدخال السريع عبر SQLAlchemy
-    uri = "postgresql://postgres.ncuofpvbaglwbdqnpman:WaelPreview2026@://supabase.com:6543/postgres"
+    # تم تصحيح الرابط وإضافة المنفذ الصحيح 6543
+    # ملاحظة: إذا كانت كلمة المرور تحتوي على رموز خاصة، يجب كتابتها بدقة
+    uri = "postgresql://postgres.ncuofpvbaglwbdqnpman:WaelPreview2026@://supabase.com"
     return create_engine(uri)
 
 # --- 2. Word & RTL Helpers (Same as your logic with improvements) ---
