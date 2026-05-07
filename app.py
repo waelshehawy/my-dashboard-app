@@ -40,13 +40,15 @@ def get_engine():
 # --- 2. Word & RTL Helpers ---
 
 
-def apply_rtl(obj):
-    if hasattr(obj, 'paragraphs'):
-        for p in obj.paragraphs: _force_rtl_style(p)
-    else: _force_rtl_style(obj)
+# 1. دالة ضبط اتجاه الجدول (يجب تعريفها قبل استخدامها)
+def set_table_rtl(table):
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
+
+# 2. دالة المحاذاة (التي علمتني إياها)
 def _force_rtl_style(p):
-    # استخدام LEFT هنا مع bidi=1 يعني اليمين في منطق الملفات العربية
-    p.alignment = WD_ALIGN_PARAGRAPH.LEFT 
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT # اليسار هنا يعني اليمين بسبب bidi
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
     for run in p.runs:
@@ -54,11 +56,12 @@ def _force_rtl_style(p):
         rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
         rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
 
+# 3. دالة التصدير الكاملة والمعدلة
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     PURPLE_COLOR = "660099" 
 
-    # 1. السطر الافتتاحي
+    # السطر الافتتاحي
     p_cust = doc.add_paragraph()
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     _force_rtl_style(p_cust)
@@ -67,7 +70,6 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     p_stat.add_run(f"موضوع العرض: حجز مواقع إعلانية للفترة من ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
 
-    # 2. الجداول والتفاصيل المالية
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph()
         p_city.add_run(f"■ محافظة {city}").bold = True
@@ -80,8 +82,10 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
                 p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
                 _force_rtl_style(p_size)
                 
-                table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'
-                set_table_rtl(table)
+                # إنشاء الجدول مع ضبط الاتجاه
+                table = doc.add_table(rows=1, cols=2)
+                table.style = 'Table Grid'
+                set_table_rtl(table) # تم التأكد من تعريفها أعلاه
                 
                 hdr = table.rows[0].cells
                 hdr[0].text = "اسم الموقع (العمود)"; hdr[1].text = "العدد"
@@ -97,37 +101,32 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
                     for cell in row_cells:
                         for p in cell.paragraphs: _force_rtl_style(p)
 
-                # --- الحساب المالي لكل جدول (إضافة المجموع الكلي للقسم) ---
+                # --- الحساب المالي المجمع لكل جدول ---
                 total_q = pd.to_numeric(group_df['العدد']).sum()
                 f_p = float(group_df['fee_print'].iloc[0])
                 f_a = float(group_df['fee_ads'].iloc[0])
-                
                 sum_print = total_q * f_p
                 sum_ads = total_q * f_a
-                sum_combined = sum_print + sum_ads # مجموع الطباعة والعرض معاً
+                sum_combined = sum_print + sum_ads
                 
                 p_fin = doc.add_paragraph()
                 txt = (f"إجمالي العدد: {int(total_q)} | "
                        f"أجور الطباعة: {sum_print:,.0f}$ | "
                        f"أجور العرض: {sum_ads:,.0f}$ | "
                        f"المجموع للقسم: {sum_combined:,.0f}$")
-                run_fin = p_fin.add_run(txt); run_fin.bold = True
+                p_fin.add_run(txt).bold = True
                 _force_rtl_style(p_fin)
 
-    # 3. المجموع النهائي العام
+    # المجموع النهائي العام
     doc.add_paragraph() 
     p_grand = doc.add_paragraph()
     run_g = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
     run_g.bold = True; run_g.font.size = Pt(14); run_g.font.color.rgb = RGBColor(102, 0, 153)
     _force_rtl_style(p_grand)
 
-    # 4. الملاحظة الختامية
-    p_note = doc.add_paragraph()
-    p_note.add_run("• ملاحظة: هذه المواقع المتاحة سارية لمدة 48 ساعة من تاريخ العرض.").italic = True
-    _force_rtl_style(p_note)
-
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
+
 
 
 
