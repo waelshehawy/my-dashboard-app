@@ -322,7 +322,10 @@ else:
                             (df_periods['no'] <= int(df_periods[df_periods['namee']==end_p]['no'].iloc[0]))]['namee'].tolist()
         
         all_boards = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
-        booked_list = pd.read_sql(f"SELECT DISTINCT \"رقم اللوحة\" FROM \"حجوزات1\" WHERE \"العام\"={b_year} AND \"فترة الحجز\" IN ({', '.join([f'\'{p}\'' for p in p_names])})", conn)['رقم اللوحة'].tolist()
+        p_placeholders = ", ".join([f"'{p}'" for p in p_names])
+        query_booked = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={b_year} AND "فترة الحجز" IN ({p_placeholders})'
+
+        booked_list = pd.read_sql(query_booked, conn)['رقم اللوحة'].tolist()
         all_boards['Status'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_list else 'متاح')
 
         for city in all_boards['المحافظة'].unique():
