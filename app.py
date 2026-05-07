@@ -167,6 +167,20 @@ else:
 
     # --- Page: Dashboard ---
     if page == "📊 Dashboard":
+    elif page == "📊 Dashboard":
+        st.title("📊 الخريطة التفاعلية وحالة الإشغال")
+        
+        # التأكد من وجود اتصال فعال
+        if conn is None:
+            st.error("لا يوجد اتصال بقاعدة البيانات. تأكد من إعدادات السيرفر.")
+        else:
+            try:
+                df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+                df_booked = pd.read_sql('SELECT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1"', conn)
+                # ... باقي كود الخريطة ...
+            except Exception as e:
+                st.error(f"خطأ في جلب بيانات الخريطة: {e}")
+        
         st.title("📊 الخريطة التفاعلية وحالة الإشغال")
         df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
         df_booked = pd.read_sql('SELECT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1"', conn)
