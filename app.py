@@ -181,20 +181,59 @@ else:
         if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
     if conn:
-        # --- Page: Dashboard ---
-        if page == "📊 Dashboard":
-            st.title("📊 الخريطة التفاعلية وحالة الإشغال")
-            df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-            df_booked = pd.read_sql('SELECT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1"', conn)
-            df_merged = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
-            m = folium.Map(location=SYRIA_CITIES_COORDS["سوريا"], zoom_start=7)
-            cluster = MarkerCluster().add_to(m)
-            for _, r in df_merged.iterrows():
-                if pd.notnull(r.get('Latitude')):
-                    color = 'red' if pd.notnull(r['اسم الزبون']) else 'purple'
-                    folium.Marker([r['Latitude'], r['Longitude']], popup=f"الموقع: {r['اسم العمود']}", icon=folium.Icon(color=color)).add_to(cluster)
-            st_folium(m, width="100%", height=600)
-            st.dataframe(df_merged, use_container_width=True)
+    # --- Page: Dashboard (المصحح لإظهار الحالة الحالية فقط) ---
+    elif page == "📊 Dashboard":
+        st.title("📊 الخريطة التفاعلية - الحالة الحالية")
+        
+        # 1. تحديد الفترة الحالية بناءً على تاريخ اليوم
+        current_month = datetime.now().month
+        # نفترض أن جدول الفترة يحتوي على عمود 'no' يمثل رقم الشهر أو تسلسل الفترات
+        # سنجلب اسم الفترة الحالية (مثلاً: شهر أيار)
+        df_periods = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
+        
+        # ملاحظة: يمكنك تعديل منطق اختيار الفترة الحالية بناءً على هيكل جدولك
+        # هنا سنفترض أننا نريد الحجوزات التي تشمل الشهر الحالي والعام الحالي
+        current_year = datetime.now().year
+        
+        # 2. جلب الحجوزات النشطة الآن فقط
+        query_booked = f"""
+            SELECT DISTINCT "رقم اللوحة", "اسم الزبون" 
+            FROM "حجوزات1" 
+            WHERE "العام" = {current_year} 
+        """
+        df_booked = pd.read_sql(query_booked, conn)
+        
+        # 3. جلب كافة الأعمدة
+        df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+        
+        # 4. الربط (Left Join)
+        df_merged = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
+        
+        # 5. تنظيف التكرار (لوحة واحدة فقط لكل موقع)
+        df_map = df_merged.drop_duplicates(subset=['رقم اللوحة'])
+        
+        # عرض إحصائية سريعة
+        c1, c2, c3 = st.columns(3)
+        c1.metric("إجمالي اللوحات", len(df_map))
+        c2.metric("محجوز حالياً", df_map['اسم الزبون'].notnull().sum())
+        c3.metric("متاح حالياً", df_map['اسم الزبون'].isnull().sum())
+
+        m = folium.Map(location=SYRIA_CITIES_COORDS["سوريا"], zoom_start=7)
+        cluster = MarkerCluster().add_to(m)
+        
+        for _, r in df_map.iterrows():
+            if pd.notnull(r.get('Latitude')) and pd.notnull(r.get('Longitude')):
+                is_booked = pd.notnull(r['اسم الزبون'])
+                color = 'red' if is_booked else 'purple'
+                popup_text = f"الموقع: {r['اسم العمود']}<br>الحالة: {'محجوز لـ ' + str(r['اسم الزبون']) if is_booked else 'متاح'}"
+                folium.Marker(
+                    [r['Latitude'], r['Longitude']], 
+                    popup=folium.Popup(popup_text, max_width=200), 
+                    icon=folium.Icon(color=color)
+                ).add_to(cluster)
+                
+        st_folium(m, width="100%", height=600)
+
 
         # --- Page: Quotation ---
         elif page == "📄 Quotation":
@@ -349,7 +388,7 @@ else:
                 
                 
 
-                # --- Page: تقرير الجرد (مع أزرار التصدير) ---
+              
                 # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
