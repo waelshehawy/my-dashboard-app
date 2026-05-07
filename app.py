@@ -62,6 +62,11 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     PURPLE_COLOR = "660099" 
         # --- إضافة مسافة سطرين بين العنوان وبداية العرض ---
     doc.add_paragraph()
+        # --- 1. إضافة تاريخ اليوم في أعلى اليمين ---
+    today_date = datetime.now().strftime("%d / %m / %Y")
+    p_date = doc.add_paragraph()
+    p_date.add_run(f"التاريخ: {today_date}")
+    _force_rtl_style(p_date) # لضمان ظهوره على اليمين
     doc.add_paragraph()
     # السطر الافتتاحي
     p_cust = doc.add_paragraph()
