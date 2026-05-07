@@ -51,7 +51,7 @@ def apply_rtl(obj):
     if hasattr(obj, 'paragraphs'):
         for p in obj.paragraphs: _force_rtl_style(p)
     else: _force_rtl_style(obj)
-        def _force_rtl_style(p):
+def _force_rtl_style(p):
     # 1. ضبط المحاذاة الأفقية لليمين
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
