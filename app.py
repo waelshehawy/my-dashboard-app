@@ -51,6 +51,31 @@ def apply_rtl(obj):
     if hasattr(obj, 'paragraphs'):
         for p in obj.paragraphs: _force_rtl_style(p)
     else: _force_rtl_style(obj)
+        def _force_rtl_style(p):
+    # 1. ضبط المحاذاة الأفقية لليمين
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
+    # 2. الوصول إلى الخصائص العميقة للفقرة (XML) لضبط اتجاه RTL
+    pPr = p._element.get_or_add_pPr()
+    
+    # ضبط اتجاه الفقرة من اليمين لليسار
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    
+    # 3. ضبط اتجاه النص داخل الـ Runs (الكلمات)
+    for run in p.runs:
+        rPr = run._element.get_or_add_rPr()
+        # تفعيل خاصية النصوص المعقدة (للغة العربية)
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        
+        # إجبار نوع الخط العربي لضمان عدم انقلابه
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
+
 
 def set_table_rtl(table):
     # جعل الجدول نفسه يبدأ من اليمين
