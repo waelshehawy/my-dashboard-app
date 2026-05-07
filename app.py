@@ -60,14 +60,14 @@ def _force_rtl_style(p):
 def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     PURPLE_COLOR = "660099" 
-
+        # --- إضافة مسافة سطرين بين العنوان وبداية العرض ---
+    doc.add_paragraph()
+    doc.add_paragraph()
     # السطر الافتتاحي
     p_cust = doc.add_paragraph()
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     _force_rtl_style(p_cust)
-        # --- إضافة مسافة سطرين بين العنوان وبداية العرض ---
-    doc.add_paragraph()
-    doc.add_paragraph()
+
     p_stat = doc.add_paragraph()
     p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
@@ -126,6 +126,12 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total):
     run_g.bold = True; run_g.font.size = Pt(14); run_g.font.color.rgb = RGBColor(102, 0, 153)
     _force_rtl_style(p_grand)
 
+        # --- 4. الملاحظة الختامية للالتزام بـ 48 ساعة ---
+    doc.add_paragraph() # سطر فارغ قبل الملاحظة
+    p_note = doc.add_paragraph()
+    run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.")
+    run_note.bold = True
+    _force_rtl_style(p_note)
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
 
