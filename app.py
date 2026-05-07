@@ -361,8 +361,16 @@ else:
                 with c3: yr = st.number_input("العام:", value=2026, key="s3")
                 
                 # حساب الفترات المستهدفة
-                target_list = df_p[(df_p['no'] >= int(df_p[df_p['namee']==s_p]['no'].iloc)) & 
-                                   (df_p['no'] <= int(df_p[df_p['namee']==e_p]['no'].iloc))]['namee'].tolist()
+                s_no_val = df_p[df_p['namee'] == s_p]['no']
+                e_no_val = df_p[df_p['namee'] == e_p]['no']
+
+                if not s_no_val.empty and not e_no_val.empty:
+                    s_no = int(s_no_val.iloc[0]) # إضافة [0] لحل المشكلة
+                    e_no = int(e_no_val.iloc[0]) # إضافة [0] لحل المشكلة
+                    
+                    target_list = df_p[(df_p['no'] >= s_no) & (df_p['no'] <= e_no)]['namee'].tolist()
+                else:
+                    target_list = []
                 
                 # جلب البيانات
                 all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم", "الشبكة" FROM "اعمدة انارة"', conn)
