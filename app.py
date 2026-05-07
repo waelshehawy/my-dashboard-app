@@ -166,7 +166,7 @@ else:
         if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
     # --- Page: Dashboard ---
-    if page == "📊 Dashboard":
+
     elif page == "📊 Dashboard":
         st.title("📊 الخريطة التفاعلية وحالة الإشغال")
         
