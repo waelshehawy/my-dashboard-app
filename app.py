@@ -276,7 +276,7 @@ else:
                 
                 raw = pd.read_sql(f"SELECT \"رقم اللوحة\", \"اسم العمود\" as \"الموقع\", \"العدد\", \"الشبكة\", \"توصيف العمود\", \"الحجم\" FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_c}' AND \"الحجم\"='{sz}'", conn)
                 if not raw.empty:
-                    raw['اللشبكة'] = raw['الشبكة'].astype(str)
+                    raw['الشبكة'] = raw['الشبكة'].astype(str)
                     raw = raw[~raw['رقم اللوحة'].isin(booked_ids)]
                     nets = st.multiselect("الشبكات المتاحة:", sorted(raw['الشبكة'].unique().tolist()))
                     if st.button("➕ إضافة للسلة"):
