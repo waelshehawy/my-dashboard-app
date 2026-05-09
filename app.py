@@ -226,7 +226,8 @@ else:
 
         # --- Page: Quotation ---
         elif page == "📄 Quotation":
-             st.title("📄 بناء عرض سعر وتثبيت حجز")
+        # --- Page: Quotation (القسم الكامل مع ضبط الإزاحة وتصحيح أنواع البيانات) ---
+        st.title("📄 بناء عرض سعر وتثبيت حجز")
         
         try:
             # 1. نظام إدارة العروض المنتهية (48 ساعة)
@@ -345,7 +346,6 @@ else:
                         st.session_state.cart = {}; st.rerun()
         except Exception as e:
             st.error(f"❌ حدث خطأ في الصفحة: {e}")
-
 
                 
                 
