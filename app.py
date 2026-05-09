@@ -224,7 +224,8 @@ else:
 
 
 
-        # --- Page: Quotation (القسم الكامل مع ضبط الإزاحة وتصحيح أنواع البيانات) ---
+    # --- Page 2: Quotation (تأكد من المحاذاة مع بقية الصفحات) ---
+    elif page == "📄 Quotation":
         st.title("📄 بناء عرض سعر وتثبيت حجز")
         
         try:
@@ -268,14 +269,14 @@ else:
             e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
             target_p_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
             
-            # حساب الأجور
+            # حساب الأجور (تصحيح البحث المرن)
             subset = draw_df[draw_df['الحجم'] == sel_size]
             f_p_row = subset[subset['اسم الرسم'].str.contains("طباعة", na=False) & subset['اسم الرسم'].str.contains(print_type, na=False)]
             f_print = float(f_p_row['اجرة الرسم'].sum()) if not f_p_row.empty else 0.0
             f_a_row = subset[subset['اسم الرسم'].str.contains("عرض", na=False) & subset['اسم الرسم'].str.contains(print_type, na=False)]
             f_ads = float(f_a_row['اجرة الرسم'].sum()) if not f_a_row.empty else 0.0
 
-            # 4. فلترة المواقع المتاحة (مع تصحيح أنواع البيانات)
+            # 4. فلترة المواقع المتاحة (تصحيح أنواع int8 المستوردة من الأكسس)
             city_l = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
             sel_city = st.selectbox("المحافظة:", city_l)
             
@@ -285,7 +286,7 @@ else:
             raw = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "توصيف العمود", "الحجم" FROM "اعمدة انارة" WHERE "المحافظة"=\'{sel_city}\' AND "الحجم"=\'{sel_size}\'', conn)
             
             if not raw.empty:
-                # تحويل 'الشبكة' لنص لأنها int8 في قاعدة البيانات ولضمان ظهورها في الاختيارات
+                # تحويل 'الشبكة' لنص لأنها int8 في قاعدة البيانات
                 raw['الشبكة'] = raw['الشبكة'].astype(str)
                 raw = raw[~raw['رقم اللوحة'].isin(booked_ids)]
                 
@@ -343,14 +344,12 @@ else:
                     if st.button("🔴 تفريغ السلة"):
                         st.session_state.cart = {}; st.rerun()
         except Exception as e:
-            st.error(f"❌ حدث خطأ في الصفحة: {e}")
+            st.error(f"❌ حدث خطأ في صفحة العرض: {e}")
 
+    # --- بداية الصفحة التالية (تأكد أنها بنفس مستوى المحاذاة) ---
+    elif page == "📋 تقرير الجرد":
+        # ... كود تقرير الجرد يكمل هنا ...
 
-
-                
-                
-
-              
                 # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
