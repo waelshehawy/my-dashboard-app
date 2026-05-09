@@ -18,8 +18,9 @@ from datetime import datetime
 # --- 1. Database Connection ---
 def get_connection():
     try:
+        # تأكد أن الـ host هو النص المباشر فقط بدون أي إضافات قبلها
         return psycopg2.connect(
-            host="://supabase.com", 
+            host="aws-1-eu-north-1.pooler.supabase.com", 
             port="6543",
             database="postgres",
             user="postgres.ncuofpvbaglwbdqnpman",
