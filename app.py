@@ -226,7 +226,6 @@ else:
 
         # --- Page: Quotation ---
         elif page == "📄 Quotation":
-        elif page == "📄 Quotation":
             st.title("📄 بناء عرض سعر وتثبيت حجز")
             try:
                 # 1. نظام إدارة العروض المنتهية (48 ساعة)
