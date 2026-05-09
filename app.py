@@ -226,125 +226,105 @@ else:
 
         # --- Page: Quotation ---
         elif page == "📄 Quotation":
-st.title("📄 بناء عرض سعر وتثبيت حجز")
-        
-        try:
-            # 1. نظام إدارة العروض المنتهية (48 ساعة)
-            with st.expander("🔔 إدارة العروض التي تجاوزت 48 ساعة"):
-                manage_expired_offers(conn)
+        elif page == "📄 Quotation":
+            st.title("📄 بناء عرض سعر وتثبيت حجز")
+            try:
+                # 1. نظام إدارة العروض المنتهية (48 ساعة)
+                with st.expander("🔔 إدارة العروض التي تجاوزت 48 ساعة"):
+                    manage_expired_offers(conn)
 
-            # 2. استرجاع المسودات
-            st.subheader("📂 استرجاع عرض محفوظ")
-            saved_off_df = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status=\'Pending\' ORDER BY offer_date DESC', conn)
-            if not saved_off_df.empty:
-                off_options = {f"{r['client_name']} ({r['offer_date']})": r['id'] for _, r in saved_off_df.iterrows()}
-                sel_label = st.selectbox("اختر عرضاً لتعديله:", ["---"] + list(off_options.keys()))
-                if sel_label != "---" and st.button("🔄 تحميل للسلة"):
-                    off_id = off_options[sel_label]
-                    res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={off_id}', conn)
-                    if not res.empty:
-                        data = json.loads(res['cart_json'].iloc[0])
-                        st.session_state.cart = {c: {n: pd.DataFrame(d) for n, d in ns.items()} for c, ns in data.items()}
-                        st.session_state.temp_cust = res['client_name'].iloc[0]
+                # 2. استرجاع المسودات
+                st.subheader("📂 استرجاع عرض محفوظ")
+                saved_off_df = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status=\'Pending\' ORDER BY offer_date DESC', conn)
+                if not saved_off_df.empty:
+                    off_options = {f"{r['client_name']} ({r['offer_date']})": r['id'] for _, r in saved_off_df.iterrows()}
+                    sel_label = st.selectbox("اختر عرضاً لتعديله:", ["---"] + list(off_options.keys()))
+                    if sel_label != "---" and st.button("🔄 تحميل للسلة"):
+                        off_id = off_options[sel_label]
+                        res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={off_id}', conn)
+                        if not res.empty:
+                            data = json.loads(res['cart_json'].iloc[0])
+                            st.session_state.cart = {c: {n: pd.DataFrame(d) for n, d in ns.items()} for c, ns in data.items()}
+                            st.session_state.temp_cust = res['client_name'].iloc[0]
+                            st.rerun()
+
+                st.divider()
+                # 3. جلب البيانات والأسعار والفترات
+                draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+                df_p = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
+                cust = st.text_input("اسم الزبون", value=st.session_state.get('temp_cust', ""))
+                
+                c1, c2, c3 = st.columns(3)
+                with c1: sz = st.selectbox("المقاس:", draw_df['الحجم'].unique().tolist())
+                with c2: pt = st.radio("الطباعة:", ["عادي", "سكوتش"], horizontal=True)
+                with c3: yr = st.number_input("العام:", value=2026)
+
+                cp1, cp2 = st.columns(2)
+                with cp1: start_p = st.selectbox("من فترة:", df_p['namee'].tolist())
+                with cp2: end_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1)
+
+                # حساب الأجور واللوحات المتاحة
+                subset = draw_df[draw_df['الحجم'] == sz]
+                f_pr = float(subset[subset['اسم الرسم'].str.contains("طباعة", na=False) & subset['اسم الرسم'].str.contains(pt, na=False)]['اجرة الرسم'].sum())
+                f_ad = float(subset[subset['اسم الرسم'].str.contains("عرض", na=False) & subset['اسم الرسم'].str.contains(pt, na=False)]['اجرة الرسم'].sum())
+                
+                target_p_names = df_p[(df_p['no'] >= int(df_p[df_p['namee']==start_p]['no'].iloc[0])) & (df_p['no'] <= int(df_p[df_p['namee']==end_p]['no'].iloc[0]))]['namee'].tolist()
+                p_placeholders = ", ".join([f"'{p}'" for p in target_p_names])
+                booked_ids = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_placeholders})', conn)['رقم اللوحة'].tolist()
+                
+                city_l = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
+                sel_c = st.selectbox("المحافظة:", city_l)
+                
+                raw = pd.read_sql(f"SELECT \"رقم اللوحة\", \"اسم العمود\" as \"الموقع\", \"العدد\", \"الشبكة\", \"توصيف العمود\", \"الحجم\" FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_c}' AND \"الحجم\"='{sz}'", conn)
+                if not raw.empty:
+                    raw['الالشبكة'] = raw['الشبكة'].astype(str)
+                    raw = raw[~raw['رقم اللوحة'].isin(booked_ids)]
+                    nets = st.multiselect("الشبكات المتاحة:", sorted(raw['الشبكة'].unique().tolist()))
+                    if st.button("➕ إضافة للسلة"):
+                        if sel_c not in st.session_state.cart: st.session_state.cart[sel_c] = {}
+                        for n in nets: st.session_state.cart[sel_c][n] = raw[raw['الشبكة']==n].assign(fee_print=f_pr, fee_ads=f_ad, الحجم=sz)
                         st.rerun()
 
-            st.divider()
-            
-            # 3. جلب البيانات الأساسية للفلترة والأسعار
-            draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
-            df_periods = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
-            cust = st.text_input("اسم الزبون", value=st.session_state.get('temp_cust', ""))
-            
-            c1, c2, c3 = st.columns(3)
-            with c1: sel_size = st.selectbox("المقاس:", draw_df['الحجم'].unique().tolist())
-            with c2: print_type = st.radio("الطباعة:", ["عادي", "سكوتش"], horizontal=True)
-            with c3: b_year = st.number_input("العام:", value=2026)
-
-            cp1, cp2 = st.columns(2)
-            with cp1: start_p = st.selectbox("من فترة:", df_periods['namee'].tolist())
-            with cp2: end_p = st.selectbox("إلى فترة:", df_periods['namee'].tolist(), index=len(df_periods)-1)
-
-            # حساب الفترات المختارة
-            s_no = int(df_periods[df_periods['namee'] == start_p]['no'].iloc[0])
-            e_no = int(df_periods[df_periods['namee'] == end_p]['no'].iloc[0])
-            target_p_names = df_periods[(df_periods['no'] >= s_no) & (df_periods['no'] <= e_no)]['namee'].tolist()
-            
-            # حساب الأجور
-            subset = draw_df[draw_df['الحجم'] == sel_size]
-            f_p_row = subset[subset['اسم الرسم'].str.contains("طباعة", na=False) & subset['اسم الرسم'].str.contains(print_type, na=False)]
-            f_print = float(f_p_row['اجرة الرسم'].sum()) if not f_p_row.empty else 0.0
-            f_a_row = subset[subset['اسم الرسم'].str.contains("عرض", na=False) & subset['اسم الرسم'].str.contains(print_type, na=False)]
-            f_ads = float(f_a_row['اجرة الرسم'].sum()) if not f_a_row.empty else 0.0
-
-            # 4. فلترة المواقع المتاحة (مع تصحيح أنواع البيانات)
-            city_l = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
-            sel_city = st.selectbox("المحافظة:", city_l)
-            
-            p_placeholders = ", ".join([f"'{p}'" for p in target_p_names])
-            booked_ids = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={b_year} AND "فترة الحجز" IN ({p_placeholders})', conn)['رقم اللوحة'].tolist()
-            
-            raw = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "توصيف العمود", "الحجم" FROM "اعمدة انارة" WHERE "المحافظة"=\'{sel_city}\' AND "الحجم"=\'{sel_size}\'', conn)
-            
-            if not raw.empty:
-                # تحويل 'الشبكة' لنص لأنها int8 في قاعدة البيانات ولضمان ظهورها في الاختيارات
-                raw['الشبكة'] = raw['الشبكة'].astype(str)
-                raw = raw[~raw['رقم اللوحة'].isin(booked_ids)]
-                
-                nets_options = sorted(raw['الشبكة'].unique().tolist())
-                nets = st.multiselect("اختر الشبكات المتاحة:", nets_options)
-                
-                if st.button("➕ إضافة للسلة"):
-                    if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
-                    for n in nets:
-                        st.session_state.cart[sel_city][n] = raw[raw['الشبكة'] == n].assign(fee_print=f_print, fee_ads=f_ads, الحجم=sel_size)
-                    st.rerun()
-
-            # 5. إدارة السلة وحساب المجموع
-            if st.session_state.cart:
-                st.divider()
-                grand_total = 0.0
-                for city, nets_in_cart in list(st.session_state.cart.items()):
-                    for net, df in list(nets_in_cart.items()):
-                        with st.expander(f"📍 {city} - شبكة {net}", expanded=True):
-                            ed_df = st.data_editor(df, key=f"ed_{city}_{net}", num_rows="dynamic")
-                            st.session_state.cart[city][net] = ed_df
-                            
-                            total_q = pd.to_numeric(ed_df['العدد']).sum()
-                            f_p_val = float(ed_df['fee_print'].max()) if 'fee_print' in ed_df.columns else 0.0
-                            f_a_val = float(ed_df['fee_ads'].max()) if 'fee_ads' in ed_df.columns else 0.0
-                            
-                            grand_total += total_q * (f_p_val + f_a_val)
-                            if st.button("حذف الشبكة", key=f"del_{city}_{net}"):
-                                del st.session_state.cart[city][net]
-                                st.rerun()
-                
-                st.info(f"### 💰 إجمالي القيمة المالية للعرض: {grand_total:,.0f} $")
-                
-                b1, b2, b3, b4 = st.columns(4)
-                with b1:
-                    if st.button("💾 حفظ مسودة (48س)"):
-                        if not cust: st.error("أدخل اسم الزبون")
-                        else:
-                            c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
-                            cur = conn.cursor()
-                            cur.execute('INSERT INTO "offers_history" (client_name, cart_json, start_p, end_p, year, status) VALUES (%s, %s, %s, %s, %s, %s)', (cust, c_json, start_p, end_p, b_year, 'Pending'))
-                            conn.commit(); st.success("تم الحفظ في المسودات.")
-                with b2:
-                    if st.button("✅ تثبيت حجز نهائي"):
-                        if not cust: st.error("أدخل اسم الزبون")
-                        else:
-                            recs = [(str(r['رقم اللوحة']), str(cust), str(p), int(b_year)) for _, ns in st.session_state.cart.items() for _, df in ns.items() for _, r in df.iterrows() for p in target_p_names]
-                            cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs)
-                            conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت نهائياً!"); st.rerun()
-                with b3:
-                    if st.button("📝 تصدير Word الرسمي"):
-                        doc_io = export_word(cust, st.session_state.cart, start_p, end_p, grand_total)
-                        st.download_button("📥 تحميل العرض", doc_io, f"Offer_{cust}.docx")
-                with b4:
-                    if st.button("🔴 تفريغ السلة"):
-                        st.session_state.cart = {}; st.rerun()
-        except Exception as e:
-            st.error(f"❌ حدث خطأ في الصفحة: {e}")
+                # 4. إدارة السلة والأزرار (حفظ، تثبيت، تصدير)
+                if st.session_state.cart:
+                    st.divider()
+                    g_total = 0.0
+                    for c, ns in list(st.session_state.cart.items()):
+                        for n, df in list(ns.items()):
+                            with st.expander(f"📍 {c} - شبكة {n}", expanded=True):
+                                ed = st.data_editor(df, key=f"ed_{c}_{n}", num_rows="dynamic")
+                                st.session_state.cart[c][n] = ed
+                                q = pd.to_numeric(ed['العدد']).sum()
+                                f_p_v, f_a_v = float(ed['fee_print'].max()), float(ed['fee_ads'].max())
+                                g_total += q * (f_p_v + f_a_v)
+                                if st.button("حذف الشبكة", key=f"del_{c}_{n}"):
+                                    del st.session_state.cart[c][n]
+                                    st.rerun()
+                    
+                    st.info(f"💰 إجمالي القيمة المالية للعرض: {g_total:,.0f} $")
+                    b1, b2, b3, b4 = st.columns(4)
+                    with b1:
+                        if st.button("💾 حفظ مسودة (48س)"):
+                            if not cust: st.error("أدخل اسم الزبون")
+                            else:
+                                c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
+                                cur = conn.cursor()
+                                cur.execute('INSERT INTO "offers_history" (client_name, cart_json, start_p, end_p, year, status) VALUES (%s, %s, %s, %s, %s, %s)', (cust, c_json, start_p, end_p, yr, 'Pending'))
+                                conn.commit(); st.success("تم الحفظ في المسودات.")
+                    with b2:
+                        if st.button("✅ تثبيت حجز نهائي"):
+                            if not cust: st.error("أدخل اسم الزبون")
+                            else:
+                                recs = [(str(r['رقم اللوحة']), str(cust), str(p), int(yr)) for _, ns in st.session_state.cart.items() for _, df in ns.items() for _, r in df.iterrows() for p in target_p_names]
+                                cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs)
+                                conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت نهائياً!"); st.rerun()
+                    with b3:
+                        if st.button("📝 تصدير Word الرسمي"):
+                            doc_io = export_word(cust, st.session_state.cart, start_p, end_p, g_total)
+                            st.download_button("📥 تحميل العرض", doc_io, f"Offer_{cust}.docx")
+                    with b4:
+                        if st.button("🔴 تفريغ السلة"): st.session_state.cart = {}; st.rerun()
+            except Exception as e: st.error(f"❌ خطأ في صفحة العرض: {e}")
                 
                 
 
