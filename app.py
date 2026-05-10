@@ -266,7 +266,7 @@ else:
                 
                 # إذا لم يجد "طباعة عادي"، يبحث عن "طباعة" فقط بشرط ألا تكون "سكوتش"
                 if f_pr_row.empty and pt == "عادي":
-                    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) 
+                    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False)] 
                 
                 f_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
 
@@ -275,8 +275,7 @@ else:
                                   subset['search_name'].str.contains(target_pt, na=False)]
                 
                 if f_ad_row.empty and pt == "عادي":
-                    f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & 
-                                      ~subset['search_name'].str.contains("سكوتش", na=False)]
+                    f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False)]
                 
                 f_ads = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
 
