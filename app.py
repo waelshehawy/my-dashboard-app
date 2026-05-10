@@ -34,13 +34,15 @@ def get_connection():
 
 # --- 2. تصحيح دالة المحرك (SQLAlchemy) لصفحة الإعدادات ---
 def get_engine():
-    # بناء الرابط برمجياً يمنع خطأ الـ Port تماماً
+    # تأكد أن الـ host هو اسم النطاق فقط بدون أي بروتوكولات
+    clean_host = "aws-1-eu-north-1.pooler.supabase.com"
+    
     url_obj = URL.create(
         drivername="postgresql+psycopg2",
         username="postgres.ncuofpvbaglwbdqnpman",
         password="WaelPreview2026",
-        host="://supabase.com",
-        port=5432,
+        host=clean_host,
+        port=6543, # نستخدم 6543 لأنه المنفذ الأكثر استقراراً مع Supabase Pooler
         database="postgres",
     )
     return create_engine(url_obj, connect_args={'sslmode': 'require'})
