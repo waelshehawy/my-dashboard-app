@@ -215,16 +215,6 @@ else:
             st_folium(m, width="100%", height=600)
 
         # --- Page: Quotation ---
-        elif page == "📄 Quotation":
-            # (Insert your Quotation code here, MUST be at the same indentation level as 'if page == "📊 Dashboard"')
-            st.title("📄 بناء عرض سعر وتثبيت حجز")
-            # ... rest of your quotation logic
-
-    
-
-
-
-        # --- Page: Quotation ---
     # --- Page 2: Quotation (كامل الوظائف - نسخة مستقرة) ---
     elif page == "📄 Quotation":
         st.title("📄 بناء عرض سعر وتثبيت حجز")
@@ -322,6 +312,12 @@ else:
         except Exception as e:
             st.error(f"⚠️ حدث خطأ في الصفحة: {e}")
 
+    
+
+
+
+
+    
                 
                 
 
