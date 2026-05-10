@@ -374,10 +374,9 @@ else:
 
               
                 # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
-        # --- Page 3: تقرير الجرد (نسخة الأزرار العلوية) ---
+        # --- Page 3: تقرير الجرد (المصحح من أخطاء التسمية) ---
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
-            
             try:
                 # 1. جلب بيانات الفترات
                 df_p = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
@@ -387,40 +386,44 @@ else:
                 with c2: e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="inv_e")
                 with c3: yr = st.number_input("العام:", value=2026, key="inv_y")
 
-                # 2. أزرار التصدير (نقلناها للأعلى لضمان ظهورها)
-                st.subheader("📥 روابط التحميل السريع")
-                exp_c1, exp_c2 = st.columns(2)
-
-                # 3. العمليات الحسابية
+                # 2. حساب الفترات (توحيد الأسماء لمنع الخطأ)
                 s_idx = int(df_p[df_p['namee'] == s_p]['no'].iloc[0])
                 e_idx = int(df_p[df_p['namee'] == e_p]['no'].iloc[0])
-                target_p_list = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
-                p_placeholders = ", ".join([f"'{p}'" for p in target_p_names]) # تم استخدام التسمية الصحيحة
+                
+                # هذا هو المتغير الذي سبب المشكلة، قمنا بتثبيته الآن
+                target_p_names = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
+                p_placeholders = ", ".join([f"'{p}'" for p in target_p_names])
 
+                # 3. جلب البيانات
                 all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
-                booked_j = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_placeholders})', conn)['رقم اللوحة'].tolist()
-                all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_j else 'متاح')
+                booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_placeholders})'
+                booked_list = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
+                
+                all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_list else 'متاح')
 
-                # تفعيل أزرار التحميل
+                # 4. عرض الأزرار والمجاميع (قبل الجداول الطويلة)
+                st.subheader("📥 روابط التحميل والمؤشرات")
+                exp_c1, exp_c2 = st.columns(2)
                 with exp_c1:
                     csv = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
                     st.download_button("📥 Excel تصدير الجرد", csv, f"Inventory_{yr}.csv", "text/csv")
                 with exp_c2:
                     rep_doc = Document()
                     rep_doc.add_heading(f"تقرير الجرد لعام {yr}", 0)
+                    rep_doc.add_paragraph(f"إجمالي المحجوز: {len(booked_list)}")
                     word_out = io.BytesIO()
                     rep_doc.save(word_out)
                     st.download_button("📥 Word تصدير ملخص", word_out.getvalue(), f"Report_{yr}.docx")
 
-                st.divider()
-
-                # 4. المجاميع والجداول
-                t_all, t_booked = len(all_b), len(booked_j)
+                t_all, t_booked = len(all_b), len(booked_list)
                 m1, m2, m3 = st.columns(3)
                 m1.metric("إجمالي اللوحات", t_all)
                 m2.metric("إجمالي المحجوز", t_booked)
                 m3.metric("إجمالي المتاح", t_all - t_booked)
 
+                st.divider()
+
+                # 5. عرض الجداول التفصيلية
                 for city in sorted(all_b['المحافظة'].unique()):
                     st.write(f"#### 📍 محافظة {city}")
                     city_df = all_b[all_b['المحافظة'] == city]
