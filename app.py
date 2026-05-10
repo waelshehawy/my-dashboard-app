@@ -374,11 +374,11 @@ else:
 
               
                 # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
-        # --- Page 3: تقرير الجرد (المصحح من أخطاء التسمية) ---
+        # --- Page 3: تقرير الجرد (النسخة النهائية المصححة بالكامل) ---
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
             try:
-                # 1. جلب بيانات الفترات
+                # 1. جلب بيانات الفترات وحساب النطاق
                 df_p = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
                 
                 c1, c2, c3 = st.columns(3)
@@ -386,47 +386,41 @@ else:
                 with c2: e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="inv_e")
                 with c3: yr = st.number_input("العام:", value=2026, key="inv_y")
 
-                # 2. حساب الفترات (توحيد الأسماء لمنع الخطأ)
                 s_idx = int(df_p[df_p['namee'] == s_p]['no'].iloc[0])
                 e_idx = int(df_p[df_p['namee'] == e_p]['no'].iloc[0])
-                
-                # هذا هو المتغير الذي سبب المشكلة، قمنا بتثبيته الآن
                 target_p_names = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
                 p_placeholders = ", ".join([f"'{p}'" for p in target_p_names])
 
-                # 3. جلب البيانات
+                # 2. الحسابات الأساسية (يجب أن تسبق الأزرار)
                 all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
                 booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_placeholders})'
                 booked_list = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
                 
                 all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_list else 'متاح')
+                
+                t_all = len(all_b)
+                t_booked = len(booked_list)
+                t_avail = t_all - t_booked
 
-                # 4. عرض الأزرار والمجاميع (قبل الجداول الطويلة)
-                # --- القسم المصحح لروابط التحميل (تقرير الجرد) ---
+                # 3. عرض الأزرار والمؤشرات
                 st.subheader("📥 روابط التحميل والمؤشرات")
-                exp_c1, exp_c2 = st.columns(2) # تم تثبيت الأسماء هنا
+                m1, m2, m3 = st.columns(3)
+                m1.metric("إجمالي اللوحات", t_all)
+                m2.metric("إجمالي المحجوز", t_booked)
+                m3.metric("إجمالي المتاح", t_avail)
 
-                # 1. زر تحميل Excel (CSV)
+                exp_c1, exp_c2 = st.columns(2)
                 with exp_c1:
-                    csv_data = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button("📥 Excel تصدير الجرد التفصيلي", csv_data, f"Inventory_{yr}.csv", "text/csv")
-
-                # 2. زر تحميل Word التفصيلي
+                    csv = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+                    st.download_button("📥 Excel تصدير الجرد", csv, f"Inventory_{yr}.csv", "text/csv")
+                
                 with exp_c2:
                     rep_doc = Document()
-                    # ضبط العنوان والاتجاه
-                    h = rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
-                    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    
-                    p_info = rep_doc.add_paragraph()
-                    p_info.add_run(f"الفترة المشمولة: من {s_p} إلى {e_p}").bold = True
-                    _force_rtl_style(p_info)
-                    
-                    p_metrics = rep_doc.add_paragraph()
-                    p_metrics.add_run(f"إجمالي اللوحات: {t_all} | المحجوز: {t_booked} | المتاح: {t_all - t_booked}")
-                    _force_rtl_style(p_metrics)
+                    rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
+                    p_m = rep_doc.add_paragraph()
+                    p_m.add_run(f"إجمالي اللوحات: {t_all} | المحجوز: {t_booked} | المتاح: {t_avail}")
+                    _force_rtl_style(p_m)
 
-                    # إضافة جداول المحافظات في الوورد
                     for city in sorted(all_b['المحافظة'].unique()):
                         city_p = rep_doc.add_paragraph()
                         city_p.add_run(f"📍 محافظة {city}").bold = True
@@ -437,10 +431,7 @@ else:
                         if 'محجوز' not in stats.columns: stats['محجوز'] = 0
                         if 'متاح' not in stats.columns: stats['متاح'] = 0
                         
-                        table = rep_doc.add_table(rows=1, cols=3)
-                        table.style = 'Table Grid'
-                        set_table_rtl(table)
-                        
+                        table = rep_doc.add_table(rows=1, cols=3); table.style = 'Table Grid'; set_table_rtl(table)
                         hdr = table.rows[0].cells
                         hdr[0].text, hdr[1].text, hdr[2].text = "المقاس", "المحجوز", "المتاح"
                         for cell in hdr:
@@ -448,39 +439,28 @@ else:
                         
                         for size, row in stats.iterrows():
                             row_cells = table.add_row().cells
-                            row_cells[0].text = str(size)
-                            row_cells[1].text = str(row['محجوز'])
-                            row_cells[2].text = str(row['متاح'])
+                            row_cells[0].text, row_cells[1].text, row_cells[2].text = str(size), str(row['محجوز']), str(row['متاح'])
                             for cell in row_cells:
                                 for p in cell.paragraphs: _force_rtl_style(p)
-                        
-                        rep_doc.add_paragraph()
 
                     word_out = io.BytesIO()
                     rep_doc.save(word_out)
-                    st.download_button("📥 Word تحميل التقرير التفصيلي", word_out.getvalue(), f"Detailed_Report_{yr}.docx")
-
-
-
-                t_all, t_booked = len(all_b), len(booked_list)
-                m1, m2, m3 = st.columns(3)
-                m1.metric("إجمالي اللوحات", t_all)
-                m2.metric("إجمالي المحجوز", t_booked)
-                m3.metric("إجمالي المتاح", t_all - t_booked)
+                    st.download_button("📥 Word تحميل التقرير التفصيلي", word_out.getvalue(), f"Report_{yr}.docx")
 
                 st.divider()
 
-                # 5. عرض الجداول التفصيلية
+                # 4. عرض الجداول في الواجهة
                 for city in sorted(all_b['المحافظة'].unique()):
                     st.write(f"#### 📍 محافظة {city}")
-                    city_df = all_b[all_b['المحافظة'] == city]
-                    stats = city_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
-                    if 'محجوز' not in stats.columns: stats['محجوز'] = 0
-                    if 'متاح' not in stats.columns: stats['متاح'] = 0
-                    st.table(stats)
+                    c_df = all_b[all_b['المحافظة'] == city]
+                    c_stats = c_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
+                    if 'محجوز' not in c_stats.columns: c_stats['محجوز'] = 0
+                    if 'متاح' not in c_stats.columns: c_stats['متاح'] = 0
+                    st.table(c_stats)
 
             except Exception as e:
                 st.error(f"⚠️ فشل في إظهار التقرير: {e}")
+
 
 
 
