@@ -407,7 +407,8 @@ else:
                 with exp_c1:
                     csv = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
                     st.download_button("📥 Excel تصدير الجرد", csv, f"Inventory_{yr}.csv", "text/csv")
-                                with exp_col2:
+                                
+                with exp_col2:
                     # بناء تقرير Word رسمي وتفصيلي
                     rep_doc = Document()
                     
