@@ -347,31 +347,40 @@ else:
 
 
         # --- Page 4: Settings ---
+                # --- Page 4: Settings (إزاحة مضبوطة تحت شرط الاتصال) ---
         elif page == "⚙️ الإعدادات":
             st.title("⚙️ إدارة البيانات الأساسية (Cloud)")
+            st.info("💡 يمكنك تعديل أو حذف الأسطر مباشرة من الجداول ثم الضغط على حفظ.")
+            
             try:
+                # إنشاء المحرك الموثوق
                 engine = get_engine() 
                 tab1, tab2 = st.tabs(["📍 اللوحات", "📅 سجل الحجوزات"])
                 
                 with tab1:
-                    df_set = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-                    new_set = st.data_editor(df_set, num_rows="dynamic", key="set_boards_final")
+                    st.subheader("تعديل بيانات أعمدة الإنارة")
+                    df_boards = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+                    # تفعيل الإضافة والحذف الديناميكي
+                    new_boards = st.data_editor(df_boards, num_rows="dynamic", key="editor_boards_cloud")
                     if st.button("💾 حفظ تغييرات اللوحات"):
                         with engine.begin() as cn:
                             cn.execute(text('DELETE FROM "اعمدة انارة"'))
-                            new_set.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
-                        st.success("✅ تم تحديث الجداول بنجاح.")
-                
+                            new_boards.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
+                        st.success("✅ تم تحديث جدول اللوحات في السحابة.")
+
                 with tab2:
-                    df_h = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 200', conn)
-                    new_h = st.data_editor(df_h, num_rows="dynamic", key="set_bookings_final")
+                    st.subheader("سجل الحجوزات (آخر 300 سجل)")
+                    df_booking = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 300', conn)
+                    new_booking = st.data_editor(df_booking, num_rows="dynamic", key="editor_bookings_cloud")
                     if st.button("💾 تحديث سجل الحجوزات"):
                         with engine.begin() as cn:
                             cn.execute(text('DELETE FROM "حجوزات1"'))
-                            new_h.to_sql("حجوزات1", cn, if_exists="append", index=False)
-                        st.success("✅ تمت المزامنة.")
+                            new_booking.to_sql("حجوزات1", cn, if_exists="append", index=False)
+                        st.success("✅ تمت مزامنة سجل الحجوزات بنجاح.")
+
             except Exception as e:
                 st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
+
 
     
                 # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
