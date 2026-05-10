@@ -402,21 +402,22 @@ else:
                 all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_list else 'متاح')
 
                 # 4. عرض الأزرار والمجاميع (قبل الجداول الطويلة)
+                # --- القسم المصحح لروابط التحميل (تقرير الجرد) ---
                 st.subheader("📥 روابط التحميل والمؤشرات")
-                exp_c1, exp_c2 = st.columns(2)
+                exp_c1, exp_c2 = st.columns(2) # تم تثبيت الأسماء هنا
+
+                # 1. زر تحميل Excel (CSV)
                 with exp_c1:
-                    csv = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button("📥 Excel تصدير الجرد", csv, f"Inventory_{yr}.csv", "text/csv")
-                                
-                with exp_col2:
-                    # بناء تقرير Word رسمي وتفصيلي
+                    csv_data = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+                    st.download_button("📥 Excel تصدير الجرد التفصيلي", csv_data, f"Inventory_{yr}.csv", "text/csv")
+
+                # 2. زر تحميل Word التفصيلي
+                with exp_c2:
                     rep_doc = Document()
+                    # ضبط العنوان والاتجاه
+                    h = rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
+                    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     
-                    # 1. عنوان التقرير
-                    p_title = rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
-                    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    
-                    # 2. ملخص عام
                     p_info = rep_doc.add_paragraph()
                     p_info.add_run(f"الفترة المشمولة: من {s_p} إلى {e_p}").bold = True
                     _force_rtl_style(p_info)
@@ -424,48 +425,41 @@ else:
                     p_metrics = rep_doc.add_paragraph()
                     p_metrics.add_run(f"إجمالي اللوحات: {t_all} | المحجوز: {t_booked} | المتاح: {t_all - t_booked}")
                     _force_rtl_style(p_metrics)
-                    
-                    rep_doc.add_paragraph("-" * 50) # خط فاصل
 
-                    # 3. جداول المحافظات
+                    # إضافة جداول المحافظات في الوورد
                     for city in sorted(all_b['المحافظة'].unique()):
                         city_p = rep_doc.add_paragraph()
                         city_p.add_run(f"📍 محافظة {city}").bold = True
                         _force_rtl_style(city_p)
                         
-                        # حساب الإحصائيات لهذه المحافظة
                         city_df = all_b[all_b['المحافظة'] == city]
                         stats = city_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
                         if 'محجوز' not in stats.columns: stats['محجوز'] = 0
                         if 'متاح' not in stats.columns: stats['متاح'] = 0
                         
-                        # إنشاء الجدول في الوورد
                         table = rep_doc.add_table(rows=1, cols=3)
                         table.style = 'Table Grid'
-                        set_table_rtl(table) # ضبط اتجاه الجدول لليمين
+                        set_table_rtl(table)
                         
                         hdr = table.rows[0].cells
                         hdr[0].text, hdr[1].text, hdr[2].text = "المقاس", "المحجوز", "المتاح"
-                        for cell in hdr: _force_rtl_style(cell.paragraphs[0])
+                        for cell in hdr:
+                            for p in cell.paragraphs: _force_rtl_style(p)
                         
                         for size, row in stats.iterrows():
                             row_cells = table.add_row().cells
                             row_cells[0].text = str(size)
                             row_cells[1].text = str(row['محجوز'])
                             row_cells[2].text = str(row['متاح'])
-                            for cell in row_cells: _force_rtl_style(cell.paragraphs[0])
+                            for cell in row_cells:
+                                for p in cell.paragraphs: _force_rtl_style(p)
                         
-                        rep_doc.add_paragraph() # سطر فارغ بين المحافظات
+                        rep_doc.add_paragraph()
 
-                    # 4. حفظ وإعداد الملف للتحميل
                     word_out = io.BytesIO()
                     rep_doc.save(word_out)
-                    st.download_button(
-                        label="📥 Word تحميل التقرير التفصيلي",
-                        data=word_out.getvalue(),
-                        file_name=f"Detailed_Inventory_{yr}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                    st.download_button("📥 Word تحميل التقرير التفصيلي", word_out.getvalue(), f"Detailed_Report_{yr}.docx")
+
 
 
                 t_all, t_booked = len(all_b), len(booked_list)
