@@ -347,50 +347,32 @@ else:
 
 
         # --- Page 4: Settings ---
-        # --- Page 4: Settings (الإعدادات بإزاحة مضبوطة) ---
         elif page == "⚙️ الإعدادات":
             st.title("⚙️ إدارة البيانات الأساسية (Cloud)")
-            st.info("💡 يمكنك إضافة، تعديل، أو حذف الأسطر مباشرة من الجداول ثم الضغط على حفظ.")
-            
             try:
-                # التأكد من استخدام محرك SQLAlchemy للعمليات الضخمة
                 engine = get_engine() 
-                tab1, tab2, tab3 = st.tabs(["📍 اللوحات", "📅 سجل الحجوزات", "💰 الأسعار"])
+                tab1, tab2 = st.tabs(["📍 اللوحات", "📅 سجل الحجوزات"])
                 
                 with tab1:
-                    st.subheader("إدارة بيانات الأعمدة")
                     df_set = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-                    # num_rows="dynamic" تتيح لك حذف الأسطر أو إضافتها يدوياً
-                    new_set = st.data_editor(df_set, num_rows="dynamic", key="set_b_all")
+                    new_set = st.data_editor(df_set, num_rows="dynamic", key="set_boards_final")
                     if st.button("💾 حفظ تغييرات اللوحات"):
                         with engine.begin() as cn:
                             cn.execute(text('DELETE FROM "اعمدة انارة"'))
                             new_set.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
-                        st.success("✅ تم تحديث جدول اللوحات بنجاح في Supabase.")
-
+                        st.success("✅ تم تحديث الجداول بنجاح.")
+                
                 with tab2:
-                    st.subheader("سجل الحجوزات التاريخي")
-                    # جلب آخر 500 حجز لضمان سرعة الصفحة
-                    df_h = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 500', conn)
-                    new_h = st.data_editor(df_h, num_rows="dynamic", key="set_h_all")
+                    df_h = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 200', conn)
+                    new_h = st.data_editor(df_h, num_rows="dynamic", key="set_bookings_final")
                     if st.button("💾 تحديث سجل الحجوزات"):
                         with engine.begin() as cn:
                             cn.execute(text('DELETE FROM "حجوزات1"'))
                             new_h.to_sql("حجوزات1", cn, if_exists="append", index=False)
-                        st.success("✅ تمت مزامنة سجل الحجوزات.")
-
-                with tab3:
-                    st.subheader("إدارة قوائم الأسعار والأجور")
-                    df_pr = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
-                    new_pr = st.data_editor(df_pr, num_rows="dynamic", key="set_pr_all")
-                    if st.button("💾 حفظ تحديث الأسعار"):
-                        with engine.begin() as cn:
-                            cn.execute(text('DELETE FROM "اسماء الرسم"'))
-                            new_pr.to_sql("اسماء الرسم", cn, if_exists="append", index=False)
-                        st.success("✅ تم تحديث قوائم الأسعار بنجاح.")
-
+                        st.success("✅ تمت المزامنة.")
             except Exception as e:
                 st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
+
         
 
 
