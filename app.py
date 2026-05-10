@@ -266,8 +266,7 @@ else:
                 
                 # إذا لم يجد "طباعة عادي"، يبحث عن "طباعة" فقط بشرط ألا تكون "سكوتش"
                 if f_pr_row.empty and pt == "عادي":
-                    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & 
-                                      ~subset['search_name'].str.contains("سكوتش", na=False)]
+                    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) 
                 
                 f_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
 
