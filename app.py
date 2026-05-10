@@ -246,22 +246,26 @@ else:
                 with cp2: end_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1)
 
                 # حساب الأجور والفلترة
-                # --- بحث مرن عن الأجور لضمان عدم ظهور الصفر ---
-                subset = draw_df[draw_df['الحجم'] == sz]
+                # --- تنظيف البيانات والبحث المرن عن الأجور ---
+                subset = draw_df[draw_df['الحجم'] == sz].copy()
+                # تنظيف النصوص من المسافات الزائدة وتحويلها لنص موحد للبحث
+                subset['اسم الرسم'] = subset['اسم الرسم'].str.strip().str.replace('أ', 'ا') 
                 
-                # البحث عن أي سطر يحتوي "طباعة" ونوع الطباعة (عادي/سكوتش)
+                # البحث عن كلمة "طباعة" والنوع المختار (عادي/سكوتش)
+                target_pt = pt.replace('أ', 'ا') # توحيد الهمزات
                 f_pr_row = subset[subset['اسم الرسم'].str.contains("طباعة", na=False) & 
-                                  subset['اسم الرسم'].str.contains(pt, na=False)]
+                                  subset['اسم الرسم'].str.contains(target_pt, na=False)]
                 f_pr = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
 
-                # البحث عن أي سطر يحتوي "عرض" ونوع الطباعة
+                # البحث عن كلمة "عرض" والنوع المختار
                 f_ad_row = subset[subset['اسم الرسم'].str.contains("عرض", na=False) & 
-                                  subset['اسم الرسم'].str.contains(pt, na=False)]
+                                  subset['اسم الرسم'].str.contains(target_pt, na=False)]
                 f_ad = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
 
-                # تنبيه إذا لم يجد سعراً
+                # تنبيه في حال الصفر لمساعدتك في معرفة السبب
                 if f_pr == 0 or f_ad == 0:
-                    st.warning(f"⚠️ لم يتم العثور على أجور لـ {sz} - {pt} في جدول 'اسماء الرسم'")
+                    st.warning(f"⚠️ لم يتم العثور على سعر في عمود 'اجرة الرسم' للمقاس {sz} والنوع {pt}")
+                    # سطر اختياري للمعاينة: st.write(subset[['اسم الرسم', 'اجرة الرسم']])
 
                 
                 s_idx = int(df_p[df_p['namee']==start_p]['no'].iloc[0])
