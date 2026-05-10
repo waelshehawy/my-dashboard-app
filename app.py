@@ -434,8 +434,6 @@ else:
 
                     # (بقية كود الجداول للمحافظات كما هو...)
                     for city in sorted(all_b['المحافظة'].unique()):
-                        # ...
-
                         city_p = rep_doc.add_paragraph()
                         city_p.add_run(f"📍 محافظة {city}").bold = True
                         _force_rtl_style(city_p)
