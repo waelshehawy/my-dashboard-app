@@ -246,9 +246,23 @@ else:
                 with cp2: end_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1)
 
                 # حساب الأجور والفلترة
+                # --- بحث مرن عن الأجور لضمان عدم ظهور الصفر ---
                 subset = draw_df[draw_df['الحجم'] == sz]
-                f_pr = float(subset[subset['اسم الرسم'].str.contains("طباعة", na=False) & subset['اسم الرسم'].str.contains(pt, na=False)]['اجرة الرسم'].sum())
-                f_ad = float(subset[subset['اسم الرسم'].str.contains("عرض", na=False) & subset['اسم الرسم'].str.contains(pt, na=False)]['اجرة الرسم'].sum())
+                
+                # البحث عن أي سطر يحتوي "طباعة" ونوع الطباعة (عادي/سكوتش)
+                f_pr_row = subset[subset['اسم الرسم'].str.contains("طباعة", na=False) & 
+                                  subset['اسم الرسم'].str.contains(pt, na=False)]
+                f_pr = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
+
+                # البحث عن أي سطر يحتوي "عرض" ونوع الطباعة
+                f_ad_row = subset[subset['اسم الرسم'].str.contains("عرض", na=False) & 
+                                  subset['اسم الرسم'].str.contains(pt, na=False)]
+                f_ad = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
+
+                # تنبيه إذا لم يجد سعراً
+                if f_pr == 0 or f_ad == 0:
+                    st.warning(f"⚠️ لم يتم العثور على أجور لـ {sz} - {pt} في جدول 'اسماء الرسم'")
+
                 
                 s_idx = int(df_p[df_p['namee']==start_p]['no'].iloc[0])
                 e_idx = int(df_p[df_p['namee']==end_p]['no'].iloc[0])
