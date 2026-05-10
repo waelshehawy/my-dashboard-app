@@ -15,6 +15,7 @@ from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime
 # --- 1. Database Connections ---
+from sqlalchemy.engine import URL
 def get_connection():
     try:
         return psycopg2.connect(
@@ -33,10 +34,16 @@ def get_connection():
 
 # --- 2. تصحيح دالة المحرك (SQLAlchemy) لصفحة الإعدادات ---
 def get_engine():
-    # الرابط الكامل والمصحح للإدخال المباشر
-    uri = "postgresql://postgres.ncuofpvbaglwbdqnpman:WaelPreview2026@://supabase.com"
-    return create_engine(uri)
-
+    # بناء الرابط برمجياً يمنع خطأ الـ Port تماماً
+    url_obj = URL.create(
+        drivername="postgresql+psycopg2",
+        username="postgres.ncuofpvbaglwbdqnpman",
+        password="WaelPreview2026",
+        host="://supabase.com",
+        port=5432,
+        database="postgres",
+    )
+    return create_engine(url_obj, connect_args={'sslmode': 'require'})
 # --- 2. Word & RTL Helpers ---
 
 
