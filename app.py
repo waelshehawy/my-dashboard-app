@@ -407,13 +407,65 @@ else:
                 with exp_c1:
                     csv = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
                     st.download_button("📥 Excel تصدير الجرد", csv, f"Inventory_{yr}.csv", "text/csv")
-                with exp_c2:
+                                with exp_col2:
+                    # بناء تقرير Word رسمي وتفصيلي
                     rep_doc = Document()
-                    rep_doc.add_heading(f"تقرير الجرد لعام {yr}", 0)
-                    rep_doc.add_paragraph(f"إجمالي المحجوز: {len(booked_list)}")
+                    
+                    # 1. عنوان التقرير
+                    p_title = rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
+                    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    
+                    # 2. ملخص عام
+                    p_info = rep_doc.add_paragraph()
+                    p_info.add_run(f"الفترة المشمولة: من {s_p} إلى {e_p}").bold = True
+                    _force_rtl_style(p_info)
+                    
+                    p_metrics = rep_doc.add_paragraph()
+                    p_metrics.add_run(f"إجمالي اللوحات: {t_all} | المحجوز: {t_booked} | المتاح: {t_all - t_booked}")
+                    _force_rtl_style(p_metrics)
+                    
+                    rep_doc.add_paragraph("-" * 50) # خط فاصل
+
+                    # 3. جداول المحافظات
+                    for city in sorted(all_b['المحافظة'].unique()):
+                        city_p = rep_doc.add_paragraph()
+                        city_p.add_run(f"📍 محافظة {city}").bold = True
+                        _force_rtl_style(city_p)
+                        
+                        # حساب الإحصائيات لهذه المحافظة
+                        city_df = all_b[all_b['المحافظة'] == city]
+                        stats = city_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
+                        if 'محجوز' not in stats.columns: stats['محجوز'] = 0
+                        if 'متاح' not in stats.columns: stats['متاح'] = 0
+                        
+                        # إنشاء الجدول في الوورد
+                        table = rep_doc.add_table(rows=1, cols=3)
+                        table.style = 'Table Grid'
+                        set_table_rtl(table) # ضبط اتجاه الجدول لليمين
+                        
+                        hdr = table.rows[0].cells
+                        hdr[0].text, hdr[1].text, hdr[2].text = "المقاس", "المحجوز", "المتاح"
+                        for cell in hdr: _force_rtl_style(cell.paragraphs[0])
+                        
+                        for size, row in stats.iterrows():
+                            row_cells = table.add_row().cells
+                            row_cells[0].text = str(size)
+                            row_cells[1].text = str(row['محجوز'])
+                            row_cells[2].text = str(row['متاح'])
+                            for cell in row_cells: _force_rtl_style(cell.paragraphs[0])
+                        
+                        rep_doc.add_paragraph() # سطر فارغ بين المحافظات
+
+                    # 4. حفظ وإعداد الملف للتحميل
                     word_out = io.BytesIO()
                     rep_doc.save(word_out)
-                    st.download_button("📥 Word تصدير ملخص", word_out.getvalue(), f"Report_{yr}.docx")
+                    st.download_button(
+                        label="📥 Word تحميل التقرير التفصيلي",
+                        data=word_out.getvalue(),
+                        file_name=f"Detailed_Inventory_{yr}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+
 
                 t_all, t_booked = len(all_b), len(booked_list)
                 m1, m2, m3 = st.columns(3)
