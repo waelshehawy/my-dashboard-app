@@ -416,12 +416,26 @@ else:
                 
                 with exp_c2:
                     rep_doc = Document()
-                    rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
+                    # 1. عنوان التقرير مع الفترة
+                    h = rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
+                    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    
+                    # إضافة الفترة المختارة أسفل العنوان مباشرة
+                    p_period = rep_doc.add_paragraph()
+                    p_period.add_run(f"الفترة من: {s_p} لغاية: {e_p}").bold = True
+                    _force_rtl_style(p_period)
+                    
+                    # 2. المؤشرات العامة
                     p_m = rep_doc.add_paragraph()
                     p_m.add_run(f"إجمالي اللوحات: {t_all} | المحجوز: {t_booked} | المتاح: {t_avail}")
                     _force_rtl_style(p_m)
+                    
+                    rep_doc.add_paragraph("-" * 50) # خط فاصل للتنظيم
 
+                    # (بقية كود الجداول للمحافظات كما هو...)
                     for city in sorted(all_b['المحافظة'].unique()):
+                        # ...
+
                         city_p = rep_doc.add_paragraph()
                         city_p.add_run(f"📍 محافظة {city}").bold = True
                         _force_rtl_style(city_p)
