@@ -348,25 +348,33 @@ else:
 
         # --- Page 4: Settings ---
         elif page == "⚙️ الإعدادات":
-            st.title("⚙️ إدارة البيانات")
-            engine = get_engine()
-            tab1, tab2 = st.tabs(["📍 اللوحات", "📅 الحجوزات"])
-            with tab1:
-                df_set = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-                new_set = st.data_editor(df_set, num_rows="dynamic")
-                if st.button("حفظ اللوحات"):
-                    with engine.begin() as cn:
-                        cn.execute(text('DELETE FROM "اعمدة انارة"'))
-                        new_set.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
-                    st.success("تم التحديث")
-            with tab2:
-                df_h = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 100', conn)
-                new_h = st.data_editor(df_h, num_rows="dynamic")
-                if st.button("تحديث السجل"):
-                    with engine.begin() as cn:
-                        cn.execute(text('DELETE FROM "حجوزات1"'))
-                        new_h.to_sql("حجوزات1", cn, if_exists="append", index=False)
-                    st.success("تمت المزامنة")
+    st.title("⚙️ إدارة البيانات الأساسية")
+    try:
+        # تأكد أن دالة get_engine() تستخدم المنفذ 6543 ورابط نقي
+        engine = get_engine() 
+        tab1, tab2 = st.tabs(["📍 اللوحات", "📅 سجل الحجوزات"])
+        
+        with tab1:
+            df_set = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+            new_set = st.data_editor(df_set, num_rows="dynamic", key="settings_boards")
+            if st.button("💾 حفظ تغييرات اللوحات"):
+                with engine.begin() as cn:
+                    cn.execute(text('DELETE FROM "اعمدة انارة"'))
+                    new_set.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
+                st.success("✅ تم تحديث جدول اللوحات بنجاح.")
+
+        with tab2:
+            # عرض آخر 200 حجز فقط لسرعة التحميل
+            df_h = pd.read_sql('SELECT * FROM "حجوزات1" ORDER BY id DESC LIMIT 200', conn)
+            new_h = st.data_editor(df_h, num_rows="dynamic", key="settings_bookings")
+            if st.button("💾 تحديث سجل الحجوزات"):
+                with engine.begin() as cn:
+                    cn.execute(text('DELETE FROM "حجوزات1"'))
+                    new_h.to_sql("حجوزات1", cn, if_exists="append", index=False)
+                st.success("✅ تمت مزامنة السجلات.")
+    except Exception as e:
+        st.error(f"⚠️ خطأ في الإعدادات: {e}")
+
 
 
 
