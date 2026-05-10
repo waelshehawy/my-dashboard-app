@@ -310,7 +310,7 @@ else:
                     for c, ns in list(st.session_state.cart.items()):
                         for n, df_cart in list(ns.items()):
                             with st.expander(f"📍 {c} - {n}", expanded=True):
-                                ed = st.data_editor(df_cart, key=f"ed_{c}_{n}")
+                                ed = st.data_editor(df_cart, key=f"ed_{c}_{n}", num_rows="dynamic")
                                 st.session_state.cart[c][n] = ed
                                 q = pd.to_numeric(ed['العدد']).sum()
                                 f_p_v = float(ed['fee_print'].max()) if 'fee_print' in ed.columns else 0.0
@@ -373,11 +373,7 @@ else:
             except Exception as e:
                 st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
 
-        
-
-
-
-              
+    
                 # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
         # --- Page 3: تقرير الجرد (النسخة النهائية المصححة بالكامل) ---
         elif page == "📋 تقرير الجرد":
