@@ -347,17 +347,6 @@ else:
             except Exception as e:
                 st.error(f"❌ خطأ تقني في صفحة العرض: {e}")
 
-        # --- Page 3: Inventory ---
-        elif page == "📋 تقرير الجرد":
-            st.title("📋 تقرير الإشغال والجرد")
-            try:
-                all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
-                booked = pd.read_sql('SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1"', conn)['رقم اللوحة'].tolist()
-                all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked else 'متاح')
-                for city in sorted(all_b['المحافظة'].unique()):
-                    st.write(f"### 📍 {city}")
-                    st.table(all_b[all_b['المحافظة']==city].groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0))
-            except Exception as e: st.error(f"خطأ في الجرد: {e}")
 
         # --- Page 4: Settings ---
         elif page == "⚙️ الإعدادات":
