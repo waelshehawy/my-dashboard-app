@@ -253,15 +253,34 @@ else:
                 with cp2: end_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1)
 
                 # --- منطق البحث المرن عن الأجور (تصحيح الأصفار) ---
+                # --- منطق البحث الذكي عن الأجور (تصحيح الهمزات والتسميات) ---
                 subset = draw_df[draw_df['الحجم'] == sz].copy()
+                # تنظيف وتوحيد النصوص (إزالة الهمزات والمسافات)
                 subset['search_name'] = subset['اسم الرسم'].str.strip().str.replace('أ', 'ا')
-                target_pt = pt.replace('أ', 'ا')
+                target_pt = pt.replace('أ', 'ا') # عادي أو سكوتش
 
-                f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & subset['search_name'].str.contains(target_pt, na=False)]
-                f_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
+                # 1. البحث عن أجور الطباعة
+                # نبحث عن (طباعة + النوع المختار)
+                f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & 
+                                  subset['search_name'].str.contains(target_pt, na=False)]
                 
-                f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & subset['search_name'].str.contains(target_pt, na=False)]
+                # إذا لم يجد "طباعة عادي"، يبحث عن "طباعة" فقط بشرط ألا تكون "سكوتش"
+                if f_pr_row.empty and pt == "عادي":
+                    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & 
+                                      ~subset['search_name'].str.contains("سكوتش", na=False)]
+                
+                f_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
+
+                # 2. البحث عن أجور العرض
+                f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & 
+                                  subset['search_name'].str.contains(target_pt, na=False)]
+                
+                if f_ad_row.empty and pt == "عادي":
+                    f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & 
+                                      ~subset['search_name'].str.contains("سكوتش", na=False)]
+                
                 f_ads = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
+
 
                 # 4. فلترة المواقع المتاحة
                 s_idx = int(df_p[df_p['namee']==start_p]['no'].iloc[0])
