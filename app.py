@@ -273,7 +273,8 @@ else:
                             recs = [(str(r['رقم اللوحة']), str(cust), str(p), int(yr)) for _, ns in st.session_state.cart.items() for _, df in ns.items() for _, r in df.iterrows() for p in target_p_list]
                             cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs); conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت!"); st.rerun()
                     with b3:
-
+                        st.download_button("📥 تحميل الوورد", export_word(cust, st.session_state.cart, start_p, end_p, g_total, is_foreign), f"Offer_{cust}.docx")
+            except Exception as e: st.error(f"❌ خطأ: {e}"
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
             try:
