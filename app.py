@@ -15,12 +15,13 @@ from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime
 
-# --- 1. Database Connections ---
+# --- 1. Database Connections (كود الاتصال الخاص بك حرفياً) ---
 from sqlalchemy.engine import URL
 def get_connection():
     try:
         return psycopg2.connect(
-            host="://supabase.com", 
+            # الـ host يجب أن يكون العنوان التقني المباشر بدون http أو ://
+            host="aws-1-eu-north-1.pooler.supabase.com", 
             port="6543",
             database="postgres",
             user="postgres.ncuofpvbaglwbdqnpman",
@@ -33,20 +34,20 @@ def get_connection():
         return None
 
 def get_engine():
-    clean_host = "://supabase.com"
+    clean_host = "aws-1-eu-north-1.pooler.supabase.com"
     url_obj = URL.create(
         drivername="postgresql+psycopg2",
         username="postgres.ncuofpvbaglwbdqnpman",
         password="WaelPreview2026",
         host=clean_host,
-        port=6543,
+        port=6543, 
         database="postgres",
     )
     return create_engine(url_obj, connect_args={'sslmode': 'require'})
 
 # --- 2. Word & RTL Helpers ---
 def set_table_rtl(table):
-    tblPr = table._element.xpath('w:tblPr')[0]
+    tblPr = table._element.xpath('w:tblPr')
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
 
@@ -59,6 +60,7 @@ def _force_rtl_style(p):
         rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
         rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
 
+# دالة التصدير المعدلة لدعم خيار الأجنبي في النص
 def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreign=False):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     PURPLE_COLOR = "660099" 
@@ -66,7 +68,7 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreig
     today_date = datetime.now().strftime("%d / %m / %Y")
     p_date = doc.add_paragraph()
     p_date.add_run(f"التاريخ: {today_date}")
-    _force_rtl_style(p_date)
+    _force_rtl_style(p_date) 
     doc.add_paragraph()
     p_cust = doc.add_paragraph()
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
@@ -89,14 +91,15 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreig
                 _force_rtl_style(p_size)
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
-                set_table_rtl(table)
-                hdr = table.rows[0].cells
+                set_table_rtl(table) 
+                hdr = table.rows.cells
                 hdr[0].text = "اسم الموقع (العمود)"; hdr[1].text = "العدد"
                 for cell in hdr:
                     for p in cell.paragraphs: _force_rtl_style(p)
                     tc_pr = cell._element.get_or_add_tcPr()
                     shd = OxmlElement('w:shd'); shd.set(qn('w:fill'), PURPLE_COLOR); tc_pr.append(shd)
                     cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+
                 for _, row in group_df.iterrows():
                     row_cells = table.add_row().cells
                     row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
@@ -106,7 +109,8 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreig
                 total_q = pd.to_numeric(group_df['العدد']).sum()
                 f_p = float(group_df['fee_print'].iloc[0])
                 f_a = float(group_df['fee_ads'].iloc[0])
-                sum_print, sum_ads = total_q * f_p, total_q * f_a
+                sum_print = total_q * f_p
+                sum_ads = total_q * f_a
                 p_fin = doc.add_paragraph()
                 txt = (f"إجمالي العدد: {int(total_q)} | أجور الطباعة: {sum_print:,.0f}$ | أجور العرض: {sum_ads:,.0f}$ | المجموع: {sum_print+sum_ads:,.0f}$")
                 p_fin.add_run(txt).bold = True
@@ -118,10 +122,12 @@ def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreig
     run_g.bold = True; run_g.font.size = Pt(14); run_g.font.color.rgb = RGBColor(102, 0, 153)
     _force_rtl_style(p_grand)
     p_note = doc.add_paragraph()
-    p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.").bold = True
+    run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.")
+    run_note.bold = True
     _force_rtl_style(p_note)
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
+
 # --- 3. Manage Expired Offers Logic ---
 def manage_expired_offers(conn):
     st.subheader("⚠️ إدارة العروض التي تجاوزت 48 ساعة")
