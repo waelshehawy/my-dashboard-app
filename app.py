@@ -584,7 +584,7 @@ else:
                 # أزرار التحكم
                 col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
                 
-                with col_btn1:
+                                with col_btn1:
                     if st.button("💾 حفظ كمسودة", use_container_width=True):
                         if not customer_name:
                             st.error("الرجاء إدخال اسم الزبون")
@@ -592,8 +592,8 @@ else:
                             save_data = {
                                 "data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()},
                                 "customer": customer_name,
-                                "start_date": start_date.isoformat(),
-                                "end_date": end_date.isoformat(),
+                                "start_date": start_date.isoformat() if hasattr(start_date, 'isoformat') else str(start_date),
+                                "end_date": end_date.isoformat() if hasattr(end_date, 'isoformat') else str(end_date),
                                 "is_foreign": is_foreign,
                                 "fee_print": fee_print,
                                 "fee_ads_monthly": fee_ads_monthly,
@@ -602,7 +602,7 @@ else:
                             cur = conn.cursor()
                             cur.execute(
                                 'INSERT INTO "offers_history" (client_name, cart_json, status) VALUES (%s, %s, %s)',
-                                (customer_name, json.dumps(save_data, ensure_ascii=False), 'Pending')
+                                (customer_name, json.dumps(save_data, ensure_ascii=False, default=str), 'Pending')
                             )
                             conn.commit()
                             st.success("تم حفظ العرض كمسودة بنجاح")
