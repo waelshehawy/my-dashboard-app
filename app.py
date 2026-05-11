@@ -13,20 +13,23 @@ from sqlalchemy import create_engine, text
 from datetime import datetime
 
 # --- 1. قاعدة البيانات والاتصال ---
+# --- 1. قاعدة البيانات والاتصال (التعديل المطلوب لحل الخطأ) ---
 DB_CONFIG = {
     "host": "://supabase.com",
-    "port": "6543",
+    "port": "5432",  # تغيير المنفذ إلى 5432 للمزامنة المباشرة
     "database": "postgres",
     "user": "postgres.ncuofpvbaglwbdqnpman",
-    "password": "WaelPreview2026"
+    "password": "WaelPreview2026",
+    "connect_timeout": 10 # إضافة مهلة اتصال لتجنب الـ Redacted Error
 }
 
 def get_connection():
-    return psycopg2.connect(**DB_CONFIG, sslmode='require')
-
-def get_engine():
-    url = f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
-    return create_engine(url)
+    try:
+        return psycopg2.connect(**DB_CONFIG, sslmode='require')
+    except Exception as e:
+        # هذا سيطبع الخطأ الحقيقي في واجهة التطبيق لتعرف السبب (مثل خطأ في كلمة السر أو الشبكة)
+        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {str(e)}")
+        return None
 
 # --- 2. دوال التنسيق المتقدمة (Word RTL) ---
 def set_rtl(obj):
