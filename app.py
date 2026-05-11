@@ -831,7 +831,7 @@ else:
         except Exception as e:
             st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
     # ============================================================
-    # صفحة تقرير التوفر الشهري (نسخة خفيفة)
+    # صفحة تقرير التوفر الشهري (نسخة مبسطة)
     # ============================================================
     elif page == "📅 تقرير التوفر الشهري":
         st.title("📅 تقرير توفر الأعمدة - شهري")
@@ -844,27 +844,10 @@ else:
         
         report_year = st.selectbox("📅 سنة التقرير:", [current_year, current_year + 1], index=0)
         
-        # لا نقوم بأي عملية قبل الضغط على الزر
-        if 'report_ready' not in st.session_state:
-            st.session_state.report_ready = False
-            st.session_state.results_df = None
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary"):
-                st.session_state.report_ready = True
-                st.session_state.results_df = None
-                st.rerun()
-        
-        with col2:
-            if st.button("🗑️ مسح التقرير", use_container_width=True):
-                st.session_state.report_ready = False
-                st.session_state.results_df = None
-                st.rerun()
-        
-        # فقط إذا تم الضغط على زر التشغيل، نقوم بإنشاء التقرير
-        if st.session_state.report_ready:
-            with st.spinner("جاري إنشاء التقرير... قد يستغرق بضع ثوانٍ"):
+        # زر تشغيل التقرير
+        if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary"):
+            
+            with st.spinner("جاري إنشاء التقرير..."):
                 
                 start_date = date(report_year, today.month, today.day) if report_year == current_year else date(report_year, 1, 1)
                 end_date = date(report_year, 12, 31)
@@ -876,7 +859,7 @@ else:
                     months_list.append(current_month)
                     current_month += relativedelta(months=1)
                 
-                # جلب البيانات - فقط هنا يتم الاتصال بقاعدة البيانات
+                # جلب البيانات
                 all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم" FROM "اعمدة انارة"', conn)
                 all_bookings = pd.read_sql(f'SELECT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {report_year}', conn)
                 
@@ -903,33 +886,54 @@ else:
                         })
                 
                 progress_bar.empty()
-                st.session_state.results_df = pd.DataFrame(results)
-                st.success(f"✅ تم إنشاء التقرير - {len(st.session_state.results_df)} سجل")
-            
-            # عرض النتائج
-            if st.session_state.results_df is not None:
-                df = st.session_state.results_df
+                results_df = pd.DataFrame(results)
                 
-                # ملخص سريع
-                summary = df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
+                st.success(f"✅ تم إنشاء التقرير - {len(results_df)} سجل")
+                
+                # عرض الملخص
+                st.subheader("📊 ملخص شهري")
+                summary = results_df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
                 st.dataframe(summary, use_container_width=True)
                 
                 # رسم بياني
-                st.subheader("📊 مخطط الإشغال الشهري")
-                chart_data = df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
-                st.bar_chart(chart_data[['متاح', 'محجوز']])
+                st.subheader("📈 مخطط الإشغال الشهري")
+                chart_data = results_df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
+                st.bar_chart(chart_data)
                 
-                # تفصيل حسب الشبكة
-                with st.expander("📋 تفصيل حسب الشبكة"):
-                    last_month = df[df['الشهر'] == months_list[-1].strftime('%Y-%m')]
-                    network_stats = last_month.groupby(['الشبكة', 'الحالة']).size().unstack(fill_value=0)
-                    st.dataframe(network_stats, use_container_width=True)
+                # تفصيل حسب الشبكة (آخر شهر)
+                st.subheader("📋 تفصيل حسب الشبكة (آخر شهر)")
+                last_month = months_list[-1].strftime('%Y-%m')
+                last_month_df = results_df[results_df['الشهر'] == last_month]
+                network_stats = last_month_df.groupby(['الشبكة', 'الحالة']).size().unstack(fill_value=0)
+                st.dataframe(network_stats, use_container_width=True)
                 
-                # تفصيل حسب المحافظة
-                with st.expander("📋 تفصيل حسب المحافظة"):
-                    city_stats = last_month.groupby(['المحافظة', 'الحالة']).size().unstack(fill_value=0)
-                    st.dataframe(city_stats, use_container_width=True)
+                # تفصيل حسب المحافظة (آخر شهر)
+                st.subheader("📋 تفصيل حسب المحافظة (آخر شهر)")
+                city_stats = last_month_df.groupby(['المحافظة', 'الحالة']).size().unstack(fill_value=0)
+                st.dataframe(city_stats, use_container_width=True)
                 
-                # تصدير
-                csv = df.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button("📥 تحميل التقرير الكامل", csv, f"monthly_report_{report_year}.csv", "text/csv")
+                # أزرار التصدير
+                st.divider()
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    csv_full = results_df.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        "📥 تحميل التقرير الكامل",
+                        csv_full,
+                        f"monthly_report_{report_year}.csv",
+                        "text/csv",
+                        use_container_width=True
+                    )
+                
+                with col2:
+                    csv_month = last_month_df.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        f"📥 تحميل شهر {last_month}",
+                        csv_month,
+                        f"month_{last_month}.csv",
+                        "text/csv",
+                        use_container_width=True
+                    )
+        else:
+            st.info("👆 اضغط على زر 'تشغيل التقرير' لبدء إنشاء التقرير")
