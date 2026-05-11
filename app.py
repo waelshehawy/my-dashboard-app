@@ -487,38 +487,29 @@ else:
             end_p = ""
             
             if calc_method == "حساب بالأيام":
+                from datetime import datetime as dt
+                
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
-                    start_date = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
+                    start_date_str = st.text_input("📅 تاريخ بداية العرض (YYYY-MM-DD)", value=f"{year}-04-01")
                 with col_date2:
-                    end_date = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
+                    end_date_str = st.text_input("📅 تاريخ نهاية العرض (YYYY-MM-DD)", value=f"{year}-04-10")
                 
-                if start_date > end_date:
-                    st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
+                try:
+                    start_date = dt.strptime(start_date_str, '%Y-%m-%d').date()
+                    end_date = dt.strptime(end_date_str, '%Y-%m-%d').date()
+                    
+                    if start_date > end_date:
+                        st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
+                        st.stop()
+                    
+                    days_count = (end_date - start_date).days + 1
+                    start_p = start_date.isoformat()
+                    end_p = end_date.isoformat()
+                    st.info(f"📅 عدد الأيام: {days_count} يوم")
+                except ValueError:
+                    st.error("❌ صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD مثال: 2026-04-01")
                     st.stop()
-                
-                days_count = (end_date - start_date).days + 1
-                start_p = start_date.isoformat()
-                end_p = end_date.isoformat()
-                st.info(f"📅 عدد الأيام: {days_count} يوم")
-            else:
-                # حساب بالفترات (نصف شهر = 15 يوم)
-                periods_df = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
-                period_names = periods_df['namee'].tolist()
-                
-                col_p1, col_p2 = st.columns(2)
-                with col_p1:
-                    start_p = st.selectbox("من فترة:", period_names)
-                with col_p2:
-                    end_p = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1)
-                
-                # حساب عدد الفترات
-                start_idx = period_names.index(start_p)
-                end_idx = period_names.index(end_p)
-                periods_count = abs(end_idx - start_idx) + 1
-                days_count = periods_count * 14  # كل فترة = 15 يوم
-                
-                st.info(f"📅 عدد الفترات: {periods_count} | عدد الأيام: {days_count} يوم")
             
             # جلب الأسعار
             fee_print, fee_ads_monthly = get_fees(draw_df, selected_size, print_type, is_foreign)
