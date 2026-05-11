@@ -14,7 +14,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
-
+from datetime import date
 # ============================================================
 # 1. اتصالات قاعدة البيانات
 # ============================================================
@@ -465,9 +465,9 @@ else:
             # اختيار التاريخ (للحساب بالأيام)
             col_date1, col_date2 = st.columns(2)
             with col_date1:
-                start_date = st.date_input("📅 تاريخ بداية العرض", value=datetime(year, 4, 1))
+                start_date = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
             with col_date2:
-                end_date = st.date_input("📅 تاريخ نهاية العرض", value=datetime(year, 4, 10))
+               end_date = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
             
             if start_date > end_date:
                 st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
