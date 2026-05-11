@@ -21,26 +21,24 @@ def set_table_rtl(table):
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
 
-def _force_rtl_style(p):
-    """تطبيق الكتابة من اليمين لليسار على الفقرة"""
-    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    pPr = p._element.get_or_add_pPr()
-    
-    # إعداد bidi
+def _force_rtl_style(paragraph):
+    """تطبيق الكتابة من اليمين لليسار على أي فقرة"""
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    pPr = paragraph._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
     pPr.append(bidi)
     
-    # إعداد direction
-    direction = OxmlElement('w:jc')
-    direction.set(qn('w:val'), 'right')
-    pPr.append(direction)
-    
-    for run in p.runs:
+    for run in paragraph.runs:
         rPr = run._element.get_or_add_rPr()
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
+        
+    # إضافة هذه الأسطر لحل المشكلة بشكل نهائي
+    paragraph._element.get_or_add_pPr().get_or_add_jc().val = 'right'
+    
+    return paragraph
 # للتحقق
 def safe_date(date_input):
     """تحويل أي مدخل تاريخ إلى كائن date بشكل آمن"""
