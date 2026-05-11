@@ -87,40 +87,38 @@ def force_rtl_paragraph(p):
 # 3. دوال حساب الأجور (مع دعم الأجنبي والأيام)
 # ============================================================
 def get_fees(draw_df, size, print_type, is_foreign):
-    """
-    جلب أجور الطباعة (ثابتة) وأجور العرض (شهرية 28 يوم)
-    """
+    """جلب أجور الطباعة والعرض من جدول اسماء الرسم"""
     subset = draw_df[draw_df['الحجم'] == size].copy()
-    subset['search_name'] = subset['اسم الرسم'].str.strip().str.replace('أ', 'ا')
-    target_pt = print_type.replace('أ', 'ا')
     
-    # أجور الطباعة (ثابتة - لا تتغير بالأيام)
-    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & 
-                      subset['search_name'].str.contains(target_pt, na=False)]
-    if f_pr_row.empty and print_type == "عادي":
-        f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False)]
-    fee_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
+    # 1. أجور الطباعة - ابحث عن "اجور الطباعة" أو "اجور الطباعة عادي"
+    if print_type == "عادي":
+        f_pr = subset[subset['اسم الرسم'].str.contains("اجور الطباعة عادي", na=False)]
+        if f_pr.empty:
+            f_pr = subset[subset['اسم الرسم'].str.contains("اجور الطباعة", na=False)]
+    else:  # سكوتش
+        f_pr = subset[subset['اسم الرسم'].str.contains("اجور الطباعة", na=False)]
+        # استبعاد كلمة "عادي"
+        f_pr = f_pr[~f_pr['اسم الرسم'].str.contains("عادي", na=False)]
     
-    # أجور العرض (شهرية - تقسم على 28)
-    search_keyword = "اجنبي شهري" if is_foreign else "عرض شهري"
-    f_ad_row = subset[subset['search_name'].str.contains(search_keyword, na=False)]
+    fee_print = float(f_pr['اجرة الرسم'].iloc[0]) if not f_pr.empty else 0.0
     
-    if is_foreign and f_ad_row.empty:
-        f_ad_row = subset[subset['search_name'].str.contains("عرض شهري", na=False)]
+    # 2. أجور العرض - ابحث عن "اجور العرض" أو "اجور العرض اجنبي"
+    if is_foreign:
+        f_ad = subset[subset['اسم الرسم'].str.contains("اجور العرض اجنبي", na=False)]
+        if f_ad.empty:
+            f_ad = subset[subset['اسم الرسم'].str.contains("اجور العرض", na=False)]
+    else:
+        f_ad = subset[subset['اسم الرسم'].str.contains("اجور العرض", na=False)]
+        # استبعاد كلمة "اجنبي"
+        f_ad = f_ad[~f_ad['اسم الرسم'].str.contains("اجنبي", na=False)]
     
-    fee_ads_monthly = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
+    fee_ads = float(f_ad['اجرة الرسم'].iloc[0]) if not f_ad.empty else 0.0
     
-    return fee_print, fee_ads_monthly
-
-def calculate_price_per_column(fee_print, fee_ads_monthly, days):
-    """
-    حساب سعر العمود الواحد:
-    - أجر الطباعة: ثابت
-    - أجر العرض: (أجر شهري / 28) × عدد الأيام
-    """
-    daily_ads = fee_ads_monthly / 28
-    actual_ads = daily_ads * days
-    return fee_print + actual_ads, actual_ads
+    # عرض للمستخدم لقيم DEBUG
+    st.info(f"🔍 DEBUG: الحجم={size}, نوع الطباعة={print_type}, أجنبي={is_foreign}")
+    st.info(f"💰 أجر الطباعة: {fee_print}$, أجر العرض (شهري): {fee_ads}$")
+    
+    return fee_print, fee_ads
 
 # ============================================================
 # 4. دالة تصدير Word (كاملة بالتنسيقات)
