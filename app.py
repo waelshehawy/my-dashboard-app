@@ -300,6 +300,9 @@ else:
                             st.download_button("📥 تحميل العرض", export_word(cust, st.session_state.cart, start_p, end_p, g_total, is_foreign), f"Offer_{cust}.docx")
                     with b4:
                         if st.button("🔴 تفريغ السلة"): st.session_state.cart = {}; st.rerun()
+            except Exception as e:
+                st.error(f"❌ خطأ تقني في صفحة العرض: {e}")
+
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
             try:
@@ -311,8 +314,8 @@ else:
                 with c2: e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="inv_e")
                 with c3: yr_i = st.number_input("العام:", value=2026, key="inv_y")
 
-                s_idx = int(df_p[df_p['namee'] == s_p]['no'].iloc)
-                e_idx = int(df_p[df_p['namee'] == e_p]['no'].iloc)
+                s_idx = int(df_p[df_p['namee'] == s_p]['no'].iloc[0])
+                e_idx = int(df_p[df_p['namee'] == e_p]['no'].iloc[0])
                 target_p_names = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
                 p_placeholders = ", ".join([f"'{p}'" for p in target_p_names])
 
@@ -370,7 +373,7 @@ else:
 
                     word_out = io.BytesIO()
                     rep_doc.save(word_out)
-                    st.download_button("📥 Word تحميل التقرير", word_out.getvalue(), f"Report_{yr_i}.docx")
+                    st.download_button("📥 Word تحميل التقرير التفصيلي", word_out.getvalue(), f"Report_{yr_i}.docx")
 
                 st.divider()
                 for city in sorted(all_b['المحافظة'].unique()):
