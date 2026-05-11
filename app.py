@@ -333,9 +333,13 @@ else:
         # دمج البيانات
         df_map = pd.merge(all_columns_df, booked_df, on="رقم اللوحة", how="left", suffixes=('', '_booked'))
         
-        # حساب الإحصائيات
+        # التحقق من وجود العمود وتحديد المحجوزات
+        if 'رقم اللوحة_booked' in df_map.columns:
+            booked_count = df_map['رقم اللوحة_booked'].notna().sum()
+        else:
+            booked_count = 0
+        
         total_boards = len(df_map)
-        booked_count = df_map['رقم اللوحة_booked'].notna().sum()
         available_count = total_boards - booked_count
         
         # عرض المؤشرات
@@ -357,7 +361,12 @@ else:
         
         for _, row in df_map.iterrows():
             if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')):
-                is_booked = pd.notnull(row['رقم اللوحة_booked'])
+                # التحقق من الحجز
+                if 'رقم اللوحة_booked' in df_map.columns:
+                    is_booked = pd.notnull(row['رقم اللوحة_booked'])
+                else:
+                    is_booked = False
+                    
                 color = 'red' if is_booked else 'purple'
                 status_text = 'محجوز' if is_booked else 'متاح'
                 
@@ -379,14 +388,20 @@ else:
         
         st_folium(m, width="100%", height=600)
         
-        # عرض إحصائيات إضافية
+        # عرض إحصائيات حسب المحافظة
         st.divider()
         st.subheader("📊 إحصائيات حسب المحافظة")
         
+        # إضافة عمود الحالة
+        if 'رقم اللوحة_booked' in df_map.columns:
+            df_map['الحالة'] = df_map['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
+        else:
+            df_map['الحالة'] = 'متاح'
+        
         stats_by_city = df_map.groupby('المحافظة').agg({
             'رقم اللوحة': 'count',
-            'رقم اللوحة_booked': lambda x: x.notna().sum()
-        }).rename(columns={'رقم اللوحة': 'الإجمالي', 'رقم اللوحة_booked': 'المحجوز'})
+            'الحالة': lambda x: (x == 'محجوز').sum()
+        }).rename(columns={'رقم اللوحة': 'الإجمالي', 'الحالة': 'المحجوز'})
         stats_by_city['المتاح'] = stats_by_city['الإجمالي'] - stats_by_city['المحجوز']
         
         st.dataframe(stats_by_city, use_container_width=True)
