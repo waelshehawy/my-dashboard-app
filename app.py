@@ -125,6 +125,29 @@ def get_fees(draw_df, size, print_type, is_foreign):
 # ============================================================
 def export_word_full(customer_name, cart_data, start_date, end_date, grand_total, days, is_foreign, fee_print, fee_ads_monthly):
     """تصدير عرض السعر إلى Word مع تنسيق RTL وجداول ملونة"""
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    
+    def set_table_rtl(table):
+        tblPr = table._element.xpath('w:tblPr')[0]
+        bidi = OxmlElement('w:bidiVisual')
+        tblPr.append(bidi)
+    
+    def force_rtl_paragraph(p):
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        pPr = p._element.get_or_add_pPr()
+        bidi = OxmlElement('w:bidi')
+        bidi.set(qn('w:val'), '1')
+        pPr.append(bidi)
+        for run in p.runs:
+            rPr = run._element.get_or_add_rPr()
+            rtl = OxmlElement('w:rtl')
+            rtl.set(qn('w:val'), '1')
+            rPr.append(rtl)
+    
     doc = Document()
     
     # العنوان الرئيسي
@@ -135,10 +158,9 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
     p_date = doc.add_paragraph()
     p_date.add_run(f"التاريخ: {datetime.now().strftime('%d / %m / %Y')}")
     force_rtl_paragraph(p_date)
-    
     doc.add_paragraph()
     
-    # بيانات العميل
+    # اسم الزبون
     p_cust = doc.add_paragraph()
     cust_type = " (عميل أجنبي)" if is_foreign else ""
     p_cust.add_run(f"السادة شركة {customer_name} المحترمين{cust_type}").bold = True
@@ -146,7 +168,7 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
     
     # فترة العرض
     p_period = doc.add_paragraph()
-    p_period.add_run(f"عرض إعلانكم الوطني من تاريخ {start_date.strftime('%Y/%m/%d')} لغاية {end_date.strftime('%Y/%m/%d')}")
+    p_period.add_run(f"عرض إعلانكم الوطني من تاريخ {start_date} لغاية {end_date}")
     force_rtl_paragraph(p_period)
     
     # طريقة الحساب
@@ -158,10 +180,9 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
     p_fees = doc.add_paragraph()
     p_fees.add_run(f"أجور الطباعة الثابتة: {fee_print}$ | أجور العرض الشهرية: {fee_ads_monthly}$")
     force_rtl_paragraph(p_fees)
-    
     doc.add_paragraph()
     
-    # عرض بيانات كل محافظة وشبكة
+    # عرض البيانات
     for city, networks in cart_data.items():
         p_city = doc.add_paragraph()
         p_city.add_run(f"■ محافظة {city}").bold = True
@@ -171,17 +192,15 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
             if df.empty:
                 continue
             
-            # عنوان الشبكة
             p_net = doc.add_paragraph()
             p_net.add_run(f"الشبكة: {net} | القياس: {df['الحجم'].iloc[0]}").bold = True
             force_rtl_paragraph(p_net)
             
-            # إنشاء الجدول
+            # جدول
             table = doc.add_table(rows=1, cols=2)
             table.style = 'Table Grid'
             set_table_rtl(table)
             
-            # رأس الجدول
             hdr_cells = table.rows[0].cells
             hdr_cells[0].text = "اسم الموقع (العمود)"
             hdr_cells[1].text = "العدد"
@@ -189,7 +208,6 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
             for cell in hdr_cells:
                 for p in cell.paragraphs:
                     force_rtl_paragraph(p)
-                # تلوين رأس الجدول
                 tc_pr = cell._element.get_or_add_tcPr()
                 shd = OxmlElement('w:shd')
                 shd.set(qn('w:fill'), '660099')
@@ -197,7 +215,6 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
                 if cell.paragraphs[0].runs:
                     cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
             
-            # بيانات الجدول
             for _, row in df.iterrows():
                 row_cells = table.add_row().cells
                 row_cells[0].text = str(row['الموقع'])
@@ -206,32 +223,28 @@ def export_word_full(customer_name, cart_data, start_date, end_date, grand_total
                     for p in cell.paragraphs:
                         force_rtl_paragraph(p)
             
-            # حساب المجموع لهذه الشبكة
+            # حساب المجموع
             qty = int(df['العدد'].sum())
-            per_col, actual_ads = calculate_price_per_column(fee_print, fee_ads_monthly, days)
+            per_col = fee_print + (fee_ads_monthly / 28 * days)
             section_total = qty * per_col
             
             p_total = doc.add_paragraph()
-            p_total.add_run(f"إجمالي العدد: {qty} | سعر العمود: {per_col:.2f}$ | إجمالي القسم: {section_total:,.2f}$").bold = True
+            p_total.add_run(f"العدد: {qty} | لكل عمود: {per_col:.2f}$ | إجمالي القسم: {section_total:,.2f}$").bold = True
             force_rtl_paragraph(p_total)
-            
             doc.add_paragraph()
     
-    # المجموع النهائي
+    # الإجمالي النهائي
     doc.add_paragraph()
     p_grand = doc.add_paragraph()
     p_grand.add_run(f"الإجمالي النهائي للعرض بالكامل: {grand_total:,.2f} $").bold = True
     p_grand.runs[0].font.size = Pt(14)
-    p_grand.runs[0].font.color.rgb = RGBColor(102, 0, 153)
     force_rtl_paragraph(p_grand)
     
-    # ملاحظة الـ 48 ساعة
-    doc.add_paragraph()
+    # ملاحظة
     p_note = doc.add_paragraph()
     p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة فقط.").bold = True
     force_rtl_paragraph(p_note)
     
-    # حفظ الملف
     output = io.BytesIO()
     doc.save(output)
     output.seek(0)
