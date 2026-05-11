@@ -15,6 +15,18 @@ from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from datetime import date
+# للتحقق
+def safe_date(date_input):
+    """تحويل أي مدخل تاريخ إلى كائن date"""
+    if date_input is None:
+        return date.today()
+    if hasattr(date_input, 'date'):
+        return date_input.date()
+    if isinstance(date_input, (tuple, list)):
+        return date_input[0]
+    if isinstance(date_input, (datetime, date)):
+        return date_input if isinstance(date_input, date) else date_input.date()
+    return date_input
 # ============================================================
 # 1. اتصالات قاعدة البيانات
 # ============================================================
