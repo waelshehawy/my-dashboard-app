@@ -33,9 +33,6 @@ def _force_rtl_style(p):
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
-        rFonts = OxmlElement('w:rFonts')
-        rFonts.set(qn('w:cs'), 'Arial')
-        rPr.append(rFonts)
 # للتحقق
 def safe_date(date_input):
     """تحويل أي مدخل تاريخ إلى كائن date بشكل آمن"""
