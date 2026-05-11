@@ -848,22 +848,21 @@ else:
         except Exception as e:
             st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
     # ============================================================
-    # ============================================================
-    # صفحة تقرير المتاح حالياً (Word فقط)
+    # صفحة تقرير المتاح حالياً (Word فقط - تفصيلي)
     # ============================================================
     elif page == "📅 تقرير التوفر الشهري":
         st.title("📋 تقرير الأعمدة المتاحة حالياً")
-        st.info("يعرض هذا التقرير جميع الأعمدة المتاحة حالياً مع إجمالي لكل محافظة")
+        st.info("تقرير مفصل بجميع الأعمدة المتاحة حسب المحافظة")
         
         from docx import Document
-        from docx.shared import Pt
+        from docx.shared import Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
         import io
         from datetime import date
         
-        # دالة RTL للـ Word
+        # دالة RTL
         def force_rtl_word(paragraph):
             paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             pPr = paragraph._element.get_or_add_pPr()
@@ -889,36 +888,38 @@ else:
             title = doc.add_heading("تقرير الأعمدة المتاحة حالياً", 0)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
             
-            # تاريخ التقرير
+            # تاريخ
             p = doc.add_paragraph()
-            p.add_run(f"تاريخ التقرير: {date.today().strftime('%Y/%m/%d')}")
+            p.add_run(f"التاريخ: {date.today().strftime('%d/%m/%Y')}")
             force_rtl_word(p)
             doc.add_paragraph()
             
-            # ملخص
+            # إجمالي عام في البداية
             p = doc.add_paragraph()
-            p.add_run(f"إجمالي عدد الأعمدة المتاحة: {total_count} عمود").bold = True
+            p.add_run(f"إجمالي الأعمدة المتاحة: {total_count} عمود").bold = True
             force_rtl_word(p)
             doc.add_paragraph()
             
             # تفصيل حسب المحافظة
             for city in sorted(df['المحافظة'].unique()):
+                city_df = df[df['المحافظة'] == city]
+                city_count = len(city_df)
+                
+                # عنوان المحافظة
                 p = doc.add_paragraph()
                 p.add_run(f"■ محافظة {city}").bold = True
                 p.runs[0].font.size = Pt(14)
                 force_rtl_word(p)
                 
-                city_df = df[df['المحافظة'] == city]
-                
-                # جدول الشبكات
+                # جدول الأعمدة (عمودين: الرقم + الاسم)
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
                 set_table_rtl(table)
                 
                 # رأس الجدول
                 hdr = table.rows[0].cells
-                hdr[0].text = "الشبكة"
-                hdr[1].text = "عدد الأعمدة"
+                hdr[0].text = "رقم اللوحة"
+                hdr[1].text = "اسم العمود"
                 for cell in hdr:
                     for para in cell.paragraphs:
                         force_rtl_word(para)
@@ -930,12 +931,11 @@ else:
                     if cell.paragraphs[0].runs:
                         cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
                 
-                # بيانات الشبكات
-                network_counts = city_df.groupby('الشبكة').size()
-                for net, count in network_counts.items():
+                # بيانات الأعمدة
+                for _, row in city_df.iterrows():
                     cells = table.add_row().cells
-                    cells[0].text = str(net)
-                    cells[1].text = str(count)
+                    cells[0].text = str(row['رقم اللوحة'])
+                    cells[1].text = str(row['اسم العمود'])
                     for cell in cells:
                         for para in cell.paragraphs:
                             force_rtl_word(para)
@@ -944,14 +944,15 @@ else:
                 
                 # إجمالي المحافظة
                 p = doc.add_paragraph()
-                p.add_run(f"إجمالي محافظة {city}: {len(city_df)} عمود").bold = True
+                p.add_run(f"إجمالي محافظة {city}: {city_count} عمود").bold = True
                 force_rtl_word(p)
+                doc.add_paragraph()
                 doc.add_paragraph()
             
             # المجموع الكلي في النهاية
             doc.add_paragraph()
             p = doc.add_paragraph()
-            p.add_run("═" * 30).bold = True
+            p.add_run("═" * 40).bold = True
             force_rtl_word(p)
             
             p = doc.add_paragraph()
@@ -971,28 +972,27 @@ else:
                 current_year = date.today().year
                 
                 # جلب جميع الأعمدة
-                all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم" FROM "اعمدة انارة"', conn)
+                all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة" FROM "اعمدة انارة"', conn)
                 
-                # جلب الأعمدة المحجوزة حالياً
-                booked_boards = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)['رقم اللوحة'].tolist()
+                # جلب الأعمدة المحجوزة
+                booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)['رقم اللوحة'].tolist()
                 
-                # تصفية الأعمدة المتاحة
-                available_df = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
+                # المتاحة
+                available = all_columns[~all_columns['رقم اللوحة'].isin(booked)]
+                total = len(available)
                 
-                total_available = len(available_df)
+                st.success(f"✅ {total} عمود متاح")
                 
-                st.success(f"✅ تم إنشاء التقرير - {total_available} عمود متاح")
+                # عرض ملخص سريع
+                summary = available.groupby('المحافظة').size().reset_index(name='العدد')
+                st.dataframe(summary, use_container_width=True)
                 
-                # عرض ملخص سريع في الواجهة
-                st.subheader("📊 ملخص سريع")
-                city_summary = available_df.groupby('المحافظة').size().reset_index(name='عدد الأعمدة')
-                st.dataframe(city_summary, use_container_width=True)
-                
-                st.subheader(f"📋 قائمة الأعمدة المتاحة ({total_available} عمود)")
-                st.dataframe(available_df[['اسم العمود', 'المحافظة', 'الشبكة', 'الحجم']], use_container_width=True, height=400)
+                # عرض تفصيلي
+                st.subheader("📋 قائمة الأعمدة المتاحة")
+                st.dataframe(available[['رقم اللوحة', 'اسم العمود', 'المحافظة']], use_container_width=True, height=400)
                 
                 # تصدير Word
-                word_file = export_available_word(available_df, total_available)
+                word_file = export_available_word(available, total)
                 st.download_button(
                     "📝 تحميل التقرير (Word)",
                     word_file,
