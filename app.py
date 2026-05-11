@@ -540,9 +540,9 @@ else:
                     st.stop()
             
             # جلب الأسعار
-            fee_print, fee_ads_monthly = get_fees(draw_df, selected_size, print_type, is_foreign)
-            st.write(f"DEBUG: fee_print={fee_print}, fee_ads_monthly={fee_ads_monthly}")  # سطر تصحيح مؤقت
-            per_column_price = fee_print + (fee_ads_monthly / 28 * days_count)
+            fee_print, fee_ads = get_fees(draw_df, selected_size, print_type, is_foreign)
+            st.write(f"DEBUG: fee_print={fee_print}, fee_ads={fee_ads}")
+            per_column_price = fee_print + (fee_ads / 28 * days_count)
             
             st.success(f"""
             💰 **تفاصيل الأسعار:**
