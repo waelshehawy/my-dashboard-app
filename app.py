@@ -23,6 +23,8 @@ def set_table_rtl(table):
 
 def _force_rtl_style(paragraph):
     """تطبيق الكتابة من اليمين لليسار على أي فقرة"""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    
     paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     pPr = paragraph._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -34,9 +36,6 @@ def _force_rtl_style(paragraph):
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
-        
-    # إضافة هذه الأسطر لحل المشكلة بشكل نهائي
-    paragraph._element.get_or_add_pPr().get_or_add_jc().val = 'right'
     
     return paragraph
 # للتحقق
