@@ -501,7 +501,7 @@ else:
             # خيارات الحساب
             col_opt1, col_opt2 = st.columns(2)
             with col_opt1:
-                is_foreign = st.checkbox("🌍 عميل أجنبي (يبحث عن أجور عرض خاصة)")
+                is_foreign = st.checkbox("🌍 منتج أجنبي ")
             with col_opt2:
                 st.write("")
             
