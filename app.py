@@ -154,7 +154,7 @@ def export_word_old(customer_name, cart_data, start_p, end_p, grand_total):
     
     p_cust = doc.add_paragraph()
     if is_foreign:
-        p_cust.add_run(f"السادة شركة {customer_name} المحترمين (عميل أجنبي)").bold = True
+        p_cust.add_run(f"السادة شركة {customer_name} المحترمين ").bold = True
     else:
         p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     _force_rtl_style(p_cust)
