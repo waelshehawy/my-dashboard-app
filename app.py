@@ -597,7 +597,8 @@ else:
                     for net in networks:
                         net_data = available_columns[available_columns['الشبكة'] == net].copy()
                         net_data['fee_print'] = fee_print
-                        net_data['fee_ads'] = fee_ads_monthly
+                        net_data['fee_ads'] = fee_ads
+                        net_data['fee_ads_monthly'] = fee_ads
                         st.session_state.cart[selected_city][net] = net_data
                     
                     st.success(f"تمت الإضافة")
