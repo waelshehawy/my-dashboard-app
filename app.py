@@ -144,14 +144,6 @@ def get_fees(draw_df, size, print_type, is_foreign):
 # ============================================================
 # 4. دالة تصدير Word (كاملة بالتنسيقات)
 # ============================================================
-for city in cart_data:
-        for net in cart_data[city]:
-            df = cart_data[city][net]
-            if 'fee_ads' not in df.columns:
-                if 'fee_ads_monthly' in df.columns:
-                    df['fee_ads'] = df['fee_ads_monthly']
-                else:
-                    df['fee_ads'] = 0
 def export_word_old(customer_name, cart_data, start_p, end_p, grand_total):
     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
     PURPLE_COLOR = "660099" 
