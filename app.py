@@ -153,11 +153,17 @@ def export_word_old(customer_name, cart_data, start_p, end_p, grand_total):
     doc.add_paragraph()
     
     p_cust = doc.add_paragraph()
-    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+    if is_foreign:
+        p_cust.add_run(f"السادة شركة {customer_name} المحترمين (عميل أجنبي)").bold = True
+    else:
+        p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
     _force_rtl_style(p_cust)
 
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
+    if is_foreign:
+        p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني (أجنبي) من فترة ({start_p}) ولغاية ({end_p})")
+    else:
+        p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
 
     for city, networks in cart_data.items():
