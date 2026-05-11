@@ -502,20 +502,23 @@ else:
                 end_p = end_date.isoformat()
                 st.info(f"📅 عدد الأيام: {days_count} يوم")
             else:
-                # حساب بالفترات
+                # حساب بالفترات (نصف شهر = 15 يوم)
                 periods_df = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
+                period_names = periods_df['namee'].tolist()
+                
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
-                    start_p = st.selectbox("من فترة:", periods_df['namee'].tolist())
+                    start_p = st.selectbox("من فترة:", period_names)
                 with col_p2:
-                    end_p = st.selectbox("إلى فترة:", periods_df['namee'].tolist(), index=len(periods_df)-1)
+                    end_p = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1)
                 
-                # حساب عدد الأيام من الفترات
-                s_idx = int(periods_df[periods_df['namee'] == start_p]['no'].iloc[0])
-                e_idx = int(periods_df[periods_df['namee'] == end_p]['no'].iloc[0])
-                periods_count = e_idx - s_idx + 1
-                days_count = periods_count * 7  # كل فترة نصف شهر = 7 أيام تقريباً
-                st.info(f"📅 عدد الأيام التقريبي: {days_count} يوم")
+                # حساب عدد الفترات
+                start_idx = period_names.index(start_p)
+                end_idx = period_names.index(end_p)
+                periods_count = abs(end_idx - start_idx) + 1
+                days_count = periods_count * 15  # كل فترة = 15 يوم
+                
+                st.info(f"📅 عدد الفترات: {periods_count} | عدد الأيام: {days_count} يوم")
             
             # جلب الأسعار
             fee_print, fee_ads_monthly = get_fees(draw_df, selected_size, print_type, is_foreign)
