@@ -848,22 +848,20 @@ else:
         except Exception as e:
             st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
     # ============================================================
-    # صفحة تقرير التوفر الشهري (Word فقط - المتاح فقط)
+    # ============================================================
+    # صفحة تقرير المتاح حالياً (Word فقط)
     # ============================================================
     elif page == "📅 تقرير التوفر الشهري":
-        st.title("📅 تقرير التوفر الشهري - الأعمدة المتاحة فقط")
+        st.title("📋 تقرير الأعمدة المتاحة حالياً")
+        st.info("يعرض هذا التقرير جميع الأعمدة المتاحة حالياً مع إجمالي لكل محافظة")
         
-        from datetime import date
-        from dateutil.relativedelta import relativedelta
-        import io
         from docx import Document
         from docx.shared import Pt
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
-        
-        today = date.today()
-        current_year = today.year
+        import io
+        from datetime import date
         
         # دالة RTL للـ Word
         def force_rtl_word(paragraph):
@@ -878,12 +876,17 @@ else:
                 rtl.set(qn('w:val'), '1')
                 rPr.append(rtl)
         
+        def set_table_rtl(table):
+            tblPr = table._element.xpath('w:tblPr')[0]
+            bidi = OxmlElement('w:bidiVisual')
+            tblPr.append(bidi)
+        
         # دالة تصدير Word
-        def export_available_report(df, year, months):
+        def export_available_word(df, total_count):
             doc = Document()
             
             # عنوان
-            title = doc.add_heading(f"تقرير الأعمدة المتاحة - {year}", 0)
+            title = doc.add_heading("تقرير الأعمدة المتاحة حالياً", 0)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
             
             # تاريخ التقرير
@@ -892,151 +895,108 @@ else:
             force_rtl_word(p)
             doc.add_paragraph()
             
-            # ملخص شهري
-            summary = df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
-            
+            # ملخص
             p = doc.add_paragraph()
-            p.add_run("ملخص شهري:").bold = True
+            p.add_run(f"إجمالي عدد الأعمدة المتاحة: {total_count} عمود").bold = True
             force_rtl_word(p)
-            
-            # جدول الملخص
-            table = doc.add_table(rows=len(summary)+1, cols=2)
-            table.style = 'Table Grid'
-            
-            # رأس الجدول
-            hdr = table.rows[0].cells
-            hdr[0].text = "الشهر"
-            hdr[1].text = "عدد الأعمدة المتاحة"
-            for cell in hdr:
-                for para in cell.paragraphs:
-                    force_rtl_word(para)
-            
-            # بيانات الجدول
-            for i, (month, row) in enumerate(summary.iterrows()):
-                cells = table.rows[i+1].cells
-                cells[0].text = str(month)
-                cells[1].text = str(row.get('متاح', 0))
-                for cell in cells:
-                    for para in cell.paragraphs:
-                        force_rtl_word(para)
-            
             doc.add_paragraph()
             
-            # تفاصيل كل شهر
-            doc.add_page_break()
-            
-            for month in df['الشهر'].unique():
+            # تفصيل حسب المحافظة
+            for city in sorted(df['المحافظة'].unique()):
                 p = doc.add_paragraph()
-                p.add_run(f"══════════ شهر {month} ══════════").bold = True
+                p.add_run(f"■ محافظة {city}").bold = True
+                p.runs[0].font.size = Pt(14)
                 force_rtl_word(p)
                 
-                month_df = df[(df['الشهر'] == month) & (df['الحالة'] == 'متاح')]
+                city_df = df[df['المحافظة'] == city]
                 
-                if month_df.empty:
-                    p = doc.add_paragraph()
-                    p.add_run("لا توجد أعمدة متاحة في هذا الشهر")
-                    force_rtl_word(p)
-                else:
-                    # تفصيل حسب المحافظة
-                    for city in month_df['المحافظة'].unique():
-                        p = doc.add_paragraph()
-                        p.add_run(f"■ محافظة {city}").bold = True
-                        force_rtl_word(p)
-                        
-                        city_df = month_df[month_df['المحافظة'] == city]
-                        
-                        # جدول الشبكات
-                        table = doc.add_table(rows=1, cols=2)
-                        table.style = 'Table Grid'
-                        hdr = table.rows[0].cells
-                        hdr[0].text = "الشبكة"
-                        hdr[1].text = "عدد الأعمدة"
-                        for cell in hdr:
-                            for para in cell.paragraphs:
-                                force_rtl_word(para)
-                        
-                        network_counts = city_df.groupby('الشبكة').size()
-                        for net, count in network_counts.items():
-                            cells = table.add_row().cells
-                            cells[0].text = str(net)
-                            cells[1].text = str(count)
-                            for cell in cells:
-                                for para in cell.paragraphs:
-                                    force_rtl_word(para)
-                        
-                        doc.add_paragraph()
-                    
-                    # قائمة مفصلة بالأعمدة
-                    with st.expander(f"📋 قائمة الأعمدة - شهر {month}"):
-                        st.dataframe(month_df[['اسم العمود', 'المحافظة', 'الشبكة', 'الحجم']], use_container_width=True)
+                # جدول الشبكات
+                table = doc.add_table(rows=1, cols=2)
+                table.style = 'Table Grid'
+                set_table_rtl(table)
+                
+                # رأس الجدول
+                hdr = table.rows[0].cells
+                hdr[0].text = "الشبكة"
+                hdr[1].text = "عدد الأعمدة"
+                for cell in hdr:
+                    for para in cell.paragraphs:
+                        force_rtl_word(para)
+                    # تلوين الرأس
+                    tc_pr = cell._element.get_or_add_tcPr()
+                    shd = OxmlElement('w:shd')
+                    shd.set(qn('w:fill'), '660099')
+                    tc_pr.append(shd)
+                    if cell.paragraphs[0].runs:
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                
+                # بيانات الشبكات
+                network_counts = city_df.groupby('الشبكة').size()
+                for net, count in network_counts.items():
+                    cells = table.add_row().cells
+                    cells[0].text = str(net)
+                    cells[1].text = str(count)
+                    for cell in cells:
+                        for para in cell.paragraphs:
+                            force_rtl_word(para)
+                
+                doc.add_paragraph()
+                
+                # إجمالي المحافظة
+                p = doc.add_paragraph()
+                p.add_run(f"إجمالي محافظة {city}: {len(city_df)} عمود").bold = True
+                force_rtl_word(p)
+                doc.add_paragraph()
+            
+            # المجموع الكلي في النهاية
+            doc.add_paragraph()
+            p = doc.add_paragraph()
+            p.add_run("═" * 30).bold = True
+            force_rtl_word(p)
+            
+            p = doc.add_paragraph()
+            p.add_run(f"المجموع الكلي للأعمدة المتاحة: {total_count} عمود").bold = True
+            p.runs[0].font.size = Pt(14)
+            force_rtl_word(p)
             
             output = io.BytesIO()
             doc.save(output)
             output.seek(0)
             return output
         
-        report_year = st.selectbox("📅 سنة التقرير:", [current_year, current_year + 1], index=0)
-        
         if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary"):
             
             with st.spinner("جاري إنشاء التقرير..."):
                 
-                start_date = date(report_year, today.month, today.day) if report_year == current_year else date(report_year, 1, 1)
-                end_date = date(report_year, 12, 31)
+                current_year = date.today().year
                 
-                # قائمة الأشهر
-                months_list = []
-                current_month = start_date
-                while current_month <= end_date:
-                    months_list.append(current_month)
-                    current_month += relativedelta(months=1)
-                
-                # جلب البيانات
+                # جلب جميع الأعمدة
                 all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم" FROM "اعمدة انارة"', conn)
-                all_bookings = pd.read_sql(f'SELECT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {report_year}', conn)
                 
-                booked_boards = all_bookings['رقم اللوحة'].unique().tolist()
+                # جلب الأعمدة المحجوزة حالياً
+                booked_boards = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)['رقم اللوحة'].tolist()
                 
-                # إنشاء النتائج
-                results = []
-                progress_bar = st.progress(0)
+                # تصفية الأعمدة المتاحة
+                available_df = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
                 
-                for idx, month_date in enumerate(months_list):
-                    progress_bar.progress((idx + 1) / len(months_list))
-                    month_name = month_date.strftime('%Y-%m')
-                    
-                    for _, col in all_columns.iterrows():
-                        is_booked = col['رقم اللوحة'] in booked_boards
-                        results.append({
-                            'الشهر': month_name,
-                            'رقم اللوحة': col['رقم اللوحة'],
-                            'اسم العمود': col['اسم العمود'],
-                            'المحافظة': col['المحافظة'],
-                            'الشبكة': col['الشبكة'],
-                            'الحجم': col['الحجم'],
-                            'الحالة': 'محجوز' if is_booked else 'متاح'
-                        })
+                total_available = len(available_df)
                 
-                progress_bar.empty()
-                results_df = pd.DataFrame(results)
+                st.success(f"✅ تم إنشاء التقرير - {total_available} عمود متاح")
                 
-                st.success(f"✅ تم إنشاء التقرير")
+                # عرض ملخص سريع في الواجهة
+                st.subheader("📊 ملخص سريع")
+                city_summary = available_df.groupby('المحافظة').size().reset_index(name='عدد الأعمدة')
+                st.dataframe(city_summary, use_container_width=True)
                 
-                # عرض ملخص سريع
-                st.subheader("📊 ملخص شهري (الأعمدة المتاحة)")
-                summary = results_df[results_df['الحالة'] == 'متاح'].groupby('الشهر').size()
-                st.dataframe(summary, use_container_width=True)
-                
-                # رسم بياني
-                st.subheader("📈 عدد الأعمدة المتاحة شهرياً")
-                st.bar_chart(summary)
+                st.subheader(f"📋 قائمة الأعمدة المتاحة ({total_available} عمود)")
+                st.dataframe(available_df[['اسم العمود', 'المحافظة', 'الشبكة', 'الحجم']], use_container_width=True, height=400)
                 
                 # تصدير Word
-                word_file = export_available_report(results_df, report_year, months_list)
+                word_file = export_available_word(available_df, total_available)
                 st.download_button(
                     "📝 تحميل التقرير (Word)",
                     word_file,
-                    f"available_columns_report_{report_year}.docx",
+                    f"available_columns_{date.today().strftime('%Y%m%d')}.docx",
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True
                 )
