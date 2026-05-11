@@ -305,7 +305,7 @@ else:
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/000000/advertising.png", width=80)
         st.title("القائمة الرئيسية")
-        page = st.radio("", ["📊 Dashboard", "📄 عرض سعر", "📋 تقرير الجرد", "⚙️ الإعدادات"])
+        page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 عرض سعر", "📋 تقرير الجرد", "📅 تقرير التوفر الشهري", "⚙️ الإعدادات"])
         st.divider()
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
             st.session_state.auth = False
@@ -830,3 +830,152 @@ else:
         
         except Exception as e:
             st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
+    # ============================================================
+    # صفحة تقرير التوفر الشهري
+    # ============================================================
+    elif page == "📅 تقرير التوفر الشهري":
+        st.title("📅 تقرير توفر الأعمدة - شهري حتى نهاية العام")
+        st.info("يعرض هذا التقرير جميع الأعمدة المتاحة والمحجوزة لكل شهر من تاريخ اليوم حتى نهاية العام")
+        
+        try:
+            from datetime import date, timedelta
+            from dateutil.relativedelta import relativedelta
+            
+            # تاريخ اليوم
+            today = date.today()
+            current_year = today.year
+            
+            # اختيار سنة التقرير
+            report_year = st.selectbox("📅 سنة التقرير:", [current_year, current_year + 1], index=0)
+            
+            # إنشاء قائمة الأشهر من اليوم الحالي حتى نهاية السنة
+            start_date = date(report_year, today.month, today.day) if report_year == current_year else date(report_year, 1, 1)
+            end_date = date(report_year, 12, 31)
+            
+            # قائمة الأشهر
+            months_list = []
+            current_month = start_date
+            while current_month <= end_date:
+                months_list.append(current_month)
+                current_month += relativedelta(months=1)
+            
+            # جلب جميع الأعمدة
+            all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم" FROM "اعمدة انارة"', conn)
+            
+            # جلب جميع الحجوزات
+            all_bookings = pd.read_sql(f'SELECT "رقم اللوحة", "فترة الحجز", "تاريخ البداية", "تاريخ النهاية", "العام" FROM "حجوزات1" WHERE "العام" = {report_year}', conn)
+            
+            st.subheader(f"📊 تقرير التوفر من {start_date.strftime('%Y-%m-%d')} إلى {end_date.strftime('%Y-%m-%d')}")
+            
+            # إنشاء جدول النتائج
+            results = []
+            
+            for month_date in months_list:
+                month_name = month_date.strftime('%Y-%m')
+                month_start = month_date
+                month_end = month_date + relativedelta(months=1) - timedelta(days=1)
+                
+                for _, col in all_columns.iterrows():
+                    board_id = col['رقم اللوحة']
+                    
+                    # التحقق إذا كان العمود محجوزاً في هذا الشهر
+                    is_booked = False
+                    for _, book in all_bookings.iterrows():
+                        if book['رقم اللوحة'] != board_id:
+                            continue
+                        
+                        # إذا كان الحجز بالفترات النصف شهرية
+                        if book['فترة الحجز'] and pd.notnull(book['فترة الحجز']):
+                            # افتراض أن الفترة تشمل الشهر كاملاً (تبسيط)
+                            is_booked = True
+                            break
+                        
+                        # إذا كان الحجز بالتواريخ
+                        if book['تاريخ البداية'] and book['تاريخ النهاية']:
+                            book_start = book['تاريخ البداية']
+                            book_end = book['تاريخ النهاية']
+                            if not (book_end < month_start or book_start > month_end):
+                                is_booked = True
+                                break
+                    
+                    results.append({
+                        'الشهر': month_name,
+                        'رقم اللوحة': board_id,
+                        'اسم العمود': col['اسم العمود'],
+                        'المحافظة': col['المحافظة'],
+                        'الشبكة': col['الشبكة'],
+                        'الحجم': col['الحجم'],
+                        'الحالة': 'محجوز' if is_booked else 'متاح'
+                    })
+            
+            results_df = pd.DataFrame(results)
+            
+            # إحصائيات سريعة
+            st.subheader("📈 ملخص سريع")
+            summary = results_df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
+            summary['الإجمالي'] = summary['متاح'] + summary['محجوز']
+            summary['نسبة الإشغال'] = (summary['محجوز'] / summary['الإجمالي'] * 100).round(1).astype(str) + '%'
+            st.dataframe(summary, use_container_width=True)
+            
+            # عرض تفصيلي لكل شهر مع فلتر
+            st.subheader("📋 تفاصيل شهرية")
+            
+            selected_month = st.selectbox("اختر شهراً للتفاصيل:", results_df['الشهر'].unique())
+            
+            month_details = results_df[results_df['الشهر'] == selected_month]
+            
+            # إحصائيات الشهر
+            col1, col2, col3 = st.columns(3)
+            col1.metric("إجمالي الأعمدة", len(month_details))
+            col2.metric("محجوز", month_details[month_details['الحالة'] == 'محجوز'].shape[0])
+            col3.metric("متاح", month_details[month_details['الحالة'] == 'متاح'].shape[0])
+            
+            # تفصيل حسب الشبكة
+            st.write("### حسب الشبكة")
+            network_stats = month_details.groupby(['الشبكة', 'الحالة']).size().unstack(fill_value=0)
+            network_stats['الإجمالي'] = network_stats['متاح'] + network_stats['محجوز']
+            st.dataframe(network_stats, use_container_width=True)
+            
+            # تفصيل حسب المحافظة
+            st.write("### حسب المحافظة")
+            city_stats = month_details.groupby(['المحافظة', 'الحالة']).size().unstack(fill_value=0)
+            city_stats['الإجمالي'] = city_stats['متاح'] + city_stats['محجوز']
+            st.dataframe(city_stats, use_container_width=True)
+            
+            # عرض جدول مفصل
+            with st.expander("📋 عرض جميع الأعمدة التفصيلية"):
+                st.dataframe(month_details, use_container_width=True, height=400)
+            
+            # أزرار التصدير
+            st.divider()
+            col_exp1, col_exp2 = st.columns(2)
+            
+            with col_exp1:
+                # تصدير Excel
+                csv_data = results_df.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    "📊 تصدير التقرير الكامل إلى Excel",
+                    csv_data,
+                    f"monthly_availability_{report_year}.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+            
+            with col_exp2:
+                # تصدير Excel للشهر المحدد
+                month_csv = month_details.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    f"📊 تصدير شهر {selected_month} إلى Excel",
+                    month_csv,
+                    f"availability_{selected_month}.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+            
+            # رسم بياني بسيط
+            st.subheader("📊 رسم بياني للإشغال الشهري")
+            chart_data = results_df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
+            st.bar_chart(chart_data[['متاح', 'محجوز']])
+            
+        except Exception as e:
+            st.error(f"حدث خطأ في التقرير: {str(e)}")
