@@ -13,23 +13,33 @@ from sqlalchemy import create_engine, text
 from datetime import datetime
 
 # --- 1. قاعدة البيانات والاتصال ---
-# --- 1. قاعدة البيانات والاتصال (التعديل المطلوب لحل الخطأ) ---
+# --- 1. تصحيح إعدادات الاتصال (إزالة البروتوكول الزائد) ---
 DB_CONFIG = {
-    "host": "://supabase.com",
-    "port": "5432",  # تغيير المنفذ إلى 5432 للمزامنة المباشرة
+    # تم إزالة البروتوكول وأي زوائد، فقط اسم السيرفر
+    "host": "aws-1-eu-north-1.pooler.supabase.com", 
+    "port": "5432", 
     "database": "postgres",
     "user": "postgres.ncuofpvbaglwbdqnpman",
     "password": "WaelPreview2026",
-    "connect_timeout": 10 # إضافة مهلة اتصال لتجنب الـ Redacted Error
+    "sslmode": "require",
+    "connect_timeout": 10
 }
 
 def get_connection():
     try:
-        return psycopg2.connect(**DB_CONFIG, sslmode='require')
+        # استخدام إرسال البارامترات مباشرة لضمان عدم حدوث خطأ في الترجمة
+        return psycopg2.connect(**DB_CONFIG)
     except Exception as e:
-        # هذا سيطبع الخطأ الحقيقي في واجهة التطبيق لتعرف السبب (مثل خطأ في كلمة السر أو الشبكة)
-        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {str(e)}")
+        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {e}")
         return None
+
+# --- إضافة فحص داخل الكود الرئيسي لمنع الـ AttributeError ---
+if st.session_state.auth:
+    conn = get_connection()
+    if conn: # تأكد أن الاتصال ناجح قبل تنفيذ أي استعلام
+        # ... كود الصفحات ...
+    else:
+        st.warning("⚠️ لا يمكن الوصول للسيرفر حالياً، يرجى المحاولة لاحقاً.")
 
 # --- 2. دوال التنسيق المتقدمة (Word RTL) ---
 def set_rtl(obj):
