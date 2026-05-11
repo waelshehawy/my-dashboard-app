@@ -656,14 +656,14 @@ else:
                 
                 with col_btn3:
                     if st.button("📝 تصدير Word", use_container_width=True):
-                        from docx import Document
-                        from docx.shared import Pt
-                        doc = Document()
-                        p = doc.add_paragraph()
-                        p.add_run(f"عرض سعر لشركة {customer_name}")
-                        word_bytes = io.BytesIO()
-                        doc.save(word_bytes)
-                        st.download_button("تحميل", word_bytes.getvalue(), f"offer_{customer_name}.docx")
+                        word_file = export_word_old(
+                            customer_name, 
+                            st.session_state.cart, 
+                            start_p, 
+                            end_p, 
+                            grand_total
+                        )
+                        st.download_button("📥 تحميل العرض", word_file, f"Offer_{customer_name}.docx")
                 
                 with col_btn4:
                     if st.button("🔴 تفريغ", use_container_width=True):
