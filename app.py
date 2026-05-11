@@ -17,15 +17,15 @@ from datetime import datetime, timedelta
 from datetime import date
 # للتحقق
 def safe_date(date_input):
-    """تحويل أي مدخل تاريخ إلى كائن date"""
+    """تحويل أي مدخل تاريخ إلى كائن date بشكل آمن"""
     if date_input is None:
         return date.today()
+    if isinstance(date_input, (tuple, list)):
+        date_input = date_input[0]
     if hasattr(date_input, 'date'):
         return date_input.date()
-    if isinstance(date_input, (tuple, list)):
-        return date_input[0]
-    if isinstance(date_input, (datetime, date)):
-        return date_input if isinstance(date_input, date) else date_input.date()
+    if isinstance(date_input, datetime):
+        return date_input.date()
     return date_input
 # ============================================================
 # 1. اتصالات قاعدة البيانات
@@ -338,34 +338,31 @@ else:
         
         current_year = datetime.now().year
         
-        # جلب البيانات
-        booked_df = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
+        # جلب جميع اللوحات
         all_columns_df = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+        
+        # جلب الحجوزات - debug
+        booked_df = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
+        
+        st.write(f"DEBUG: عدد الحجوزات في قاعدة البيانات: {len(booked_df)}")
         
         # دمج البيانات
         df_map = pd.merge(all_columns_df, booked_df, on="رقم اللوحة", how="left", suffixes=('', '_booked'))
         
-        # التحقق من وجود العمود وتحديد المحجوزات
-        if 'رقم اللوحة_booked' in df_map.columns:
-            booked_count = df_map['رقم اللوحة_booked'].notna().sum()
-        else:
-            booked_count = 0
-        
+        # حساب المحجوزات
+        booked_count = df_map['رقم اللوحة_booked'].notna().sum() if 'رقم اللوحة_booked' in df_map.columns else 0
         total_boards = len(df_map)
         available_count = total_boards - booked_count
         
         # عرض المؤشرات
         col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("🏢 إجمالي اللوحات", total_boards)
-        with col2:
-            st.metric("🔴 محجوز حالياً", booked_count)
-        with col3:
-            st.metric("🟢 متاح حالياً", available_count)
+        col1.metric("🏢 إجمالي اللوحات", total_boards)
+        col2.metric("🔴 محجوز حالياً", booked_count)
+        col3.metric("🟢 متاح حالياً", available_count)
         
         st.divider()
         
-        # إنشاء الخريطة
+        # الخريطة
         st.subheader("🗺️ توزع اللوحات على الخريطة")
         
         m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
@@ -373,12 +370,7 @@ else:
         
         for _, row in df_map.iterrows():
             if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')):
-                # التحقق من الحجز
-                if 'رقم اللوحة_booked' in df_map.columns:
-                    is_booked = pd.notnull(row['رقم اللوحة_booked'])
-                else:
-                    is_booked = False
-                    
+                is_booked = pd.notnull(row.get('رقم اللوحة_booked', None))
                 color = 'red' if is_booked else 'purple'
                 status_text = 'محجوز' if is_booked else 'متاح'
                 
@@ -387,7 +379,6 @@ else:
                     <b>{row['اسم العمود']}</b><br>
                     المحافظة: {row['المحافظة']}<br>
                     الشبكة: {row['الشبكة']}<br>
-                    الحجم: {row['الحجم']}<br>
                     الحالة: {status_text}
                 </div>
                 """
@@ -395,27 +386,17 @@ else:
                 folium.Marker(
                     [row['Latitude'], row['Longitude']],
                     popup=folium.Popup(popup_html, max_width=250),
-                    icon=folium.Icon(color=color, icon="info-sign")
+                    icon=folium.Icon(color=color)
                 ).add_to(marker_cluster)
         
-        st_folium(m, width="100%", height=600)
+        st_folium(m, width="100%", height=500)
         
-        # عرض إحصائيات حسب المحافظة
+        # إحصائيات حسب المحافظة
         st.divider()
         st.subheader("📊 إحصائيات حسب المحافظة")
         
-        # إضافة عمود الحالة
-        if 'رقم اللوحة_booked' in df_map.columns:
-            df_map['الحالة'] = df_map['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
-        else:
-            df_map['الحالة'] = 'متاح'
-        
-        stats_by_city = df_map.groupby('المحافظة').agg({
-            'رقم اللوحة': 'count',
-            'الحالة': lambda x: (x == 'محجوز').sum()
-        }).rename(columns={'رقم اللوحة': 'الإجمالي', 'الحالة': 'المحجوز'})
-        stats_by_city['المتاح'] = stats_by_city['الإجمالي'] - stats_by_city['المحجوز']
-        
+        df_map['الحالة'] = df_map['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
+        stats_by_city = df_map.groupby('المحافظة')['الحالة'].value_counts().unstack(fill_value=0)
         st.dataframe(stats_by_city, use_container_width=True)
     
     # ============================================================
