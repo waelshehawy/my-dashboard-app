@@ -487,28 +487,32 @@ else:
             end_p = ""
             
             if calc_method == "حساب بالأيام":
-                from datetime import datetime as dt
+                import datetime as dt
                 
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
-                    start_date_str = st.text_input("📅 تاريخ بداية العرض (YYYY-MM-DD)", value=f"{year}-04-01")
+                    start_date_str = st.text_input("📅 تاريخ البداية (YYYY-MM-DD)", f"{year}-04-01")
                 with col_date2:
-                    end_date_str = st.text_input("📅 تاريخ نهاية العرض (YYYY-MM-DD)", value=f"{year}-04-10")
+                    end_date_str = st.text_input("📅 تاريخ النهاية (YYYY-MM-DD)", f"{year}-04-10")
                 
                 try:
-                    start_date = dt.strptime(start_date_str, '%Y-%m-%d').date()
-                    end_date = dt.strptime(end_date_str, '%Y-%m-%d').date()
+                    # التحقق من الصيغة
+                    dt.datetime.strptime(start_date_str, '%Y-%m-%d')
+                    dt.datetime.strptime(end_date_str, '%Y-%m-%d')
                     
-                    if start_date > end_date:
-                        st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
-                        st.stop()
+                    start_date = start_date_str
+                    end_date = end_date_str
                     
-                    days_count = (end_date - start_date).days + 1
-                    start_p = start_date.isoformat()
-                    end_p = end_date.isoformat()
+                    # حساب الأيام
+                    d1 = dt.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                    d2 = dt.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                    days_count = (d2 - d1).days + 1
+                    
+                    start_p = start_date_str
+                    end_p = end_date_str
                     st.info(f"📅 عدد الأيام: {days_count} يوم")
                 except ValueError:
-                    st.error("❌ صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD مثال: 2026-04-01")
+                    st.error("❌ صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD")
                     st.stop()
             
             # جلب الأسعار
