@@ -214,26 +214,37 @@ else:
             st.rerun()
     
     if conn:
-        # ==================== Dashboard ====================
+        # ==================== Dashboard (مصحح) ====================
         if page == "📊 Dashboard":
             st.title("🗺️ الخريطة وحالة الإشغال")
             yr = datetime.now().year
             booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr}', conn)
             all_col = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-            df = pd.merge(all_col, booked, on="رقم اللوحة", how="left")
-            df['حالة'] = df['رقم اللوحة_y'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
+            
+            # دمج مع تحديد الأعمدة بوضوح
+            df = pd.merge(all_col, booked, on="رقم اللوحة", how="left", suffixes=('', '_booked'))
+            
+            # التحقق من وجود العمود الناتج وتحديد الحالة
+            if 'رقم اللوحة_booked' in df.columns:
+                df['الحالة'] = df['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
+            else:
+                df['الحالة'] = 'متاح'
             
             c1, c2, c3 = st.columns(3)
             c1.metric("إجمالي اللوحات", len(df))
-            c2.metric("محجوز", df['حالة'].eq('محجوز').sum())
-            c3.metric("متاح", df['حالة'].eq('متاح').sum())
+            c2.metric("محجوز", (df['الحالة'] == 'محجوز').sum())
+            c3.metric("متاح", (df['الحالة'] == 'متاح').sum())
             
             m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
             cluster = MarkerCluster().add_to(m)
             for _, r in df.iterrows():
                 if pd.notnull(r.get('Latitude')):
-                    color = 'red' if r['حالة'] == 'محجوز' else 'green'
-                    folium.Marker([r['Latitude'], r['Longitude']], popup=r['اسم العمود'], icon=folium.Icon(color=color)).add_to(cluster)
+                    color = 'red' if r['الحالة'] == 'محجوز' else 'green'
+                    folium.Marker(
+                        [r['Latitude'], r['Longitude']], 
+                        popup=r['اسم العمود'], 
+                        icon=folium.Icon(color=color)
+                    ).add_to(cluster)
             st_folium(m, width="100%", height=500)
         
         # ==================== عرض سعر ====================
@@ -243,10 +254,8 @@ else:
                 with st.expander("إدارة العروض المنتهية"):
                     manage_expired_offers(conn)
                 
-                # تحميل البيانات
                 draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
                 
-                # بيانات العميل
                 cust = st.text_input("اسم الزبون")
                 
                 col1, col2 = st.columns(2)
@@ -259,9 +268,8 @@ else:
                 with col3:
                     is_foreign = st.checkbox("عميل أجنبي")
                 with col4:
-                    st.write("")  # فراغ
+                    st.write("")
                 
-                # التواريخ
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
                     start_date = st.date_input("تاريخ البداية", datetime(2026, 4, 1))
@@ -275,7 +283,6 @@ else:
                 days = (end_date - start_date).days + 1
                 st.info(f"📅 عدد الأيام: {days} (الشهر = 28 يوم)")
                 
-                # جلب الأجور
                 fee_print, fee_ads_monthly = get_fees(draw_df, sz, pt, is_foreign)
                 daily_ads = fee_ads_monthly / 28
                 actual_ads = daily_ads * days
@@ -285,23 +292,12 @@ else:
                 st.info(f"📊 حسب الأيام {days}: أجر العرض الفعلي = {daily_ads:.2f} × {days} = {actual_ads:.2f}$ لكل عمود")
                 st.info(f"💵 إجمالي لكل عمود = {per_column_total:.2f}$")
                 
-                # اختيار المحافظة والشبكات
                 cities = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
                 city = st.selectbox("المحافظة", cities)
                 
-                # جلب المواقع المتاحة
                 all_columns = pd.read_sql(f'SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم" FROM "اعمدة انارة" WHERE "المحافظة"=\'{city}\' AND "الحجم"=\'{sz}\'', conn)
                 
-                # جلب المحجوزات في هذه الفترة
                 yr = 2026
-                booked_query = f'''
-                    SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-                    WHERE "العام"={yr} AND (
-                        ("تاريخ البداية" <= '{end_date}' AND "تاريخ النهاية" >= '{start_date}')
-                        OR ("فترة الحجز" IS NOT NULL)
-                    )
-                '''
-                # تبسيط: نأخذ المحجوزات حسب العام فقط حالياً
                 booked_simple = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr}', conn)['رقم اللوحة'].tolist()
                 
                 available = all_columns[~all_columns['رقم اللوحة'].isin(booked_simple)]
@@ -318,7 +314,6 @@ else:
                             st.session_state.cart[city][net] = df_net
                         st.rerun()
                 
-                # عرض السلة
                 if st.session_state.cart:
                     st.divider()
                     st.subheader("🛒 سلة العروض")
