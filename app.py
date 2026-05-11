@@ -411,23 +411,45 @@ else:
                 manage_expired_offers(conn)
             
             # استرجاع عرض محفوظ
+                        # استرجاع عرض محفوظ
             st.subheader("📂 استرجاع عرض محفوظ")
             saved_offers = pd.read_sql('SELECT id, client_name, offer_date FROM "offers_history" WHERE status = \'Pending\' ORDER BY id DESC', conn)
             
             if not saved_offers.empty:
-                offer_options = {f"{row['client_name']} ({row['offer_date'][:10]})": row['id'] for _, row in saved_offers.iterrows()}
+                offer_options = {f"{row['client_name']} ({row['offer_date'][:10] if row['offer_date'] else 'بدون تاريخ'})": row['id'] for _, row in saved_offers.iterrows()}
                 selected_offer = st.selectbox("اختر عرضاً محفوظاً:", ["---"] + list(offer_options.keys()))
                 
                 if selected_offer != "---" and st.button("🔄 تحميل للسلة"):
-                    offer_id = offer_options[selected_offer]
-                    result = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id = {offer_id}', conn)
-                    
-                    if not result.empty:
-                        data = json.loads(result['cart_json'].iloc[0])
-                        st.session_state.cart = data.get("data", data)
-                        st.session_state.temp_cust = result['client_name'].iloc[0]
-                        st.success("تم تحميل العرض بنجاح")
-                        st.rerun()
+                    try:
+                        offer_id = offer_options[selected_offer]
+                        result = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id = {offer_id}', conn)
+                        
+                        if not result.empty:
+                            # تحميل البيانات
+                            data = json.loads(result['cart_json'].iloc[0])
+                            
+                            # معالجة متوافقة مع هيكل البيانات
+                            if "data" in data:
+                                cart_data = data["data"]
+                            else:
+                                cart_data = data
+                            
+                            # تنظيف السلة الحالية وتعيين الجديدة
+                            st.session_state.cart = cart_data
+                            st.session_state.temp_cust = result['client_name'].iloc[0]
+                            
+                            # تخزين معلومات إضافية إذا وجدت
+                            if "days" in data:
+                                st.session_state.loaded_days = data["days"]
+                            if "start_date" in data:
+                                st.session_state.loaded_start_date = data["start_date"]
+                            if "end_date" in data:
+                                st.session_state.loaded_end_date = data["end_date"]
+                            
+                            st.success("تم تحميل العرض بنجاح")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ في تحميل العرض: {str(e)}")
             
             st.divider()
             
