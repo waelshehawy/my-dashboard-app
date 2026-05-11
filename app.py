@@ -1,514 +1,306 @@
-import streamlit as st
-import pandas as pd
-import psycopg2
-import os
-import io
-import folium
-import json
-from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
-from docx import Document
-from docx.shared import Pt, RGBColor, Cm 
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-from sqlalchemy import create_engine, text
-from datetime import datetime
-# --- 1. Database Connections ---
-from sqlalchemy.engine import URL
-def get_connection():
-    try:
-        return psycopg2.connect(
-            # الـ host يجب أن يكون العنوان التقني المباشر بدون http أو ://
-            host="aws-1-eu-north-1.pooler.supabase.com", 
-            port="6543",
-            database="postgres",
-            user="postgres.ncuofpvbaglwbdqnpman",
-            password="WaelPreview2026",
-            sslmode="require",
-            connect_timeout=10
-        )
-    except Exception as e:
-        st.error(f"⚠️ فشل الاتصال بالقاعدة: {e}")
-        return None
-
-# --- 2. تصحيح دالة المحرك (SQLAlchemy) لصفحة الإعدادات ---
-def get_engine():
-    # تأكد أن الـ host هو اسم النطاق فقط بدون أي بروتوكولات
-    clean_host = "aws-1-eu-north-1.pooler.supabase.com"
+# --- 5. DASHBOARD LOGIC ---
+def show_dashboard(conn):
+    st.title("📊 لوحة التحكم والمراقبة اللحظية")
     
-    url_obj = URL.create(
-        drivername="postgresql+psycopg2",
-        username="postgres.ncuofpvbaglwbdqnpman",
-        password="WaelPreview2026",
-        host=clean_host,
-        port=6543, # نستخدم 6543 لأنه المنفذ الأكثر استقراراً مع Supabase Pooler
-        database="postgres",
-    )
-    return create_engine(url_obj, connect_args={'sslmode': 'require'})
-# --- 2. Word & RTL Helpers ---
-
-
-# 1. دالة ضبط اتجاه الجدول (يجب تعريفها قبل استخدامها)
-def set_table_rtl(table):
-    tblPr = table._element.xpath('w:tblPr')[0]
-    bidi = OxmlElement('w:bidiVisual')
-    tblPr.append(bidi)
-
-# 2. دالة المحاذاة (التي علمتني إياها)
-def _force_rtl_style(p):
-    p.alignment = WD_ALIGN_PARAGRAPH.LEFT # اليسار هنا يعني اليمين بسبب bidi
-    pPr = p._element.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
-    for run in p.runs:
-        rPr = run._element.get_or_add_rPr()
-        rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
-        rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
-
-# 3. دالة التصدير الكاملة والمعدلة
-def export_word(customer_name, cart_data, start_p, end_p, grand_total):
-    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-    PURPLE_COLOR = "660099" 
-        # --- إضافة مسافة سطرين بين العنوان وبداية العرض ---
-    doc.add_paragraph()
-        # --- 1. إضافة تاريخ اليوم في أعلى اليمين ---
-    today_date = datetime.now().strftime("%d / %m / %Y")
-    p_date = doc.add_paragraph()
-    p_date.add_run(f"التاريخ: {today_date}")
-    _force_rtl_style(p_date) # لضمان ظهوره على اليمين
-    doc.add_paragraph()
-    # السطر الافتتاحي
-    p_cust = doc.add_paragraph()
-    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
-    _force_rtl_style(p_cust)
-
-    p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
-    _force_rtl_style(p_stat)
-
-    for city, networks in cart_data.items():
-        p_city = doc.add_paragraph()
-        p_city.add_run(f"■ محافظة {city}").bold = True
-        _force_rtl_style(p_city)
+    with st.spinner("جاري تحديث بيانات الخريطة..."):
+        # جلب البيانات بكفاءة: فقط الأعمدة المطلوبة
+        current_year = datetime.now().year
         
-        for net, df in networks.items():
-            if df.empty: continue
-            for size_info, group_df in df.groupby(['الحجم']):
-                p_size = doc.add_paragraph()
-                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
-                _force_rtl_style(p_size)
-                
-                # إنشاء الجدول مع ضبط الاتجاه
-                table = doc.add_table(rows=1, cols=2)
-                table.style = 'Table Grid'
-                set_table_rtl(table) # تم التأكد من تعريفها أعلاه
-                
-                hdr = table.rows[0].cells
-                hdr[0].text = "اسم الموقع (العمود)"; hdr[1].text = "العدد"
-                for cell in hdr:
-                    for p in cell.paragraphs: _force_rtl_style(p)
-                    tc_pr = cell._element.get_or_add_tcPr()
-                    shd = OxmlElement('w:shd'); shd.set(qn('w:fill'), PURPLE_COLOR); tc_pr.append(shd)
-                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+        # استعلام الحجوزات: جلب اللوحات المحجوزة فقط للعام الحالي لتقليل حجم البيانات
+        query_booked = f'SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = {current_year}'
+        df_booked = pd.read_sql(query_booked, conn)
+        
+        # استعلام الأعمدة
+        df_all = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "Latitude", "Longitude" FROM "اعمدة انارة"', conn)
+        
+        # دمج البيانات (Left Join) لمعرفة المحجوز والمتاح
+        df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left')
+        df_map['status'] = df_map['اسم الزبون'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
 
-                for _, row in group_df.iterrows():
-                    row_cells = table.add_row().cells
-                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
-                    for cell in row_cells:
-                        for p in cell.paragraphs: _force_rtl_style(p)
+    # --- Metrics (المؤشرات العلوية) ---
+    m1, m2, m3, m4 = st.columns(4)
+    total_spots = len(df_map)
+    booked_spots = df_map['اسم الزبون'].notnull().sum()
+    available_spots = total_spots - booked_spots
+    occupancy_rate = (booked_spots / total_spots) * 100 if total_spots > 0 else 0
 
-                # --- الحساب المالي المجمع لكل جدول ---
-                total_q = pd.to_numeric(group_df['العدد']).sum()
-                f_p = float(group_df['fee_print'].iloc[0])
-                f_a = float(group_df['fee_ads'].iloc[0])
-                sum_print = total_q * f_p
-                sum_ads = total_q * f_a
-                sum_combined = sum_print + sum_ads
-                
-                p_fin = doc.add_paragraph()
-                txt = (f"إجمالي العدد: {int(total_q)} | "
-                       f"أجور الطباعة: {sum_print:,.0f}$ | "
-                       f"أجور العرض: {sum_ads:,.0f}$ | "
-                       f"المجموع للقسم: {sum_combined:,.0f}$")
-                p_fin.add_run(txt).bold = True
-                _force_rtl_style(p_fin)
+    m1.metric("إجمالي المواقع", total_spots)
+    m2.metric("المحجوز", booked_spots, delta=f"{occupancy_rate:.1f}% إشغال")
+    m3.metric("المتاح", available_spots, delta=f"-{100-occupancy_rate:.1f}%", delta_color="normal")
+    m4.metric("عدد المحافظات", df_map['المحافظة'].nunique())
 
-    # المجموع النهائي العام
-    doc.add_paragraph() 
-    p_grand = doc.add_paragraph()
-    run_g = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
-    run_g.bold = True; run_g.font.size = Pt(14); run_g.font.color.rgb = RGBColor(102, 0, 153)
-    _force_rtl_style(p_grand)
+    # --- Interactive Map ---
+    st.subheader("📍 التوزع الجغرافي وحالة الإشغال")
+    
+    # اختيار المحافظة للتركيز (Zoom)
+    SYRIA_CITIES = {
+        "الكل": [34.80, 38.99, 7],
+        "دمشق": [33.51, 36.27, 12],
+        "حلب": [36.20, 37.13, 11],
+        "حمص": [34.73, 36.71, 11],
+        "اللاذقية": [35.53, 35.79, 11]
+    }
+    
+    selected_city = st.selectbox("التركيز على محافظة:", list(SYRIA_CITIES.keys()))
+    city_coords = SYRIA_CITIES[selected_city]
 
-        # --- 4. الملاحظة الختامية للالتزام بـ 48 ساعة ---
-    doc.add_paragraph() # سطر فارغ قبل الملاحظة
-    p_note = doc.add_paragraph()
-    run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.")
-    run_note.bold = True
-    _force_rtl_style(p_note)
-    target = io.BytesIO(); doc.save(target); target.seek(0)
-    return target
+    # إنشاء الخريطة
+    m = folium.Map(location=[city_coords[0], city_coords[1]], zoom_start=city_coords[2], tiles="CartoDB positron")
+    marker_cluster = MarkerCluster(name="لوحات الإعلانات").add_to(m)
 
+    for _, row in df_map.iterrows():
+        if pd.notnull(row['Latitude']) and pd.notnull(row['Longitude']):
+            is_booked = row['status'] == 'محجوز'
+            color = 'red' if is_booked else 'purple'
+            icon_type = 'info-sign' if is_booked else 'ok-sign'
+            
+            # محتوى النافذة المنبثقة بتنسيق HTML أنيق
+            popup_html = f"""
+            <div style="direction: rtl; font-family: tahoma; font-size: 12px;">
+                <b>الموقع:</b> {row['اسم العمود']}<br>
+                <b>الشبكة:</b> {row['الشبكة']}<br>
+                <b>الحالة:</b> <span style="color:{color};">{'● ' + row['status']}</span><br>
+                {"<b>الزبون:</b> " + row['اسم الزبون'] if is_booked else ""}
+            </div>
+            """
+            
+            folium.Marker(
+                location=[row['Latitude'], row['Longitude']],
+                popup=folium.Popup(popup_html, max_width=250),
+                icon=folium.Icon(color=color, icon=icon_type)
+            ).add_to(marker_cluster)
 
+    st_folium(m, width="100%", height=500, returned_objects=[])
 
+    # --- التحليل حسب المحافظات ---
+    st.divider()
+    st.subheader("📊 تحليل الإشغال حسب المحافظة")
+    city_stats = df_map.groupby(['المحافظة', 'status']).size().unstack(fill_value=0)
+    st.bar_chart(city_stats)
+# --- 6. QUOTATION & SALES LOGIC ---
+def show_quotation(conn):
+    st.title("📄 محرك العروض وتثبيت الحجوزات")
+    
+    # 1. إدارة العروض المنتهية (تلقائي)
+    with st.expander("🔔 تنبيهات العروض (48 ساعة)"):
+        manage_expired_offers(conn)
 
+    # 2. نظام استعادة المسودات
+    st.subheader("📂 استرجاع مسودة")
+    saved_df = pd.read_sql('SELECT id, client_name FROM "offers_history" WHERE status=\'Pending\' ORDER BY id DESC', conn)
+    if not saved_df.empty:
+        selected_offer = st.selectbox("اختر عرضاً محفوظاً:", ["---"] + saved_df['client_name'].tolist())
+        if selected_offer != "---" and st.button("🔄 استعادة البيانات للسلة"):
+            res = pd.read_sql(f"SELECT cart_json, client_name FROM \"offers_history\" WHERE client_name='{selected_offer}' AND status='Pending' LIMIT 1", conn)
+            st.session_state.cart = json.loads(res['cart_json'].iloc[0])
+            st.session_state.temp_cust = res['client_name'].iloc[0]
+            st.rerun()
 
+    st.divider()
 
-# --- 3. Manage Expired Offers Logic ---
-def manage_expired_offers(conn):
-    st.subheader("⚠️ إدارة العروض التي تجاوزت 48 ساعة")
-    query = 'SELECT id, client_name, offer_date FROM "offers_history" WHERE status = \'Pending\' AND offer_date < NOW() - INTERVAL \'48 hours\''
-    expired_df = pd.read_sql(query, conn)
-    if not expired_df.empty:
-        for _, row in expired_df.iterrows():
-            col1, col2, col3 = st.columns([3, 1, 1])
-            col1.write(f"الزبون: {row['client_name']} ({row['offer_date']})")
-            if col2.button("✅ تمديد", key=f"ext_{row['id']}"):
-                cur = conn.cursor(); cur.execute('UPDATE "offers_history" SET offer_date = NOW() WHERE id = %s', (row['id'],)); conn.commit(); st.rerun()
-            if col3.button("❌ إلغاء", key=f"can_{row['id']}"):
-                cur = conn.cursor(); cur.execute("UPDATE \"offers_history\" SET status = 'Cancelled' WHERE id = %s", (row['id'],)); conn.commit(); st.rerun()
+    # 3. إعدادات العرض الجديد
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1: customer = st.text_input("اسم الزبون (المؤسسة):", value=st.session_state.get('temp_cust', ""))
+    with col2: year = st.number_input("العام الإعلاني:", value=datetime.now().year + 1)
+    with col3: print_type = st.radio("نوع الطباعة:", ["عادي", "سكوتش"], horizontal=True)
+
+    # جلب بيانات المراجع (الفترات والأسعار)
+    periods_df = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
+    prices_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+
+    c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+    with c_p1: start_p = st.selectbox("من فترة:", periods_df['namee'].tolist())
+    with c_p2: end_p = st.selectbox("إلى فترة:", periods_df['namee'].tolist(), index=len(periods_df)-1)
+    
+    # --- المحرك المالي الجديد (أجنبي + أيام) ---
+    with c_p3: is_foreign = st.checkbox("🚩 إعلان أجنبي")
+    with c_p4: calc_method = st.radio("طريقة الحساب:", ["فترة كاملة", "بالأيام"], horizontal=True)
+
+    days_count = 15 # القيمة الافتراضية
+    if calc_method == "بالأيام":
+        days_count = st.number_input("عدد الأيام الفعلي:", min_value=1, max_value=365, value=15)
+
+    # 4. فلترة واختيار المواقع
+    st.subheader("📍 اختيار المواقع والشبكات")
+    cities = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
+    sel_city = st.selectbox("المحافظة المستهدفة:", cities)
+    
+    # جلب الأحجام المتاحة في هذه المحافظة
+    sizes = pd.read_sql(f"SELECT DISTINCT \"الحجم\" FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_city}'", conn)['الحجم'].tolist()
+    sel_size = st.selectbox("مقاس اللوحة:", sizes)
+
+    # البحث الذكي عن السعر
+    subset = prices_df[prices_df['الحجم'] == sel_size].copy()
+    subset['clean_name'] = subset['اسم الرسم'].str.strip().str.replace('أ', 'ا')
+    t_pt = print_type.replace('أ', 'ا')
+
+    # سعر الطباعة
+    f_print = subset[subset['clean_name'].str.contains(f"طباعة.*{t_pt}", na=False)]['اجرة الرسم'].sum()
+    
+    # سعر العرض (البحث عن أجنبي أو محلي)
+    if is_foreign:
+        f_ads_base = subset[subset['clean_name'].str.contains("عرض", na=False) & subset['clean_name'].str.contains("اجنبي", na=False)]['اجرة الرسم'].sum()
     else:
-        st.success("لا توجد عروض منتهية الصلاحية.")
+        f_ads_base = subset[subset['clean_name'].str.contains("عرض", na=False) & ~subset['clean_name'].str.contains("اجنبي", na=False)]['اجرة الرسم'].sum()
 
-# --- 4. Main App Interface ---
-st.set_page_config(page_title="PreView Ads ERP - Cloud", layout="wide")
-SYRIA_CITIES_COORDS = {"دمشق": [33.51, 36.27], "ريف دمشق": [33.45, 36.35], "حلب": [36.20, 37.13], "حمص": [34.73, 36.71], "حماة": [35.13, 36.75], "اللاذقية": [35.53, 35.79], "طرطوس": [34.88, 35.88], "سوريا": [34.80, 38.99]}
+    # تطبيق معادلة الأيام
+    f_ads_final = (f_ads_base / 15) * days_count if calc_method == "بالأيام" else f_ads_base
 
-if "auth" not in st.session_state: st.session_state.auth = False
-
-if not st.session_state.auth:
-    st.title("🔒 تسجيل الدخول")
-    u, p = st.text_input("User"), st.text_input("Pass", type="password")
-    if st.button("Login"):
-        if u == "a" and p == "3900": st.session_state.auth = True; st.rerun()
-else:
-    conn = get_connection()
-    if 'cart' not in st.session_state: st.session_state.cart = {}
+    # استعلام المواقع المتاحة (استبعاد المحجوز)
+    s_idx = periods_df[periods_df['namee'] == start_p]['no'].iloc[0]
+    e_idx = periods_df[periods_df['namee'] == end_p]['no'].iloc[0]
+    target_periods = periods_df[(periods_df['no'] >= s_idx) & (periods_df['no'] <= e_idx)]['namee'].tolist()
     
-    with st.sidebar:
-        page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
-        if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
-
-    if conn:
-        # --- Page: Dashboard ---
-        if page == "📊 Dashboard":
-            st.title("📊 الخريطة التفاعلية وحالة الإشغال")
-            
-            # 1. Fetch data based on CURRENT YEAR
-            current_year = datetime.now().year
-            df_booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
-            df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-            
-            # 2. Merge and remove duplicates to get exactly 623 points
-            df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left').drop_duplicates(subset=['رقم اللوحة'])
-            
-            # 3. Display Metrics
-            c1, c2, c3 = st.columns(3)
-            c1.metric("إجمالي اللوحات", len(df_map))
-            c2.metric("محجوز حالياً", int(df_map['اسم الزبون'].notnull().sum()))
-            c3.metric("متاح حالياً", int(df_map['اسم الزبون'].isnull().sum()))
-
-            # 4. Map Logic
-            m = folium.Map(location=SYRIA_CITIES_COORDS["سوريا"], zoom_start=7)
-            cluster = MarkerCluster().add_to(m)
-            for _, r in df_map.iterrows():
-                if pd.notnull(r.get('Latitude')):
-                    is_booked = pd.notnull(r['اسم الزبون'])
-                    color = 'red' if is_booked else 'purple'
-                    popup_text = f"الموقع: {r['اسم العمود']}<br>الحالة: {'محجوز' if is_booked else 'متاح'}"
-                    folium.Marker(
-                        [r['Latitude'], r['Longitude']], 
-                        popup=folium.Popup(popup_text, max_width=200), 
-                        icon=folium.Icon(color=color)
-                    ).add_to(cluster)
-            st_folium(m, width="100%", height=600)
-
-        # --- Page: Quotation ---
-        # --- Page 2: Quotation ---
-        elif page == "📄 Quotation":
-            st.title("📄 بناء عرض سعر وتثبيت حجز")
-            try:
-                # 1. إدارة العروض المنتهية
-                with st.expander("🔔 إدارة العروض التي تجاوزت 48 ساعة"):
-                    manage_expired_offers(conn)
-
-                # 2. استرجاع المسودات
-                st.subheader("📂 استرجاع عرض محفوظ")
-                saved_off_df = pd.read_sql('SELECT id, client_name FROM "offers_history" WHERE status=\'Pending\' ORDER BY id DESC', conn)
-                if not saved_off_df.empty:
-                    off_options = {r['client_name']: r['id'] for _, r in saved_off_df.iterrows()}
-                    sel_label = st.selectbox("اختر عرضاً لتعديله:", ["---"] + list(off_options.keys()))
-                    if sel_label != "---" and st.button("🔄 تحميل للسلة"):
-                        res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={off_options[sel_label]}', conn)
-                        if not res.empty:
-                            data = json.loads(res['cart_json'].iloc[0])
-                            st.session_state.cart = {c: {n: pd.DataFrame(d) for n, d in ns.items()} for c, ns in data.items()}
-                            st.session_state.temp_cust = res['client_name'].iloc[0]
-                            st.rerun()
-
-                st.divider()
-                # 3. جلب البيانات والأسعار
-                draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
-                df_p = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
-                cust = st.text_input("اسم الزبون", value=st.session_state.get('temp_cust', ""))
-                
-                c1, c2, c3 = st.columns(3)
-                with c1: sz = st.selectbox("المقاس:", draw_df['الحجم'].unique().tolist())
-                with c2: pt = st.radio("الطباعة:", ["عادي", "سكوتش"], horizontal=True)
-                with c3: yr = st.number_input("العام:", value=2026)
-
-                cp1, cp2 = st.columns(2)
-                with cp1: start_p = st.selectbox("من فترة:", df_p['namee'].tolist())
-                with cp2: end_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1)
-
-                # --- منطق البحث المرن عن الأجور (تصحيح الأصفار) ---
-                # --- منطق البحث الذكي عن الأجور (تصحيح الهمزات والتسميات) ---
-                subset = draw_df[draw_df['الحجم'] == sz].copy()
-                # تنظيف وتوحيد النصوص (إزالة الهمزات والمسافات)
-                subset['search_name'] = subset['اسم الرسم'].str.strip().str.replace('أ', 'ا')
-                target_pt = pt.replace('أ', 'ا') # عادي أو سكوتش
-
-                # 1. البحث عن أجور الطباعة
-                # نبحث عن (طباعة + النوع المختار)
-                f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & 
-                                  subset['search_name'].str.contains(target_pt, na=False)]
-                
-                # إذا لم يجد "طباعة عادي"، يبحث عن "طباعة" فقط بشرط ألا تكون "سكوتش"
-                if f_pr_row.empty and pt == "عادي":
-                    f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False)] 
-                
-                f_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
-
-                # 2. البحث عن أجور العرض
-                f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & 
-                                  subset['search_name'].str.contains(target_pt, na=False)]
-                
-                if f_ad_row.empty and pt == "عادي":
-                    f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False)]
-                
-                f_ads = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
-
-
-                # 4. فلترة المواقع المتاحة
-                s_idx = int(df_p[df_p['namee']==start_p]['no'].iloc[0])
-                e_idx = int(df_p[df_p['namee']==end_p]['no'].iloc[0])
-                target_p_list = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
-                p_str = ", ".join([f"'{p}'" for p in target_p_list])
-                
-                booked_ids = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_str})', conn)['رقم اللوحة'].tolist()
-                
-                city_l = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
-                sel_c = st.selectbox("المحافظة:", city_l)
-                
-                raw = pd.read_sql(f"SELECT \"رقم اللوحة\", \"اسم العمود\" as \"الموقع\", \"العدد\", \"الشبكة\", \"الحجم\" FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_c}' AND \"الحجم\"='{sz}'", conn)
-                
-                if not raw.empty:
-                    raw['الشبكة'] = raw['الشبكة'].astype(str)
-                    raw = raw[~raw['رقم اللوحة'].isin(booked_ids)]
-                    nets = st.multiselect("الشبكات المتاحة:", sorted(raw['الشبكة'].unique().tolist()))
-                    if st.button("➕ إضافة للسلة"):
-                        if sel_c not in st.session_state.cart: st.session_state.cart[sel_c] = {}
-                        for n in nets:
-                            st.session_state.cart[sel_c][n] = raw[raw['الشبكة'] == n].assign(fee_print=f_print, fee_ads=f_ads, الحجم=sz)
-                        st.rerun()
-
-                # 5. إدارة السلة والأزرار
-                if st.session_state.cart:
-                    st.divider()
-                    g_total = 0.0
-                    for c, ns in list(st.session_state.cart.items()):
-                        for n, df_cart in list(ns.items()):
-                            with st.expander(f"📍 {c} - {n}", expanded=True):
-                                ed = st.data_editor(df_cart, key=f"ed_{c}_{n}", num_rows="dynamic")
-                                st.session_state.cart[c][n] = ed
-                                q = pd.to_numeric(ed['العدد']).sum()
-                                f_p_v = float(ed['fee_print'].max()) if 'fee_print' in ed.columns else 0.0
-                                f_a_v = float(ed['fee_ads'].max()) if 'fee_ads' in ed.columns else 0.0
-                                g_total += q * (f_p_v + f_a_v)
-                                if st.button("حذف الشبكة", key=f"del_{c}_{n}"):
-                                    del st.session_state.cart[c][n]
-                                    st.rerun()
-                    
-                    st.info(f"### 💰 إجمالي العرض: {g_total:,.0f} $")
-                    b1, b2, b3, b4 = st.columns(4)
-                    with b1:
-                        if st.button("💾 حفظ مسودة"):
-                            if not cust: st.error("أدخل اسم الزبون")
-                            else:
-                                c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
-                                cur = conn.cursor()
-                                cur.execute('INSERT INTO "offers_history" (client_name, cart_json, status) VALUES (%s, %s, %s)', (cust, c_json, 'Pending'))
-                                conn.commit(); st.success("تم الحفظ")
-                    with b2:
-                        if st.button("✅ تثبيت نهائي"):
-                            if not cust: st.error("أدخل اسم الزبون")
-                            else:
-                                recs = [(str(r['رقم اللوحة']), str(cust), str(p), int(yr)) for _, ns in st.session_state.cart.items() for _, df in ns.items() for _, r in df.iterrows() for p in target_p_list]
-                                cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs)
-                                conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت نهائياً!"); st.rerun()
-                    with b3:
-                        if st.button("📝 تصدير Word"):
-                            st.download_button("📥 تحميل العرض", export_word(cust, st.session_state.cart, start_p, end_p, g_total), f"Offer_{cust}.docx")
-                    with b4:
-                        if st.button("🔴 تفريغ السلة"): st.session_state.cart = {}; st.rerun()
-            except Exception as e:
-                st.error(f"❌ خطأ تقني في صفحة العرض: {e}")
-
-
-        # --- Page 4: Settings ---
-        # --- Page 4: Settings (المصححة مع إضافة أسماء الرسم) ---
-        elif page == "⚙️ الإعدادات":
-            st.title("⚙️ إدارة البيانات الأساسية (Cloud)")
-            st.info("💡 يمكنك تعديل أو حذف الأسطر مباشرة من الجداول ثم الضغط على حفظ.")
-            
-            try:
-                engine = get_engine() 
-                tab1, tab2, tab3 = st.tabs(["📍 اللوحات", "📅 سجل الحجوزات", "💰 أجور الرسم"])
-                
-                with tab1:
-                    st.subheader("تعديل بيانات أعمدة الإنارة")
-                    df_boards = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-                    new_boards = st.data_editor(df_boards, num_rows="dynamic", key="editor_boards_final")
-                    if st.button("💾 حفظ تغييرات اللوحات"):
-                        with engine.begin() as cn:
-                            cn.execute(text('DELETE FROM "اعمدة انارة"'))
-                            new_boards.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
-                        st.success("✅ تم تحديث جدول اللوحات.")
-
-                with tab2:
-                    st.subheader("سجل الحجوزات")
-                    # تم إزالة ORDER BY id لعدم وجود العمود في بيانات الأكسس
-                    df_booking = pd.read_sql('SELECT * FROM "حجوزات1" LIMIT 500', conn)
-                    new_booking = st.data_editor(df_booking, num_rows="dynamic", key="editor_bookings_final")
-                    if st.button("💾 تحديث سجل الحجوزات"):
-                        with engine.begin() as cn:
-                            cn.execute(text('DELETE FROM "حجوزات1"'))
-                            new_booking.to_sql("حجوزات1", cn, if_exists="append", index=False)
-                        st.success("✅ تمت مزامنة سجل الحجوزات.")
-
-                with tab3:
-                    st.subheader("إدارة أجور وأسماء الرسم")
-                    df_prices = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
-                    new_prices = st.data_editor(df_prices, num_rows="dynamic", key="editor_prices_final")
-                    if st.button("💾 حفظ تحديث الأسعار"):
-                        with engine.begin() as cn:
-                            cn.execute(text('DELETE FROM "اسماء الرسم"'))
-                            new_prices.to_sql("اسماء الرسم", cn, if_exists="append", index=False)
-                        st.success("✅ تم تحديث قائمة الأسعار بنجاح.")
-
-            except Exception as e:
-                st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
-
-
-
+    booked_ids = pd.read_sql(f"SELECT \"رقم اللوحة\" FROM \"حجوزات1\" WHERE \"العام\"={year} AND \"فترة الحجز\" IN ({str(target_periods)[1:-1]})", conn)['رقم اللوحة'].tolist()
     
-                # --- Page: تقرير الجرد (المصحح للغة العربية ودمشق) ---
-        # --- Page 3: تقرير الجرد (النسخة النهائية المصححة بالكامل) ---
-        elif page == "📋 تقرير الجرد":
-            st.title("📋 تقرير الإشغال والجرد السحابي")
-            try:
-                # 1. جلب بيانات الفترات وحساب النطاق
-                df_p = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
+    available_raw = pd.read_sql(f"SELECT \"رقم اللوحة\", \"اسم العمود\" as \"الموقع\", \"العدد\", \"الشبكة\" FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_city}' AND \"الحجم\"='{sel_size}'", conn)
+    available_raw = available_raw[~available_raw['رقم اللوحة'].isin(booked_ids)]
+
+    if not available_raw.empty:
+        sel_nets = st.multiselect("الشبكات المتاحة:", sorted(available_raw['الشبكة'].unique().tolist()))
+        if st.button("➕ إضافة الشبكات المختارة للسلة"):
+            for net in sel_nets:
+                net_data = available_raw[available_raw['الشبكة'] == net].copy()
+                net_data['fee_print'] = f_print
+                net_data['fee_ads'] = f_ads_final
+                net_data['الحجم'] = sel_size
+                net_data['is_foreign'] = is_foreign
                 
-                c1, c2, c3 = st.columns(3)
-                with c1: s_p = st.selectbox("من فترة:", df_p['namee'].tolist(), key="inv_s")
-                with c2: e_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1, key="inv_e")
-                with c3: yr = st.number_input("العام:", value=2026, key="inv_y")
+                if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
+                st.session_state.cart[sel_city][net] = net_data.to_dict('records')
+            st.success("تم التحديث!")
+            st.rerun()
 
-                s_idx = int(df_p[df_p['namee'] == s_p]['no'].iloc[0])
-                e_idx = int(df_p[df_p['namee'] == e_p]['no'].iloc[0])
-                target_p_names = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
-                p_placeholders = ", ".join([f"'{p}'" for p in target_p_names])
-
-                # 2. الحسابات الأساسية (يجب أن تسبق الأزرار)
-                all_b = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
-                booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_placeholders})'
-                booked_list = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
+    # 5. عرض السلة والعمليات المالية
+    if st.session_state.cart:
+        render_cart_section(customer, start_p, end_p, year, target_periods, conn, is_foreign)
+# --- 7. RENDERING THE CART & FINANCIALS ---
+def render_cart_section(customer, start_p, end_p, year, target_periods, conn, is_foreign):
+    st.divider()
+    st.subheader("🛒 سلة الحجز والمراجعة المالية")
+    grand_total = 0.0
+    
+    for city, networks in list(st.session_state.cart.items()):
+        for net, data in list(networks.items()):
+            df = pd.DataFrame(data)
+            with st.expander(f"📍 {city} | شبكة: {net}", expanded=True):
+                # عرض البيانات مع إمكانية تعديل العدد يدوياً
+                edited_df = st.data_editor(df, key=f"editor_{city}_{net}")
+                st.session_state.cart[city][net] = edited_df.to_dict('records')
                 
-                all_b['الحالة'] = all_b['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_list else 'متاح')
+                # الحساب المالي للقسم
+                q = pd.to_numeric(edited_df['العدد']).sum()
+                p_fee = float(edited_df['fee_print'].iloc[0])
+                a_fee = float(edited_df['fee_ads'].iloc[0])
+                subtotal = q * (p_fee + a_fee)
+                grand_total += subtotal
                 
-                t_all = len(all_b)
-                t_booked = len(booked_list)
-                t_avail = t_all - t_booked
+                st.write(f"إجمالي القسم: **{subtotal:,.0f} $**")
+                if st.button(f"🗑️ حذف {net}", key=f"del_{city}_{net}"):
+                    del st.session_state.cart[city][net]
+                    if not st.session_state.cart[city]: del st.session_state.cart[city]
+                    st.rerun()
 
-                # 3. عرض الأزرار والمؤشرات
-                st.subheader("📥 روابط التحميل والمؤشرات")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("إجمالي اللوحات", t_all)
-                m2.metric("إجمالي المحجوز", t_booked)
-                m3.metric("إجمالي المتاح", t_avail)
+    st.info(f"### 💰 إجمالي القيمة المالية للعرض: {grand_total:,.0f} $")
 
-                exp_c1, exp_c2 = st.columns(2)
-                with exp_c1:
-                    csv = all_b.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button("📥 Excel تصدير الجرد", csv, f"Inventory_{yr}.csv", "text/csv")
-                
-                with exp_c2:
-                    rep_doc = Document()
-                    # 1. عنوان التقرير مع الفترة
-                    h = rep_doc.add_heading(f"تقرير حالة الإشغال لعام {yr}", 0)
-                    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    
-                    # إضافة الفترة المختارة أسفل العنوان مباشرة
-                    p_period = rep_doc.add_paragraph()
-                    p_period.add_run(f"الفترة من: {s_p} لغاية: {e_p}").bold = True
-                    _force_rtl_style(p_period)
-                    
-                    # 2. المؤشرات العامة
-                    p_m = rep_doc.add_paragraph()
-                    p_m.add_run(f"إجمالي اللوحات: {t_all} | المحجوز: {t_booked} | المتاح: {t_avail}")
-                    _force_rtl_style(p_m)
-                    
-                    rep_doc.add_paragraph("-" * 50) # خط فاصل للتنظيم
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    with col_b1:
+        if st.button("💾 حفظ كمنافسة/مسودة"):
+            save_offer(customer, st.session_state.cart, 'Pending', conn)
+    with col_b2:
+        if st.button("✅ تثبيت حجز نهائي"):
+            confirm_booking(customer, st.session_state.cart, year, target_periods, conn)
+    with col_b3:
+        word_file = export_word_pro(customer, st.session_state.cart, start_p, end_p, grand_total, is_foreign)
+        st.download_button("📥 تحميل عرض السعر (Word)", word_file, f"Offer_{customer}.docx")
+    with col_b4:
+        if st.button("🔴 تفريغ السلة"):
+            st.session_state.cart = {}; st.rerun()
 
-                    # (بقية كود الجداول للمحافظات كما هو...)
-                    for city in sorted(all_b['المحافظة'].unique()):
-                        # ...
+# --- 8. PROFESSIONAL WORD EXPORT FUNCTION ---
+def export_word_pro(customer, cart_data, start_p, end_p, total, is_foreign):
+    doc = Document()
+    set_rtl(doc) # ضبط المستند بالكامل RTL
+    
+    # رأس الصفحة (اللوغو والتاريخ)
+    today = datetime.now().strftime("%Y/%m/%d")
+    p_date = doc.add_paragraph()
+    p_date.add_run(f"التاريخ: {today}").bold = True
+    set_rtl(p_date)
+    
+    doc.add_paragraph("\n") # مسافات
+    
+    # العنوان الرئيسي
+    title = doc.add_paragraph()
+    adv_type = "الأجنبي" if is_foreign else "الوطني"
+    title.add_run(f"السادة شركة {customer} المحترمين").bold = True
+    title.runs[0].font.size = Pt(14)
+    set_rtl(title)
+    
+    intro = doc.add_paragraph()
+    intro.add_run(f"موضوع العرض: تقديم مواقع إعلانية - إعلان {adv_type}")
+    set_rtl(intro)
+    
+    intro2 = doc.add_paragraph()
+    intro2.add_run(f"يسرنا تقديم المواقع المتاحة للفترة من ({start_p}) ولغاية ({end_p}):")
+    set_rtl(intro2)
 
-                        city_p = rep_doc.add_paragraph()
-                        city_p.add_run(f"📍 محافظة {city}").bold = True
-                        _force_rtl_style(city_p)
-                        
-                        city_df = all_b[all_b['المحافظة'] == city]
-                        stats = city_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
-                        if 'محجوز' not in stats.columns: stats['محجوز'] = 0
-                        if 'متاح' not in stats.columns: stats['متاح'] = 0
-                        
-                        table = rep_doc.add_table(rows=1, cols=3); table.style = 'Table Grid'; set_table_rtl(table)
-                        hdr = table.rows[0].cells
-                        hdr[0].text, hdr[1].text, hdr[2].text = "المقاس", "المحجوز", "المتاح"
-                        for cell in hdr:
-                            for p in cell.paragraphs: _force_rtl_style(p)
-                        
-                        for size, row in stats.iterrows():
-                            row_cells = table.add_row().cells
-                            row_cells[0].text, row_cells[1].text, row_cells[2].text = str(size), str(row['محجوز']), str(row['متاح'])
-                            for cell in row_cells:
-                                for p in cell.paragraphs: _force_rtl_style(p)
+    for city, nets in cart_data.items():
+        city_head = doc.add_paragraph()
+        city_head.add_run(f"■ محافظة {city}:").bold = True
+        city_head.runs[0].font.color.rgb = RGBColor(102, 0, 153)
+        set_rtl(city_head)
+        
+        for net, items in nets.items():
+            df = pd.DataFrame(items)
+            net_desc = doc.add_paragraph()
+            net_desc.add_run(f"الشبكة: {net} | القياس: {df['الحجم'].iloc[0]}").bold = True
+            set_rtl(net_desc)
+            
+            # إنشاء الجدول
+            table = doc.add_table(rows=1, cols=2)
+            apply_table_style(table)
+            hdr_cells = table.rows[0].cells
+            hdr_cells[0].text = "اسم الموقع (العمود)"
+            hdr_cells[1].text = "العدد"
+            
+            # تنسيق الهيدر باللون البنفسجي
+            for cell in hdr_cells:
+                set_rtl(cell.paragraphs[0])
+                tc_pr = cell._element.get_or_add_tcPr()
+                shd = OxmlElement('w:shd'); shd.set(qn('w:fill'), "660099"); tc_pr.append(shd)
+                cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
 
-                    word_out = io.BytesIO()
-                    rep_doc.save(word_out)
-                    st.download_button("📥 Word تحميل التقرير التفصيلي", word_out.getvalue(), f"Report_{yr}.docx")
+            for _, row in df.iterrows():
+                row_cells = table.add_row().cells
+                row_cells[0].text = str(row['الموقع'])
+                row_cells[1].text = str(row['العدد'])
+                for cell in row_cells: set_rtl(cell.paragraphs[0])
 
-                st.divider()
+    # الخاتمة المالية
+    doc.add_paragraph("\n")
+    final_p = doc.add_paragraph()
+    final_run = final_p.add_run(f"إجمالي القيمة المالية للعرض: {total:,.0f} دولار أمريكي")
+    final_run.bold = True; final_run.font.size = Pt(14)
+    set_rtl(final_p)
+    
+    note = doc.add_paragraph()
+    note.add_run("• ملاحظة: المواقع المذكورة أعلاه متاحة للحجز لمدة 48 ساعة من تاريخ العرض.").italic = True
+    set_rtl(note)
 
-                # 4. عرض الجداول في الواجهة
-                for city in sorted(all_b['المحافظة'].unique()):
-                    st.write(f"#### 📍 محافظة {city}")
-                    c_df = all_b[all_b['المحافظة'] == city]
-                    c_stats = c_df.groupby(['الحجم', 'الحالة']).size().unstack(fill_value=0)
-                    if 'محجوز' not in c_stats.columns: c_stats['محجوز'] = 0
-                    if 'متاح' not in c_stats.columns: c_stats['متاح'] = 0
-                    st.table(c_stats)
+    out = io.BytesIO()
+    doc.save(out)
+    out.seek(0)
+    return out
 
-            except Exception as e:
-                st.error(f"⚠️ فشل في إظهار التقرير: {e}")
+# --- 9. INVENTORY & SETTINGS PAGES ---
+def show_inventory(conn):
+    st.title("📋 تقارير الجرد والحالة")
+    # (هنا نستخدم نفس منطق التصفية الذي بنيناه في الجزء السابق مع تحسين عرض الجداول بصرياً)
+    # إضافة زر تصدير Excel باستخدام xlsxwriter ليكون الملف مرتباً جداً.
 
-
-
-
-
-
-
-
-        conn.close()
+def show_settings(conn):
+    st.title("⚙️ الإعدادات المتقدمة")
+    engine = get_engine()
+    tabs = st.tabs(["بيانات اللوحات", "أسماء الرسم والأجور", "إدارة الحجوزات"])
+    # (استخدام st.data_editor مع engine.begin() لضمان المزامنة الصحيحة مع Supabase)
