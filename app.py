@@ -20,7 +20,8 @@ from sqlalchemy.engine import URL
 def get_connection():
     try:
         return psycopg2.connect(
-            host="://supabase.com", 
+            # الـ host يجب أن يكون العنوان التقني المباشر بدون http أو ://
+            host="aws-1-eu-north-1.pooler.supabase.com", 
             port="6543",
             database="postgres",
             user="postgres.ncuofpvbaglwbdqnpman",
@@ -33,13 +34,13 @@ def get_connection():
         return None
 
 def get_engine():
-    clean_host = "://supabase.com"
+    clean_host = "aws-1-eu-north-1.pooler.supabase.com"
     url_obj = URL.create(
         drivername="postgresql+psycopg2",
         username="postgres.ncuofpvbaglwbdqnpman",
         password="WaelPreview2026",
         host=clean_host,
-        port=6543,
+        port=6543, 
         database="postgres",
     )
     return create_engine(url_obj, connect_args={'sslmode': 'require'})
