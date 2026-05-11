@@ -1,207 +1,316 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
-import os, io, json, folium
+import os
+import io
+import folium
+import json
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, RGBColor, Cm 
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime
 
-# --- 1. قاعدة البيانات والاتصال ---
-# --- 1. تصحيح إعدادات الاتصال (إزالة البروتوكول الزائد) ---
-# --- 1. تصحيح إعدادات الاتصال (إزالة البروتوكول الزائد) ---
-DB_CONFIG = {
-    # تم إزالة البروتوكول وأي زوائد، فقط اسم السيرفر
-    "host": "aws-1-eu-north-1.pooler.supabase.com", 
-    "port": "5432", 
-    "database": "postgres",
-    "user": "postgres.ncuofpvbaglwbdqnpman",
-    "password": "WaelPreview2026",
-    "sslmode": "require",
-    "connect_timeout": 10
-}
-
+# --- 1. Database Connections ---
+from sqlalchemy.engine import URL
 def get_connection():
     try:
-        # استخدام إرسال البارامترات مباشرة لضمان عدم حدوث خطأ في الترجمة
-        return psycopg2.connect(**DB_CONFIG)
+        return psycopg2.connect(
+            host="://supabase.com", 
+            port="6543",
+            database="postgres",
+            user="postgres.ncuofpvbaglwbdqnpman",
+            password="WaelPreview2026",
+            sslmode="require",
+            connect_timeout=10
+        )
     except Exception as e:
-        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {e}")
+        st.error(f"⚠️ فشل الاتصال بالقاعدة: {e}")
         return None
 
-# --- إضافة فحص داخل الكود الرئيسي لمنع الـ AttributeError ---
-if st.session_state.auth:
-    conn = get_connection()
-    if conn: # تأكد أن الاتصال ناجح قبل تنفيذ أي استعلام
-        # ... كود الصفحات ...
-    else:
-        st.warning("⚠️ لا يمكن الوصول للسيرفر حالياً، يرجى المحاولة لاحقاً.")
+def get_engine():
+    clean_host = "://supabase.com"
+    url_obj = URL.create(
+        drivername="postgresql+psycopg2",
+        username="postgres.ncuofpvbaglwbdqnpman",
+        password="WaelPreview2026",
+        host=clean_host,
+        port=6543,
+        database="postgres",
+    )
+    return create_engine(url_obj, connect_args={'sslmode': 'require'})
 
-
-# --- 2. دوال التنسيق المتقدمة (Word RTL) ---
-def set_rtl(obj):
-    pPr = obj._element.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
-    for run in obj.runs:
-        rPr = run._element.get_or_add_rPr()
-        rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
-
+# --- 2. Word & RTL Helpers ---
 def set_table_rtl(table):
     tblPr = table._element.xpath('w:tblPr')[0]
-    bidi = OxmlElement('w:bidiVisual'); tblPr.append(bidi)
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
 
-# --- 3. دالة تصدير الوورد الاحترافية (تشمل الأجنبي) ---
-def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreign):
-    doc = Document()
+def _force_rtl_style(p):
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    pPr = p._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi'); bidi.set(qn('w:val'), '1'); pPr.append(bidi)
+    for run in p.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl'); rtl.set(qn('w:val'), '1'); rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts'); rFonts.set(qn('w:cs'), 'Arial'); rPr.append(rFonts)
+
+# تعديل دالة تصدير الوورد لإظهار نوع الإعلان (وطني/أجنبي)
+def export_word(customer_name, cart_data, start_p, end_p, grand_total, is_foreign=False):
+    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+    PURPLE_COLOR = "660099" 
+    doc.add_paragraph()
     today_date = datetime.now().strftime("%d / %m / %Y")
-    
-    p_date = doc.add_paragraph(); p_date.add_run(f"التاريخ: {today_date}"); set_rtl(p_date)
+    p_date = doc.add_paragraph()
+    p_date.add_run(f"التاريخ: {today_date}")
+    _force_rtl_style(p_date)
     doc.add_paragraph()
     
-    p_cust = doc.add_paragraph(); p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True; set_rtl(p_cust)
-    
-    adv_type = "الأجنبي" if is_foreign else "الوطني"
+    p_cust = doc.add_paragraph()
+    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+    _force_rtl_style(p_cust)
+
+    # إضافة نوع الإعلان بناءً على الخيار
+    adv_label = "الأجنبي" if is_foreign else "الوطني"
     p_stat = doc.add_paragraph()
-    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم {adv_type} من فترة ({start_p}) ولغاية ({end_p})"); set_rtl(p_stat)
+    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم {adv_label} من فترة ({start_p}) ولغاية ({end_p})")
+    _force_rtl_style(p_stat)
 
     for city, networks in cart_data.items():
-        p_city = doc.add_paragraph(); p_city.add_run(f"■ محافظة {city}").bold = True; set_rtl(p_city)
-        for net, items in networks.items():
-            df = pd.DataFrame(items)
-            p_net = doc.add_paragraph(); p_net.add_run(f"الشبكة: {net} | القياس: {df['الحجم'].iloc[0]}").bold = True; set_rtl(p_net)
-            
-            table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'; set_table_rtl(table)
-            hdr = table.rows[0].cells
-            hdr[0].text, hdr[1].text = "اسم الموقع (العمود)", "العدد"
-            for cell in hdr:
-                for p in cell.paragraphs: set_rtl(p)
-                cell._element.get_or_add_tcPr().append(OxmlElement('w:shd')) # تظليل بسيط
-            
-            for _, row in df.iterrows():
-                row_cells = table.add_row().cells
-                row_cells[0].text, row_cells[1].text = str(row['الموقع']), str(row['العدد'])
-                for cell in row_cells:
-                    for p in cell.paragraphs: set_rtl(p)
+        p_city = doc.add_paragraph()
+        p_city.add_run(f"■ محافظة {city}").bold = True
+        _force_rtl_style(p_city)
+        for net, df in networks.items():
+            if df.empty: continue
+            for size_info, group_df in df.groupby(['الحجم']):
+                p_size = doc.add_paragraph()
+                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
+                _force_rtl_style(p_size)
+                table = doc.add_table(rows=1, cols=2)
+                table.style = 'Table Grid'
+                set_table_rtl(table)
+                hdr = table.rows[0].cells
+                hdr[0].text = "اسم الموقع (العمود)"; hdr[1].text = "العدد"
+                for cell in hdr:
+                    for p in cell.paragraphs: _force_rtl_style(p)
+                    tc_pr = cell._element.get_or_add_tcPr()
+                    shd = OxmlElement('w:shd'); shd.set(qn('w:fill'), PURPLE_COLOR); tc_pr.append(shd)
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
 
+                for _, row in group_df.iterrows():
+                    row_cells = table.add_row().cells
+                    row_cells[0].text = str(row['الموقع']); row_cells[1].text = str(row['العدد'])
+                    for cell in row_cells:
+                        for p in cell.paragraphs: _force_rtl_style(p)
+                
+                # الحساب المالي المجمع داخل الوورد
+                total_q = pd.to_numeric(group_df['العدد']).sum()
+                f_p = float(group_df['fee_print'].iloc[0])
+                f_a = float(group_df['fee_ads'].iloc[0])
+                sum_print = total_q * f_p
+                sum_ads = total_q * f_a
+                sum_combined = sum_print + sum_ads
+                p_fin = doc.add_paragraph()
+                txt = (f"إجمالي العدد: {int(total_q)} | أجور الطباعة: {sum_print:,.0f}$ | أجور العرض: {sum_ads:,.0f}$ | المجموع للقسم: {sum_combined:,.0f}$")
+                p_fin.add_run(txt).bold = True
+                _force_rtl_style(p_fin)
+
+    doc.add_paragraph() 
+    p_grand = doc.add_paragraph()
+    run_g = p_grand.add_run(f"إجمالي القيمة المالية للعرض بالكامل: {grand_total:,.0f} $")
+    run_g.bold = True; run_g.font.size = Pt(14); run_g.font.color.rgb = RGBColor(102, 0, 153)
+    _force_rtl_style(p_grand)
     doc.add_paragraph()
-    p_total = doc.add_paragraph()
-    run_t = p_total.add_run(f"إجمالي القيمة المالية للعرض: {grand_total:,.0f} $"); run_t.bold = True; set_rtl(p_total)
-    
+    p_note = doc.add_paragraph()
+    p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.")
+    _force_rtl_style(p_note)
     target = io.BytesIO(); doc.save(target); target.seek(0)
     return target
+# --- 3. Manage Expired Offers Logic ---
+def manage_expired_offers(conn):
+    st.subheader("⚠️ إدارة العروض التي تجاوزت 48 ساعة")
+    query = 'SELECT id, client_name, offer_date FROM "offers_history" WHERE status = \'Pending\' AND offer_date < NOW() - INTERVAL \'48 hours\''
+    expired_df = pd.read_sql(query, conn)
+    if not expired_df.empty:
+        for _, row in expired_df.iterrows():
+            col1, col2, col3 = st.columns([3, 1, 1])
+            col1.write(f"الزبون: {row['client_name']} ({row['offer_date']})")
+            if col2.button("✅ تمديد", key=f"ext_{row['id']}"):
+                cur = conn.cursor(); cur.execute('UPDATE "offers_history" SET offer_date = NOW() WHERE id = %s', (row['id'],)); conn.commit(); st.rerun()
+            if col3.button("❌ إلغاء", key=f"can_{row['id']}"):
+                cur = conn.cursor(); cur.execute("UPDATE \"offers_history\" SET status = 'Cancelled' WHERE id = %s", (row['id'],)); conn.commit(); st.rerun()
+    else:
+        st.success("لا توجد عروض منتهية الصلاحية.")
 
-# --- 4. واجهة التطبيق الرئيسية ---
-st.set_page_config(page_title="PreView ERP", layout="wide")
+# --- 4. Main App Interface ---
+st.set_page_config(page_title="PreView Ads ERP - Cloud", layout="wide")
+SYRIA_CITIES_COORDS = {"دمشق": [33.51, 36.27], "ريف دمشق": [33.45, 36.35], "حلب": [36.20, 37.13], "حمص": [34.73, 36.71], "حماة": [35.13, 36.75], "اللاذقية": [35.53, 35.79], "طرطوس": [34.88, 35.88], "سوريا": [34.80, 38.99]}
 
 if "auth" not in st.session_state: st.session_state.auth = False
-if "cart" not in st.session_state: st.session_state.cart = {}
 
 if not st.session_state.auth:
-    st.title("🔐 تسجيل الدخول")
+    st.title("🔒 تسجيل الدخول")
     u, p = st.text_input("User"), st.text_input("Pass", type="password")
     if st.button("Login"):
         if u == "a" and p == "3900": st.session_state.auth = True; st.rerun()
 else:
     conn = get_connection()
+    if 'cart' not in st.session_state: st.session_state.cart = {}
+    
     with st.sidebar:
-        st.image("https://placeholder.com", caption="PreView Ads") # ضع شعارك هنا
-        page = st.radio("القائمة", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
-        if st.button("🚪 خروج"): st.session_state.auth = False; st.rerun()
+        page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 Quotation", "📋 تقرير الجرد", "⚙️ الإعدادات"])
+        if st.button("🚪 تسجيل الخروج"): st.session_state.auth = False; st.rerun()
 
-    # --- Page 1: Dashboard ---
-    if page == "📊 Dashboard":
-        st.title("📊 لوحة التحكم")
-        df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-        df_booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {datetime.now().year}', conn)
-        df_all['الحالة'] = df_all['رقم اللوحة'].apply(lambda x: 'محجوز' if x in df_booked['رقم اللوحة'].values else 'متاح')
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("الإجمالي", len(df_all))
-        c2.metric("محجوز", len(df_all[df_all['الحالة']=='محجوز']))
-        c3.metric("متاح", len(df_all[df_all['الحالة']=='متاح']))
-        
-        m = folium.Map(location=[34.8, 39.0], zoom_start=7)
-        cluster = MarkerCluster().add_to(m)
-        for _, r in df_all.iterrows():
-            color = 'red' if r['الحالة']=='محجوز' else 'purple'
-            folium.Marker([r['Latitude'], r['Longitude']], icon=folium.Icon(color=color)).add_to(cluster)
-        st_folium(m, width="100%", height=500)
-
-    # --- Page 2: Quotation (المحرك المالي المعدل) ---
-    elif page == "📄 Quotation":
-        st.title("📄 بناء العرض")
-        prices_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
-        periods_df = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
-        
-        cust = st.text_input("اسم الزبون")
-        col_a, col_b, col_c = st.columns(3)
-        with col_a: sz = st.selectbox("المقاس:", prices_df['الحجم'].unique())
-        with col_b: pt = st.radio("الطباعة:", ["عادي", "سكوتش"], horizontal=True)
-        with col_c: is_foreign = st.checkbox("🚩 إعلان أجنبي")
-        
-        col_d, col_e = st.columns(2)
-        with col_d: calc_method = st.radio("طريقة الحساب:", ["بالفترة", "بالأيام"], horizontal=True)
-        with col_e: days = st.number_input("المدة (بالأيام):", min_value=1, value=15) if calc_method == "بالأيام" else 15
-
-        # البحث عن السعر (أجنبي/محلي)
-        subset = prices_df[prices_df['الحجم'] == sz].copy()
-        subset['name_clean'] = subset['اسم الرسم'].str.replace('أ', 'ا')
-        
-        f_print = subset[subset['name_clean'].str.contains(f"طباعة.*{pt.replace('أ','ا')}", na=False)]['اجرة الرسم'].sum()
-        
-        if is_foreign:
-            f_ads_base = subset[subset['name_clean'].str.contains("عرض.*اجنبي", na=False)]['اجرة الرسم'].sum()
-        else:
-            f_ads_base = subset[subset['name_clean'].str.contains("عرض", na=False) & ~subset['name_clean'].str.contains("اجنبي", na=False)]['اجرة الرسم'].sum()
-
-        f_ads_final = (f_ads_base / 15) * days if calc_method == "بالأيام" else f_ads_base
-
-        # اختيار المواقع
-        sel_city = st.selectbox("المحافظة:", pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn))
-        raw = pd.read_sql(f"SELECT * FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_city}' AND \"الحجم\"='{sz}'", conn)
-        
-        if not raw.empty:
-            nets = st.multiselect("الشبكات:", raw['الشبكة'].unique())
-            if st.button("➕ إضافة للسلة"):
-                if sel_city not in st.session_state.cart: st.session_state.cart[sel_city] = {}
-                for n in nets:
-                    st.session_state.cart[sel_city][n] = raw[raw['الشبكة']==n].assign(fee_print=f_print, fee_ads=f_ads_final, الحجم=sz).to_dict('records')
-                st.rerun()
-
-        # عرض السلة والتحميل
-        if st.session_state.cart:
-            st.divider()
-            g_total = 0
-            for c, ns in list(st.session_state.cart.items()):
-                for n, items in list(ns.items()):
-                    df_item = pd.DataFrame(items)
-                    st.write(f"📍 {c} - {n}")
-                    g_total += (pd.to_numeric(df_item['العدد']).sum() * (f_print + f_ads_final))
+    if conn:
+        if page == "📊 Dashboard":
+            st.title("📊 الخريطة التفاعلية وحالة الإشغال")
+            current_year = datetime.now().year
+            df_booked = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
+            df_all = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+            df_map = pd.merge(df_all, df_booked, on='رقم اللوحة', how='left').drop_duplicates(subset=['رقم اللوحة'])
             
-            st.info(f"إجمالي العرض: {g_total:,.0f} $")
-            if st.button("📝 تصدير Word"):
-                file = export_word(cust, st.session_state.cart, "فترة البداية", "فترة النهاية", g_total, is_foreign)
-                st.download_button("📥 تحميل", file, f"Offer_{cust}.docx")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("إجمالي اللوحات", len(df_map))
+            c2.metric("محجوز حالياً", int(df_map['اسم الزبون'].notnull().sum()))
+            c3.metric("متاح حالياً", int(df_map['اسم الزبون'].isnull().sum()))
 
-    # --- Page 3: Inventory ---
-    elif page == "📋 تقرير الجرد":
-        st.title("📋 الجرد")
-        df_inv = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم" FROM "اعمدة انارة"', conn)
-        st.dataframe(df_inv, use_container_width=True)
+            m = folium.Map(location=SYRIA_CITIES_COORDS["سوريا"], zoom_start=7)
+            cluster = MarkerCluster().add_to(m)
+            for _, r in df_map.iterrows():
+                if pd.notnull(r.get('Latitude')):
+                    is_booked = pd.notnull(r['اسم الزبون'])
+                    color = 'red' if is_booked else 'purple'
+                    folium.Marker([r['Latitude'], r['Longitude']], popup=f"{r['اسم العمود']}", icon=folium.Icon(color=color)).add_to(cluster)
+            st_folium(m, width="100%", height=600)
 
-    # --- Page 4: Settings ---
-    elif page == "⚙️ الإعدادات":
-        st.title("⚙️ الإعدادات")
-        engine = get_engine()
-        df_p = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
-        new_df = st.data_editor(df_p, num_rows="dynamic")
-        if st.button("حفظ"):
-            new_df.to_sql("اسماء الرسم", engine, if_exists="replace", index=False)
-            st.success("تم التحديث")
+        elif page == "📄 Quotation":
+            st.title("📄 بناء عرض سعر وتثبيت حجز")
+            try:
+                with st.expander("🔔 إدارة العروض المنتهية"):
+                    manage_expired_offers(conn)
 
-    conn.close()
+                # استرجاع المسودات
+                saved_off_df = pd.read_sql('SELECT id, client_name FROM "offers_history" WHERE status=\'Pending\' ORDER BY id DESC', conn)
+                if not saved_off_df.empty:
+                    off_options = {r['client_name']: r['id'] for _, r in saved_off_df.iterrows()}
+                    sel_label = st.selectbox("اختر عرضاً لتعديله:", ["---"] + list(off_options.keys()))
+                    if sel_label != "---" and st.button("🔄 تحميل للسلة"):
+                        res = pd.read_sql(f'SELECT cart_json, client_name FROM "offers_history" WHERE id={off_options[sel_label]}', conn)
+                        if not res.empty:
+                            data = json.loads(res['cart_json'].iloc[0])
+                            st.session_state.cart = {c: {n: pd.DataFrame(d) for n, d in ns.items()} for c, ns in data.items()}
+                            st.session_state.temp_cust = res['client_name'].iloc[0]
+                            st.rerun()
+
+                st.divider()
+                draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+                df_p = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
+                cust = st.text_input("اسم الزبون", value=st.session_state.get('temp_cust', ""))
+                
+                c1, c2, c3 = st.columns(3)
+                with c1: sz = st.selectbox("المقاس:", draw_df['الحجم'].unique().tolist())
+                with c2: pt = st.radio("الطباعة:", ["عادي", "سكوتش"], horizontal=True)
+                with c3: yr = st.number_input("العام:", value=2026)
+
+                # --- حقن الوظائف الجديدة: أجنبي وحساب بالأيام ---
+                col_new1, col_new2 = st.columns(2)
+                with col_new1: is_foreign = st.checkbox("🚩 إعلان أجنبي")
+                with col_new2: calc_type = st.radio("طريقة حساب أجور العرض:", ["بالفترة", "بالأيام"], horizontal=True)
+                
+                days_val = 15
+                if calc_type == "بالأيام":
+                    days_val = st.number_input("عدد أيام العرض:", min_value=1, value=15)
+
+                cp1, cp2 = st.columns(2)
+                with cp1: start_p = st.selectbox("من فترة:", df_p['namee'].tolist())
+                with cp2: end_p = st.selectbox("إلى فترة:", df_p['namee'].tolist(), index=len(df_p)-1)
+
+                subset = draw_df[draw_df['الحجم'] == sz].copy()
+                subset['search_name'] = subset['اسم الرسم'].str.strip().str.replace('أ', 'ا')
+                target_pt = pt.replace('أ', 'ا')
+
+                # أجور الطباعة
+                f_pr_row = subset[subset['search_name'].str.contains("طباعة", na=False) & subset['search_name'].str.contains(target_pt, na=False)]
+                f_print = float(f_pr_row['اجرة الرسم'].sum()) if not f_pr_row.empty else 0.0
+
+                # أجور العرض (تعديل الأجنبي)
+                if is_foreign:
+                    f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & subset['search_name'].str.contains("اجنبي", na=False)]
+                else:
+                    f_ad_row = subset[subset['search_name'].str.contains("عرض", na=False) & ~subset['search_name'].str.contains("اجنبي", na=False)]
+                
+                f_ads_base = float(f_ad_row['اجرة الرسم'].sum()) if not f_ad_row.empty else 0.0
+                
+                # تطبيق حساب الأيام
+                f_ads = (f_ads_base / 15) * days_val if calc_type == "بالأيام" else f_ads_base
+
+                # فلترة المواقع
+                s_idx = int(df_p[df_p['namee']==start_p]['no'].iloc[0])
+                e_idx = int(df_p[df_p['namee']==end_p]['no'].iloc[0])
+                target_p_list = df_p[(df_p['no'] >= s_idx) & (df_p['no'] <= e_idx)]['namee'].tolist()
+                p_str = ", ".join([f"'{p}'" for p in target_p_list])
+                booked_ids = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام"={yr} AND "فترة الحجز" IN ({p_str})', conn)['رقم اللوحة'].tolist()
+                
+                sel_c = st.selectbox("المحافظة:", pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist())
+                raw = pd.read_sql(f"SELECT \"رقم اللوحة\", \"اسم العمود\" as \"الموقع\", \"العدد\", \"الشبكة\", \"الحجم\" FROM \"اعمدة انارة\" WHERE \"المحافظة\"='{sel_c}' AND \"الحجم\"='{sz}'", conn)
+                
+                if not raw.empty:
+                    raw = raw[~raw['رقم اللوحة'].isin(booked_ids)]
+                    nets = st.multiselect("الشبكات المتاحة:", sorted(raw['الشبكة'].unique().tolist()))
+                    if st.button("➕ إضافة للسلة"):
+                        if sel_c not in st.session_state.cart: st.session_state.cart[sel_c] = {}
+                        for n in nets:
+                            st.session_state.cart[sel_c][n] = raw[raw['الشبكة'] == n].assign(fee_print=f_print, fee_ads=f_ads, الحجم=sz)
+                        st.rerun()
+
+                # إدارة السلة
+                if st.session_state.cart:
+                    st.divider()
+                    g_total = 0.0
+                    for c, ns in list(st.session_state.cart.items()):
+                        for n, df_cart in list(ns.items()):
+                            with st.expander(f"📍 {c} - {n}"):
+                                ed = st.data_editor(df_cart, key=f"ed_{c}_{n}")
+                                st.session_state.cart[c][n] = ed
+                                q = pd.to_numeric(ed['العدد']).sum()
+                                g_total += q * (float(ed['fee_print'].max()) + float(ed['fee_ads'].max()))
+                                if st.button("حذف الشبكة", key=f"del_{c}_{n}"):
+                                    del st.session_state.cart[c][n]; st.rerun()
+                    
+                    st.info(f"### 💰 إجمالي العرض: {g_total:,.0f} $")
+                    b1, b2, b3, b4 = st.columns(4)
+                    with b1:
+                        if st.button("💾 حفظ مسودة"):
+                            c_json = json.dumps({c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}, ensure_ascii=False)
+                            cur = conn.cursor(); cur.execute('INSERT INTO "offers_history" (client_name, cart_json, status) VALUES (%s, %s, %s)', (cust, c_json, 'Pending')); conn.commit(); st.success("تم الحفظ")
+                    with b2:
+                        if st.button("✅ تثبيت نهائي"):
+                            recs = [(str(r['رقم اللوحة']), str(cust), str(p), int(yr)) for _, ns in st.session_state.cart.items() for _, df in ns.items() for _, r in df.iterrows() for p in target_p_list]
+                            cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs); conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت!"); st.rerun()
+                    with b3:
+                        if st.button("📝 تصدير Word"):
+                            st.download_button("📥 تحميل الوورد", export_word(cust, st.session_state.cart, start_p, end_p, g_total, is_foreign), f"Offer_{cust}.docx")
+                    with b4:
+                        if st.button("🔴 تفريغ السلة"): st.session_state.cart = {}; st.rerun()
+            except Exception as e: st.error(f"❌ خطأ: {e}")
+
+        elif page == "📋 تقرير الجرد":
+            st.title("📋 تقرير الإشغال")
+            df_inv = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+            st.dataframe(df_inv)
+
+        elif page == "⚙️ الإعدادات":
+            st.title("⚙️ الإعدادات")
+            engine = get_engine()
+            df_prices = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+            new_prices = st.data_editor(df_prices, num_rows="dynamic")
+            if st.button("💾 حفظ الأسعار"):
+                with engine.begin() as cn:
+                    cn.execute(text('DELETE FROM "اسماء الرسم"'))
+                    new_prices.to_sql("اسماء الرسم", cn, if_exists="append", index=False)
+                st.success("تم التحديث")
+        conn.close()
