@@ -541,8 +541,10 @@ else:
             
             # جلب الأسعار
             fee_print, fee_ads = get_fees(draw_df, selected_size, print_type, is_foreign)
-            st.write(f"DEBUG: fee_print={fee_print}, fee_ads={fee_ads}")
             per_column_price = fee_print + (fee_ads / 28 * days_count)
+            
+            st.info(f"💰 أجر الطباعة: {fee_print}$ | أجر العرض الشهري: {fee_ads}$")
+            st.info(f"💵 الإجمالي لكل عمود: {per_column_price:.2f}$")
             
             st.success(f"""
             💰 **تفاصيل الأسعار:**
