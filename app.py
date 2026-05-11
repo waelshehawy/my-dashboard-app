@@ -16,34 +16,24 @@ from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from datetime import date
 def set_table_rtl(table):
-    """تحويل اتجاه الجدول إلى RTL"""
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
-    
-    # محاذاة كل الخلايا إلى اليمين
-    for row in table.rows:
-        for cell in row.cells:
-            for paragraph in cell.paragraphs:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-def _force_rtl_style(paragraph):
-    """تطبيق الكتابة من اليمين لليسار على أي فقرة"""
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    pPr = paragraph._element.get_or_add_pPr()
+def _force_rtl_style(p):
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
     pPr.append(bidi)
-    
-    for run in paragraph.runs:
+    for run in p.runs:
         rPr = run._element.get_or_add_rPr()
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
-    
-    return paragraph
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
 # للتحقق
 def safe_date(date_input):
     """تحويل أي مدخل تاريخ إلى كائن date بشكل آمن"""
