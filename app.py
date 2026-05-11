@@ -402,6 +402,9 @@ else:
     # ============================================================
     # صفحة عرض سعر (النسخة النهائية المصححة)
     # ============================================================
+    # ============================================================
+    # صفحة عرض سعر (النسخة النهائية المصححة)
+    # ============================================================
     elif page == "📄 عرض سعر":
         st.title("📄 بناء عرض سعر جديد")
         
@@ -486,22 +489,9 @@ else:
             if calc_method == "حساب بالأيام":
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
-                    start_date_raw = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
+                    start_date = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
                 with col_date2:
-                    end_date_raw = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
-                
-                # دالة تحويل داخلية
-                def _to_date(d):
-                    if d is None:
-                        return date(year, 4, 1)
-                    if hasattr(d, 'date'):
-                        return d.date()
-                    if isinstance(d, (tuple, list)):
-                        return _to_date(d[0])
-                    return d
-                
-                start_date = _to_date(start_date_raw)
-                end_date = _to_date(end_date_raw)
+                    end_date = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
                 
                 if start_date > end_date:
                     st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
@@ -511,26 +501,21 @@ else:
                 start_p = start_date.isoformat()
                 end_p = end_date.isoformat()
                 st.info(f"📅 عدد الأيام: {days_count} يوم")
-         
-                # حساب بالفترات
-                            else:
+            else:
                 # حساب بالفترات
                 periods_df = pd.read_sql('SELECT * FROM "الفترة" ORDER BY "no"', conn)
-                period_names = periods_df['namee'].tolist()
-                
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
-                    start_p = st.selectbox("من فترة:", period_names)
+                    start_p = st.selectbox("من فترة:", periods_df['namee'].tolist())
                 with col_p2:
-                    end_p = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1)
+                    end_p = st.selectbox("إلى فترة:", periods_df['namee'].tolist(), index=len(periods_df)-1)
                 
-                # حساب عدد الفترات
-                start_idx = period_names.index(start_p)
-                end_idx = period_names.index(end_p)
-                periods_count = abs(end_idx - start_idx) + 1
-                days_count = periods_count * 7  # كل فترة = 7 أيام
-                
-                st.info(f"📅 عدد الفترات: {periods_count} | عدد الأيام التقريبي: {days_count} يوم")
+                # حساب عدد الأيام من الفترات
+                s_idx = int(periods_df[periods_df['namee'] == start_p]['no'].iloc[0])
+                e_idx = int(periods_df[periods_df['namee'] == end_p]['no'].iloc[0])
+                periods_count = e_idx - s_idx + 1
+                days_count = periods_count * 7  # كل فترة نصف شهر = 7 أيام تقريباً
+                st.info(f"📅 عدد الأيام التقريبي: {days_count} يوم")
             
             # جلب الأسعار
             fee_print, fee_ads_monthly = get_fees(draw_df, selected_size, print_type, is_foreign)
