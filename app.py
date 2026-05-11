@@ -456,39 +456,23 @@ else:
                 st.write("")  # فراغ للحفاظ على التنسيق
             
             # اختيار التاريخ (للحساب بالأيام)
-            # ========== اختيار التاريخ (معالجة آمنة) ==========
-            
+            # ========== اختيار التاريخ ==========
             col_date1, col_date2 = st.columns(2)
             with col_date1:
                 start_date_raw = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
             with col_date2:
                 end_date_raw = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
             
-            # معالجة آمنة للتاريخ - تحويل أي نوع إلى date
-            if isinstance(start_date_raw, (tuple, list)):
-                start_date = start_date_raw[0]
-            else:
-                start_date = start_date_raw
+            # تحويل آمن
+            start_date = safe_date(start_date_raw)
+            end_date = safe_date(end_date_raw)
             
-            if isinstance(end_date_raw, (tuple, list)):
-                end_date = end_date_raw[0]
-            else:
-                end_date = end_date_raw
-            
-            # تحويل datetime إلى date إذا لزم الأمر
-            if hasattr(start_date, 'date'):
-                start_date = start_date.date()
-            if hasattr(end_date, 'date'):
-                end_date = end_date.date()
-            
-            # التحقق من صحة التواريخ
             if start_date > end_date:
                 st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
                 st.stop()
             
-            # حساب عدد الأيام
             days_count = (end_date - start_date).days + 1
-            st.info(f"📅 عدد الأيام: {days_count} يوم (الشهر = 28 يوم للحساب)")
+            st.info(f"📅 عدد الأيام: {days_count} يوم")
             
             # جلب الأسعار
             fee_print, fee_ads_monthly = get_fees(draw_df, selected_size, print_type, is_foreign)
