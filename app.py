@@ -161,7 +161,7 @@ def export_word_old(customer_name, cart_data, start_p, end_p, grand_total):
 
     p_stat = doc.add_paragraph()
     if is_foreign:
-        p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني (أجنبي) من فترة ({start_p}) ولغاية ({end_p})")
+        p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الأجنبي من فترة ({start_p}) ولغاية ({end_p})")
     else:
         p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
     _force_rtl_style(p_stat)
