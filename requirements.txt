@@ -6,3 +6,4 @@ streamlit-folium
 python-docx
 sqlalchemy
 xlsxwriter
+python-dateutil
