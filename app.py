@@ -483,12 +483,25 @@ else:
             start_p = ""
             end_p = ""
             
-            if calc_method == "حساب بالأيام":
+                        if calc_method == "حساب بالأيام":
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
-                    start_date = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
+                    start_date_raw = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
                 with col_date2:
-                    end_date = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
+                    end_date_raw = st.date_input("📅 تاريخ نهاية العرض", value=date(year, 4, 10))
+                
+                # دالة تحويل داخلية
+                def _to_date(d):
+                    if d is None:
+                        return date(year, 4, 1)
+                    if hasattr(d, 'date'):
+                        return d.date()
+                    if isinstance(d, (tuple, list)):
+                        return _to_date(d[0])
+                    return d
+                
+                start_date = _to_date(start_date_raw)
+                end_date = _to_date(end_date_raw)
                 
                 if start_date > end_date:
                     st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
