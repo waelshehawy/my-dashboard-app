@@ -139,7 +139,7 @@ def get_fees(draw_df, size, print_type, is_foreign):
     st.info(f"🔍 DEBUG: الحجم={size}, نوع الطباعة={print_type}, أجنبي={is_foreign}")
     st.info(f"💰 أجر الطباعة: {fee_print}$, أجر العرض (شهري): {fee_ads}$")
     
-    return fee_print, fee_ads_monthly
+    return fee_print, fee_ads
 
 # ============================================================
 # 4. دالة تصدير Word (كاملة بالتنسيقات)
