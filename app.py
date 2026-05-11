@@ -25,9 +25,17 @@ def _force_rtl_style(p):
     """تطبيق الكتابة من اليمين لليسار على الفقرة"""
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     pPr = p._element.get_or_add_pPr()
+    
+    # إعداد bidi
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
     pPr.append(bidi)
+    
+    # إعداد direction
+    direction = OxmlElement('w:jc')
+    direction.set(qn('w:val'), 'right')
+    pPr.append(direction)
+    
     for run in p.runs:
         rPr = run._element.get_or_add_rPr()
         rtl = OxmlElement('w:rtl')
