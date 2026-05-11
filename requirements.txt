@@ -7,3 +7,4 @@ python-docx
 sqlalchemy
 xlsxwriter
 python-dateutil
+lxml
