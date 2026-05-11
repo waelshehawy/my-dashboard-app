@@ -718,4 +718,4 @@ else:
             
             with tab1:
                 st.subheader("إدارة بيانات أعمدة الإنارة")
-                df_boards = pd.read_sql('SELECT * FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"
+                df_boards = pd.read_sql('SELECT * FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"', conn)
