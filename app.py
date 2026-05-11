@@ -15,6 +15,27 @@ from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from datetime import date
+def set_table_rtl(table):
+    """تحويل اتجاه الجدول إلى RTL"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
+
+def _force_rtl_style(p):
+    """تطبيق الكتابة من اليمين لليسار على الفقرة"""
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    pPr = p._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    for run in p.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
 # للتحقق
 def safe_date(date_input):
     """تحويل أي مدخل تاريخ إلى كائن date بشكل آمن"""
