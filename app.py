@@ -15,6 +15,23 @@ from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from datetime import date
+def export_to_excel(df, filename):
+    """تصدير DataFrame إلى Excel مع دعم اللغة العربية"""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='تقرير', index=False)
+        # ضبط اتجاه الكتابة لليمين
+        workbook = writer.book
+        worksheet = writer.sheets['تقرير']
+        worksheet.right_to_left()
+        
+        # ضبط عرض الأعمدة
+        for i, col in enumerate(df.columns):
+            max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+            worksheet.set_column(i, i, min(max_len, 30))
+    
+    output.seek(0)
+    return output
 def set_table_rtl(table):
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
@@ -831,23 +848,89 @@ else:
         except Exception as e:
             st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
     # ============================================================
-    # صفحة تقرير التوفر الشهري (نسخة مبسطة)
+    # صفحة تقرير التوفر الشهري
     # ============================================================
     elif page == "📅 تقرير التوفر الشهري":
-        st.title("📅 تقرير توفر الأعمدة - شهري")
+        st.title("📅 تقرير توفر الأعمدة - شهري حتى نهاية العام")
         
         from datetime import date
         from dateutil.relativedelta import relativedelta
+        import io
+        import pandas as pd
+        from docx import Document
+        from docx.shared import Pt
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
         
         today = date.today()
         current_year = today.year
+        
+        # دالة تصدير Excel مع دعم العربية
+        def export_to_excel(df, filename):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, sheet_name='تقرير', index=False)
+                workbook = writer.book
+                worksheet = writer.sheets['تقرير']
+                worksheet.right_to_left()
+                for i, col in enumerate(df.columns):
+                    max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                    worksheet.set_column(i, i, min(max_len, 30))
+            output.seek(0)
+            return output
+        
+        # دالة تصدير Word
+        def export_report_word(df, title, months_count):
+            doc = Document()
+            h = doc.add_heading(title, 0)
+            h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # ملخص شهري
+            summary = df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
+            
+            # إضافة جدول الملخص
+            table = doc.add_table(rows=len(summary)+1, cols=len(summary.columns)+1)
+            table.style = 'Table Grid'
+            
+            # رأس الجدول
+            cells = table.rows[0].cells
+            cells[0].text = 'الشهر'
+            for i, col in enumerate(summary.columns):
+                cells[i+1].text = col
+            for i, col in enumerate(summary.columns):
+                cells[i+1].text = col
+            if 'متاح' not in summary.columns:
+                cells[1].text = 'متاح'
+            if 'محجوز' not in summary.columns:
+                cells[2].text = 'محجوز'
+            
+            # بيانات الجدول
+            for i, (idx, row) in enumerate(summary.iterrows()):
+                cells = table.rows[i+1].cells
+                cells[0].text = str(idx)
+                col_idx = 1
+                if 'متاح' in row:
+                    cells[col_idx].text = str(row['متاح'])
+                    col_idx += 1
+                if 'محجوز' in row:
+                    cells[col_idx].text = str(row['محجوز'])
+            
+            # إجماليات
+            doc.add_paragraph()
+            total_boards = df['رقم اللوحة'].nunique()
+            p = doc.add_paragraph()
+            p.add_run(f"إجمالي عدد الأعمدة: {total_boards}").bold = True
+            
+            output = io.BytesIO()
+            doc.save(output)
+            output.seek(0)
+            return output
         
         report_year = st.selectbox("📅 سنة التقرير:", [current_year, current_year + 1], index=0)
         
         # زر تشغيل التقرير
         if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary"):
             
-            with st.spinner("جاري إنشاء التقرير..."):
+            with st.spinner("جاري إنشاء التقرير... قد يستغرق بضع ثوانٍ"):
                 
                 start_date = date(report_year, today.month, today.day) if report_year == current_year else date(report_year, 1, 1)
                 end_date = date(report_year, 12, 31)
@@ -890,50 +973,75 @@ else:
                 
                 st.success(f"✅ تم إنشاء التقرير - {len(results_df)} سجل")
                 
-                # عرض الملخص
+                # ========== عرض النتائج ==========
+                
+                # 1. ملخص شهري
                 st.subheader("📊 ملخص شهري")
                 summary = results_df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
                 st.dataframe(summary, use_container_width=True)
                 
-                # رسم بياني
+                # 2. رسم بياني
                 st.subheader("📈 مخطط الإشغال الشهري")
                 chart_data = results_df.groupby(['الشهر', 'الحالة']).size().unstack(fill_value=0)
                 st.bar_chart(chart_data)
                 
-                # تفصيل حسب الشبكة (آخر شهر)
+                # 3. تفصيل حسب الشبكة (آخر شهر)
                 st.subheader("📋 تفصيل حسب الشبكة (آخر شهر)")
                 last_month = months_list[-1].strftime('%Y-%m')
                 last_month_df = results_df[results_df['الشهر'] == last_month]
                 network_stats = last_month_df.groupby(['الشبكة', 'الحالة']).size().unstack(fill_value=0)
                 st.dataframe(network_stats, use_container_width=True)
                 
-                # تفصيل حسب المحافظة (آخر شهر)
+                # 4. تفصيل حسب المحافظة (آخر شهر)
                 st.subheader("📋 تفصيل حسب المحافظة (آخر شهر)")
                 city_stats = last_month_df.groupby(['المحافظة', 'الحالة']).size().unstack(fill_value=0)
                 st.dataframe(city_stats, use_container_width=True)
                 
-                # أزرار التصدير
+                # 5. جدول تفصيلي كامل
+                with st.expander("📋 عرض جميع الأعمدة التفصيلية"):
+                    st.dataframe(results_df, use_container_width=True, height=400)
+                
+                # ========== أزرار التصدير ==========
                 st.divider()
-                col1, col2 = st.columns(2)
+                st.subheader("📥 تصدير التقرير")
+                
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    csv_full = results_df.to_csv(index=False, encoding='utf-8-sig')
+                    # تصدير Excel كامل
+                    excel_full = export_to_excel(results_df, "تقرير_شهري")
                     st.download_button(
-                        "📥 تحميل التقرير الكامل",
-                        csv_full,
-                        f"monthly_report_{report_year}.csv",
-                        "text/csv",
+                        "📊 Excel - التقرير الكامل",
+                        excel_full,
+                        f"monthly_report_{report_year}.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
                 
                 with col2:
-                    csv_month = last_month_df.to_csv(index=False, encoding='utf-8-sig')
+                    # تصدير Excel لآخر شهر
+                    excel_month = export_to_excel(last_month_df, f"شهر_{last_month}")
                     st.download_button(
-                        f"📥 تحميل شهر {last_month}",
-                        csv_month,
-                        f"month_{last_month}.csv",
-                        "text/csv",
+                        f"📊 Excel - شهر {last_month}",
+                        excel_month,
+                        f"month_{last_month}.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
+                
+                with col3:
+                    # تصدير Word
+                    word_file = export_report_word(results_df, f"تقرير التوفر الشهري - {report_year}", len(months_list))
+                    st.download_button(
+                        "📝 Word - التقرير",
+                        word_file,
+                        f"monthly_report_{report_year}.docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+                
+                # إجمالي الأعمدة
+                st.info(f"📊 إجمالي عدد الأعمدة في النظام: {len(all_columns)} عمود")
+        
         else:
             st.info("👆 اضغط على زر 'تشغيل التقرير' لبدء إنشاء التقرير")
