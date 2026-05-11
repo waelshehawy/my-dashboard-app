@@ -483,7 +483,7 @@ else:
             start_p = ""
             end_p = ""
             
-                        if calc_method == "حساب بالأيام":
+            if calc_method == "حساب بالأيام":
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
                     start_date_raw = st.date_input("📅 تاريخ بداية العرض", value=date(year, 4, 1))
