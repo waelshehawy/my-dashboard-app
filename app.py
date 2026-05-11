@@ -549,7 +549,7 @@ else:
             st.success(f"""
             💰 **تفاصيل الأسعار:**
             - أجر الطباعة الثابت: **{fee_print}$**
-            - أجر العرض الشهري: **{fee_ads_monthly}$**
+            - أجر العرض الشهري: **{fee_ads}$**
             - **الإجمالي لكل عمود: {per_column_price:.2f}$**
             """)
             
@@ -600,7 +600,7 @@ else:
                         net_data = available_columns[available_columns['الشبكة'] == net].copy()
                         net_data['fee_print'] = fee_print
                         net_data['fee_ads'] = fee_ads
-                        net_data['fee_ads_monthly'] = fee_ads
+                        net_data['fee_ads'] = fee_ads
                         st.session_state.cart[selected_city][net] = net_data
                     
                     st.success(f"تمت الإضافة")
@@ -623,7 +623,7 @@ else:
                             
                             qty = int(edited_df['العدد'].sum())
                             fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else fee_print
-                            fam = float(edited_df['fee_ads_monthly'].iloc[0]) if 'fee_ads_monthly' in edited_df.columns else fee_ads_monthly
+                            fam = float(edited_df['fee_ads'].iloc[0]) if 'fee_ads' in edited_df.columns else fee_ads
                             
                             per_col = fp + (fam / 28 * days_count)
                             section_total = qty * per_col
