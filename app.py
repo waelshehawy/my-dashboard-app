@@ -274,7 +274,7 @@ else:
                             cur = conn.cursor(); cur.executemany('INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام") VALUES (%s, %s, %s, %s)', recs); conn.commit(); st.session_state.cart = {}; st.success("تم التثبيت!"); st.rerun()
                     with b3:
                         st.download_button("📥 تحميل الوورد", export_word(cust, st.session_state.cart, start_p, end_p, g_total, is_foreign), f"Offer_{cust}.docx")
-            except Exception as e: st.error(f"❌ خطأ: {e}"
+            except Exception as e: st.error(f"❌ خطأ: {e}")
         elif page == "📋 تقرير الجرد":
             st.title("📋 تقرير الإشغال والجرد السحابي")
             try:
