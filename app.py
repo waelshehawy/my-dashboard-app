@@ -480,7 +480,7 @@ else:
             # اختيار التاريخ - مع دعم الفترات أو التواريخ
             calc_method = st.radio("طريقة الحساب:", ["حساب بالأيام", "حساب بالفترات"], horizontal=True)
             
-            days_count = 7
+            days_count = 14
             start_date = None
             end_date = None
             start_p = ""
@@ -516,7 +516,7 @@ else:
                 start_idx = period_names.index(start_p)
                 end_idx = period_names.index(end_p)
                 periods_count = abs(end_idx - start_idx) + 1
-                days_count = periods_count * 15  # كل فترة = 15 يوم
+                days_count = periods_count * 14  # كل فترة = 15 يوم
                 
                 st.info(f"📅 عدد الفترات: {periods_count} | عدد الأيام: {days_count} يوم")
             
