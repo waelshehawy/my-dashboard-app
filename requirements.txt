@@ -7,4 +7,3 @@ python-docx
 sqlalchemy
 xlsxwriter
 python-dateutil
-pip install xlsxwriter openpyxl
