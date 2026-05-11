@@ -20,6 +20,12 @@ def set_table_rtl(table):
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
+    
+    # محاذاة كل الخلايا إلى اليمين
+    for row in table.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 def _force_rtl_style(paragraph):
     """تطبيق الكتابة من اليمين لليسار على أي فقرة"""
