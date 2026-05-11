@@ -511,7 +511,7 @@ else:
                 start_p = start_date.isoformat()
                 end_p = end_date.isoformat()
                 st.info(f"📅 عدد الأيام: {days_count} يوم")
-            else:
+         
                 # حساب بالفترات
                             else:
                 # حساب بالفترات
