@@ -719,3 +719,33 @@ else:
             with tab1:
                 st.subheader("إدارة بيانات أعمدة الإنارة")
                 df_boards = pd.read_sql('SELECT * FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"', conn)
+                edited_boards = st.data_editor(df_boards, num_rows="dynamic", key="edit_boards")
+                if st.button("💾 حفظ أعمدة الإنارة"):
+                    with engine.begin() as cn:
+                        cn.execute(text('DELETE FROM "اعمدة انارة"'))
+                        edited_boards.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
+                    st.success("✅ تم تحديث أعمدة الإنارة")
+            
+            with tab2:
+                st.subheader("إدارة سجل الحجوزات")
+                df_bookings = pd.read_sql('SELECT * FROM "حجوزات1" LIMIT 500', conn)
+                edited_bookings = st.data_editor(df_bookings, num_rows="dynamic", key="edit_bookings")
+                if st.button("💾 حفظ سجل الحجوزات"):
+                    with engine.begin() as cn:
+                        cn.execute(text('DELETE FROM "حجوزات1"'))
+                        edited_bookings.to_sql("حجوزات1", cn, if_exists="append", index=False)
+                    st.success("✅ تم تحديث سجل الحجوزات")
+            
+            with tab3:
+                st.subheader("إدارة أجور الرسم")
+                st.info("💡 أضف 'عرض شهري' للعملاء العاديين أو 'اجنبي شهري' للعملاء الأجانب")
+                df_fees = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+                edited_fees = st.data_editor(df_fees, num_rows="dynamic", key="edit_fees")
+                if st.button("💾 حفظ أجور الرسم"):
+                    with engine.begin() as cn:
+                        cn.execute(text('DELETE FROM "اسماء الرسم"'))
+                        edited_fees.to_sql("اسماء الرسم", cn, if_exists="append", index=False)
+                    st.success("✅ تم تحديث أجور الرسم")
+        
+        except Exception as e:
+            st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
