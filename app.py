@@ -253,8 +253,7 @@ else:
             st_folium(m, width="100%", height=600)
 
         # --- Quotation Page (with new features) ---
-        # --- في صفحة Quotation ---
-elif page == "📄 Quotation":
+        elif page == "📄 Quotation":
     st.title("📄 بناء عرض سعر وتثبيت حجز")
     try:
         with st.expander("🔔 إدارة العروض التي تجاوزت 48 ساعة"):
@@ -396,7 +395,7 @@ elif page == "📄 Quotation":
             
             st.info(f"### 💰 إجمالي العرض: {g_total:,.2f} $")
             # ... باقي الأزرار (حفظ، تثبيت، تصدير)
-                    
+                            
                     b1, b2, b3, b4 = st.columns(4)
                     with b1:
                         if st.button("💾 حفظ مسودة"):
