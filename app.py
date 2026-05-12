@@ -337,34 +337,26 @@ else:
     # صفحة Dashboard
     # ============================================================
     if page == "📊 Dashboard":
-        st.title("📊 لوحة التحكم - الخريطة التفاعلية وحالة الإشغال")
+        st.title("📊 لوحة التحكم - الخريطة التفاعلية")
         
         current_year = datetime.now().year
         
-        # جلب جميع اللوحات
-        all_columns_df = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+        # إجمالي اللوحات
+        total_boards = pd.read_sql('SELECT COUNT(*) FROM "اعمدة انارة"', conn).iloc[0,0]
         
-        # جلب الحجوزات في العام الحالي
-        booked_df = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
+        # عدد اللوحات المحجوزة (DISTINCT - بدون تكرار الفترات)
+        bookings_count = pd.read_sql(f'''
+            SELECT COUNT(DISTINCT "رقم اللوحة") 
+            FROM "حجوزات1" 
+            WHERE "العام" = {current_year}
+        ''', conn).iloc[0,0]
         
-        # دمج البيانات
-        df_map = pd.merge(all_columns_df, booked_df, on="رقم اللوحة", how="left", suffixes=('', '_booked'))
-        
-        # التحقق من وجود العمود قبل استخدامه
-        if 'رقم اللوحة_booked' in df_map.columns:
-            df_map['الحالة'] = df_map['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
-            booked_count = df_map['رقم اللوحة_booked'].notna().sum()
-        else:
-            df_map['الحالة'] = 'متاح'
-            booked_count = 0
-        
-        total_boards = len(df_map)
-        available_count = total_boards - booked_count
+        available_count = total_boards - bookings_count
         
         # عرض المؤشرات
         col1, col2, col3 = st.columns(3)
         col1.metric("🏢 إجمالي اللوحات", total_boards)
-        col2.metric("🔴 محجوز حالياً", booked_count)
+        col2.metric("🔴 محجوز حالياً", bookings_count)
         col3.metric("🟢 متاح حالياً", available_count)
         
         st.divider()
