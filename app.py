@@ -299,17 +299,19 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 نظام إدارة الإعلانات - تسجيل الدخول")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        username = st.text_input("اسم المستخدم")
-        password = st.text_input("كلمة المرور", type="password")
-        if st.button("دخول", use_container_width=True):
-            if username == "a" and password == "3900":
-                st.session_state.auth = True
-                st.rerun()
-            else:
-                st.error("اسم المستخدم أو كلمة المرور غير صحيحة")
+    st.title("🔒 تسجيل الدخول")
+    
+    # إضافة مفاتيح فريدة لكل عنصر
+    username = st.text_input("اسم المستخدم", key="login_username")
+    password = st.text_input("كلمة المرور", type="password", key="login_password")
+    
+    if st.button("دخول", key="login_button"):
+        if username == "a" and password == "3900":
+            st.session_state.auth = True
+            st.rerun()
+        else:
+            st.error("اسم المستخدم أو كلمة المرور غير صحيحة")
+
 else:
     conn = get_connection()
     
