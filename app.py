@@ -344,16 +344,20 @@ else:
         # جلب جميع اللوحات
         all_columns_df = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
         
-        # جلب الحجوزات - debug
+        # جلب الحجوزات في العام الحالي
         booked_df = pd.read_sql(f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}', conn)
-        
-        st.write(f"DEBUG: عدد الحجوزات في قاعدة البيانات: {len(booked_df)}")
         
         # دمج البيانات
         df_map = pd.merge(all_columns_df, booked_df, on="رقم اللوحة", how="left", suffixes=('', '_booked'))
         
-        # حساب المحجوزات
-        booked_count = df_map['رقم اللوحة_booked'].notna().sum() if 'رقم اللوحة_booked' in df_map.columns else 0
+        # التحقق من وجود العمود قبل استخدامه
+        if 'رقم اللوحة_booked' in df_map.columns:
+            df_map['الحالة'] = df_map['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
+            booked_count = df_map['رقم اللوحة_booked'].notna().sum()
+        else:
+            df_map['الحالة'] = 'متاح'
+            booked_count = 0
+        
         total_boards = len(df_map)
         available_count = total_boards - booked_count
         
@@ -365,7 +369,7 @@ else:
         
         st.divider()
         
-        # الخريطة
+        # إنشاء الخريطة
         st.subheader("🗺️ توزع اللوحات على الخريطة")
         
         m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
@@ -373,33 +377,35 @@ else:
         
         for _, row in df_map.iterrows():
             if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')):
-                is_booked = pd.notnull(row.get('رقم اللوحة_booked', None))
-                color = 'red' if is_booked else 'purple'
-                status_text = 'محجوز' if is_booked else 'متاح'
-                
+                color = 'red' if row['الحالة'] == 'محجوز' else 'purple'
                 popup_html = f"""
                 <div dir="rtl" style="font-family: Arial; text-align: right;">
                     <b>{row['اسم العمود']}</b><br>
                     المحافظة: {row['المحافظة']}<br>
                     الشبكة: {row['الشبكة']}<br>
-                    الحالة: {status_text}
+                    الحجم: {row['الحجم']}<br>
+                    الحالة: {row['الحالة']}
                 </div>
                 """
                 
                 folium.Marker(
                     [row['Latitude'], row['Longitude']],
                     popup=folium.Popup(popup_html, max_width=250),
-                    icon=folium.Icon(color=color)
+                    icon=folium.Icon(color=color, icon="info-sign")
                 ).add_to(marker_cluster)
         
-        st_folium(m, width="100%", height=500)
+        st_folium(m, width="100%", height=600)
         
         # إحصائيات حسب المحافظة
         st.divider()
         st.subheader("📊 إحصائيات حسب المحافظة")
         
-        df_map['الحالة'] = df_map['رقم اللوحة_booked'].apply(lambda x: 'محجوز' if pd.notnull(x) else 'متاح')
-        stats_by_city = df_map.groupby('المحافظة')['الحالة'].value_counts().unstack(fill_value=0)
+        stats_by_city = df_map.groupby('المحافظة').agg({
+            'رقم اللوحة': 'count',
+            'الحالة': lambda x: (x == 'محجوز').sum()
+        }).rename(columns={'رقم اللوحة': 'الإجمالي', 'الحالة': 'المحجوز'})
+        stats_by_city['المتاح'] = stats_by_city['الإجمالي'] - stats_by_city['المحجوز']
+        
         st.dataframe(stats_by_city, use_container_width=True)
     
     # ============================================================
