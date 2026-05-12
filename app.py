@@ -330,7 +330,7 @@ else:
         st.image("https://img.icons8.com/color/96/000000/advertising.png", width=80)
         st.title("القائمة الرئيسية")
         page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 عرض سعر", "📋 تقرير الجرد", "📅 تقرير التوفر الشهري", "⚙️ الإعدادات"], key="main_menu")
-        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+        if st.button("🚪 تسجيل الخروج", use_container_width=True, key="logout_button"):
             st.session_state.auth = False
             st.session_state.cart = {}
             st.rerun()
@@ -1002,7 +1002,7 @@ else:
                 col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
                 
                 with col_btn1:
-                    if st.button("💾 حفظ كمسودة", use_container_width=True):
+                    if st.button("💾 حفظ مسودة", key="save_draft"):
                         if not customer_name:
                             st.error("الرجاء إدخال اسم الزبون")
                         else:
@@ -1018,7 +1018,7 @@ else:
                             st.success("تم الحفظ")
                 
                 with col_btn2:
-                    if st.button("✅ تثبيت نهائي", use_container_width=True):
+                    if st.button("✅ تثبيت نهائي", key="confirm_booking"):
                         if not customer_name:
                             st.error("الرجاء إدخال اسم الزبون")
                         else:
@@ -1042,7 +1042,7 @@ else:
                             st.rerun()
                 
                 with col_btn3:
-                    if st.button("📝 تصدير Word", use_container_width=True):
+                    if st.button("📝 تصدير Word", key="export_word"):
                         word_file = export_word_old(
                             customer_name, 
                             st.session_state.cart, 
@@ -1306,7 +1306,7 @@ else:
             output.seek(0)
             return output
         
-        if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary"):
+        if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary", key="run_report"):
             
             with st.spinner("جاري إنشاء التقرير..."):
                 
@@ -1556,7 +1556,7 @@ else:
             if not available_columns.empty:
                 networks = st.multiselect("اختر الشبكات:", available_columns['الشبكة'].unique().tolist())
                 
-                if st.button("➕ إضافة إلى السلة", type="primary", use_container_width=True):
+                if st.button("➕ إضافة إلى السلة", type="primary", use_container_width=True, key="add_to_cart"):
                     if selected_city not in st.session_state.cart:
                         st.session_state.cart[selected_city] = {}
                     
