@@ -341,8 +341,8 @@ else:
         
         current_year = datetime.now().year
         
-        # إجمالي اللوحات
-        total_boards = pd.read_sql('SELECT COUNT(*) FROM "اعمدة انارة"', conn).iloc[0,0]
+        # جلب جميع اللوحات
+        all_columns_df = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
         
         # عدد اللوحات المحجوزة (DISTINCT - بدون تكرار الفترات)
         bookings_count = pd.read_sql(f'''
@@ -351,6 +351,7 @@ else:
             WHERE "العام" = {current_year}
         ''', conn).iloc[0,0]
         
+        total_boards = len(all_columns_df)
         available_count = total_boards - bookings_count
         
         # عرض المؤشرات
@@ -361,7 +362,22 @@ else:
         
         st.divider()
         
-        # إنشاء الخريطة
+        # جلب الحجوزات لاستخدامها في الخريطة
+        booked_boards_df = pd.read_sql(f'''
+            SELECT DISTINCT "رقم اللوحة" 
+            FROM "حجوزات1" 
+            WHERE "العام" = {current_year}
+        ''', conn)
+        
+        booked_boards_list = booked_boards_df['رقم اللوحة'].tolist() if not booked_boards_df.empty else []
+        
+        # إنشاء DataFrame للخريطة
+        df_map = all_columns_df.copy()
+        df_map['الحالة'] = df_map['رقم اللوحة'].apply(
+            lambda x: 'محجوز' if x in booked_boards_list else 'متاح'
+        )
+        
+        # الخريطة
         st.subheader("🗺️ توزع اللوحات على الخريطة")
         
         m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
