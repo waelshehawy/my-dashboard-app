@@ -556,6 +556,7 @@ else:
             end_date = None
             start_p = ""
             end_p = ""
+            selected_periods = []  # <--- أضف هذا السطر
             
             if calc_method == "حساب بالأيام":
                 import datetime as dt
@@ -585,6 +586,33 @@ else:
                 except ValueError:
                     st.error("❌ صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD")
                     st.stop()
+            
+            else:  # حساب بالفترات
+                # جلب قائمة الفترات من قاعدة البيانات
+                periods_df = pd.read_sql('SELECT namee, no FROM "الفترة" ORDER BY no', conn)
+                period_names = periods_df['namee'].tolist()
+                
+                if not period_names:
+                    st.error("❌ لا توجد فترات في جدول الفترة")
+                    st.stop()
+                
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    start_p = st.selectbox("📅 من فترة:", period_names, key="start_period")
+                with col_p2:
+                    end_p = st.selectbox("📅 إلى فترة:", period_names, index=len(period_names)-1, key="end_period")
+                
+                # حساب عدد الفترات والأيام التقريبية
+                start_idx = period_names.index(start_p)
+                end_idx = period_names.index(end_p)
+                periods_count = abs(end_idx - start_idx) + 1
+                days_count = periods_count * 15  # كل فترة = 15 يوم
+                
+                # تخزين الفترات لاستخدامها عند التثبيت
+                selected_periods = period_names[start_idx:end_idx+1]
+                
+                st.info(f"📅 عدد الفترات: {periods_count} | عدد الأيام التقريبي: {days_count} يوم")
+                st.write(f"📋 الفترات المحددة: {', '.join(selected_periods)}")
             
             # جلب الأسعار
             fee_print, fee_ads = get_fees(draw_df, selected_size, print_type, is_foreign)
