@@ -732,15 +732,17 @@ else:
                                                         VALUES (%s, %s, %s, %s)
                                                     ''', (str(row['رقم اللوحة']), customer_name, year, period))
                                                             # تحديث حالة العرض المقابل في offers_history (إذا كان محفوظاً مسبقاً)
+                            # تحديث حالة العرض إذا كان محفوظاً مسبقاً
                             if 'current_offer_id' in st.session_state:
                                 cur.execute('''
                                     UPDATE "offers_history" SET status = 'Accepted' WHERE id = %s
                                 ''', (st.session_state.current_offer_id,))
-                                conn.commit()
-
-                                st.session_state.cart = {}
-                                st.success("تم التثبيت")
-                                st.rerun()                
+                                del st.session_state.current_offer_id
+                            
+                            conn.commit()
+                            st.session_state.cart = {}
+                            st.success("تم التثبيت")
+                            st.rerun()
                 
                 with col_btn3:
                     if st.button("📝 تصدير Word", use_container_width=True):
