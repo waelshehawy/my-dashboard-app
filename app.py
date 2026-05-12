@@ -751,7 +751,13 @@ else:
                                                         INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
                                                         VALUES (%s, %s, %s, %s)
                                                     ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                                            # تحديث حالة العرض المقابل في offers_history (إذا كان محفوظاً مسبقاً)
+                            if 'current_offer_id' in st.session_state:
+                                cur.execute('''
+                                    UPDATE "offers_history" SET status = 'Accepted' WHERE id = %s
+                                ''', (st.session_state.current_offer_id,))
                                 conn.commit()
+
                                 st.session_state.cart = {}
                                 st.success("تم التثبيت")
                                 st.rerun()                
