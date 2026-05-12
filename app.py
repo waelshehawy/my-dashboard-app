@@ -730,29 +730,31 @@ else:
                             conn.commit()
                             st.success("تم الحفظ")
                 
-                with col_btn2:
-                    if st.button("✅ تثبيت نهائي", use_container_width=True):
-                        if not customer_name:
-                            st.error("الرجاء إدخال اسم الزبون")
-                        else:
-                            cur = conn.cursor()
-                            for city, networks in st.session_state.cart.items():
-                                for net, df in networks.items():
-                                    for _, row in df.iterrows():
-                                        if calc_method == "حساب بالأيام":
-                                            cur.execute('''
-                                                INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "تاريخ البداية", "تاريخ النهاية") 
-                                                VALUES (%s, %s, %s, %s, %s)
-                                            ''', (str(row['رقم اللوحة']), customer_name, year, start_date, end_date))
-                                        else:
-                                            cur.execute('''
-                                                INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
-                                                VALUES (%s, %s, %s, %s)
-                                            ''', (str(row['رقم اللوحة']), customer_name, year, start_p))
-                            conn.commit()
-                            st.session_state.cart = {}
-                            st.success("تم التثبيت")
-                            st.rerun()
+                    with col_btn2:
+                        if st.button("✅ تثبيت نهائي", use_container_width=True):
+                            if not customer_name:
+                                st.error("الرجاء إدخال اسم الزبون")
+                            else:
+                                cur = conn.cursor()
+                                for city, networks in st.session_state.cart.items():
+                                    for net, df in networks.items():
+                                        for _, row in df.iterrows():
+                                            if calc_method == "حساب بالأيام":
+                                                cur.execute('''
+                                                    INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "تاريخ البداية", "تاريخ النهاية") 
+                                                    VALUES (%s, %s, %s, %s, %s)
+                                                ''', (str(row['رقم اللوحة']), customer_name, year, start_date, end_date))
+                                            else:  # حساب بالفترات
+                                                # إدراج سجل لكل فترة في النطاق المحدد
+                                                for period in selected_periods:
+                                                    cur.execute('''
+                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                                        VALUES (%s, %s, %s, %s)
+                                                    ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                conn.commit()
+                                st.session_state.cart = {}
+                                st.success("تم التثبيت")
+                                st.rerun()                
                 
                 with col_btn3:
                     if st.button("📝 تصدير Word", use_container_width=True):
