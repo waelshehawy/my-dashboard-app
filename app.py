@@ -329,7 +329,7 @@ else:
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/000000/advertising.png", width=80)
         st.title("القائمة الرئيسية")
-       page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 عرض سعر", "📋 تقرير الجرد", "📅 تقرير التوفر الشهري", "⚙️ الإعدادات"], key="main_menu")
+        page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 عرض سعر", "📋 تقرير الجرد", "📅 تقرير التوفر الشهري", "⚙️ الإعدادات"], key="main_menu")
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
             st.session_state.auth = False
             st.session_state.cart = {}
