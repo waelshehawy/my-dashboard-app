@@ -341,40 +341,43 @@ else:
         
         current_year = datetime.now().year
         
-        # جلب جميع اللوحات
-        all_columns_df = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+        # إجمالي اللوحات الفعلية (مجموع العدد)
+        total_boards = pd.read_sql('SELECT SUM("العدد") as total FROM "اعمدة انارة"', conn).iloc[0,0]
         
-        # عدد اللوحات المحجوزة (DISTINCT - بدون تكرار الفترات)
-        bookings_count = pd.read_sql(f'''
-            SELECT COUNT(DISTINCT "رقم اللوحة") 
-            FROM "حجوزات1" 
-            WHERE "العام" = {current_year}
+        # اللوحات المحجوزة (مجموع العدد للحجوزات النشطة)
+        booked_boards = pd.read_sql(f'''
+            SELECT COALESCE(SUM(b."العدد"), 0) as booked
+            FROM "اعمدة انارة" b
+            INNER JOIN (
+                SELECT DISTINCT "رقم اللوحة" 
+                FROM "حجوزات1" 
+                WHERE "العام" = {current_year}
+            ) h ON b."رقم اللوحة" = h."رقم اللوحة"
         ''', conn).iloc[0,0]
         
-        total_boards = len(all_columns_df)
-        available_count = total_boards - bookings_count
+        available_boards = total_boards - booked_boards
         
         # عرض المؤشرات
         col1, col2, col3 = st.columns(3)
-        col1.metric("🏢 إجمالي اللوحات", total_boards)
-        col2.metric("🔴 محجوز حالياً", bookings_count)
-        col3.metric("🟢 متاح حالياً", available_count)
+        col1.metric("🏢 إجمالي اللوحات", f"{int(total_boards):,}")
+        col2.metric("🔴 محجوز حالياً", f"{int(booked_boards):,}")
+        col3.metric("🟢 متاح حالياً", f"{int(available_boards):,}")
+        
+        st.progress(booked_boards / total_boards, text=f"📊 نسبة الإشغال: {(booked_boards/total_boards*100):.1f}%")
         
         st.divider()
         
-        # جلب الحجوزات لاستخدامها في الخريطة
-        booked_boards_df = pd.read_sql(f'''
+        # جلب بيانات الخريطة
+        all_columns = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
+        booked_numbers = pd.read_sql(f'''
             SELECT DISTINCT "رقم اللوحة" 
             FROM "حجوزات1" 
             WHERE "العام" = {current_year}
-        ''', conn)
+        ''', conn)['رقم اللوحة'].tolist()
         
-        booked_boards_list = booked_boards_df['رقم اللوحة'].tolist() if not booked_boards_df.empty else []
-        
-        # إنشاء DataFrame للخريطة
-        df_map = all_columns_df.copy()
-        df_map['الحالة'] = df_map['رقم اللوحة'].apply(
-            lambda x: 'محجوز' if x in booked_boards_list else 'متاح'
+        # تحديد الحالة لكل موقع
+        all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(
+            lambda x: 'محجوز' if x in booked_numbers else 'متاح'
         )
         
         # الخريطة
@@ -383,7 +386,7 @@ else:
         m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
         marker_cluster = MarkerCluster().add_to(m)
         
-        for _, row in df_map.iterrows():
+        for _, row in all_columns.iterrows():
             if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')):
                 color = 'red' if row['الحالة'] == 'محجوز' else 'purple'
                 popup_html = f"""
@@ -392,6 +395,7 @@ else:
                     المحافظة: {row['المحافظة']}<br>
                     الشبكة: {row['الشبكة']}<br>
                     الحجم: {row['الحجم']}<br>
+                    العدد: {row['العدد']}<br>
                     الحالة: {row['الحالة']}
                 </div>
                 """
@@ -399,7 +403,7 @@ else:
                 folium.Marker(
                     [row['Latitude'], row['Longitude']],
                     popup=folium.Popup(popup_html, max_width=250),
-                    icon=folium.Icon(color=color, icon="info-sign")
+                    icon=folium.Icon(color=color)
                 ).add_to(marker_cluster)
         
         st_folium(m, width="100%", height=600)
@@ -408,13 +412,21 @@ else:
         st.divider()
         st.subheader("📊 إحصائيات حسب المحافظة")
         
-        stats_by_city = df_map.groupby('المحافظة').agg({
-            'رقم اللوحة': 'count',
-            'الحالة': lambda x: (x == 'محجوز').sum()
-        }).rename(columns={'رقم اللوحة': 'الإجمالي', 'الحالة': 'المحجوز'})
-        stats_by_city['المتاح'] = stats_by_city['الإجمالي'] - stats_by_city['المحجوز']
+        # حساب الإجمالي والمحجوز لكل محافظة (بالأعداد الفعلية)
+        city_stats = []
+        for city in all_columns['المحافظة'].unique():
+            city_data = all_columns[all_columns['المحافظة'] == city]
+            total = city_data['العدد'].sum()
+            booked = city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum()
+            city_stats.append({
+                'المحافظة': city,
+                'الإجمالي': int(total),
+                'المحجوز': int(booked),
+                'المتاح': int(total - booked)
+            })
         
-        st.dataframe(stats_by_city, use_container_width=True)
+        stats_df = pd.DataFrame(city_stats)
+        st.dataframe(stats_df, use_container_width=True)
     
     # ============================================================
     # صفحة عرض سعر (النسخة النهائية المصححة)
