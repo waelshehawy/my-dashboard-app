@@ -457,42 +457,19 @@ else:
                     if hasattr(date_val, 'strftime'):
                         return date_val.strftime('%Y-%m-%d')
                     return str(date_val)[:10]
-                
+            # استرجاع عرض محفوظ
+            st.subheader("📂 استرجاع عرض محفوظ")
+            saved_offers = pd.read_sql('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = \'Pending\' ORDER BY id DESC', conn)
+            
+            if not saved_offers.empty:
                 offer_options = {}
                 for _, row in saved_offers.iterrows():
                     date_str = safe_offer_date(row['offer_date'])
                     offer_options[f"{row['client_name']} ({date_str})"] = row['id']
                 
-                selected_offer = st.selectbox("اختر عرضاً محفوظاً:", ["---"] + list(offer_options.keys()))
+                selected_offer = st.selectbox("اختر عرضاً محفوظاً:", ["---"] + list(offer_options.keys()), key="load_offer_select")
                 
-                if selected_offer != "---" and st.button("🔄 تحميل للسلة"):
-                    try:
-                        offer_id = offer_options[selected_offer]
-                        result = pd.read_sql(f'SELECT cart_json, client_name, start_p, end_p, year FROM "offers_history" WHERE id = {offer_id}', conn)
-                        
-                        if not result.empty:
-                            row = result.iloc[0]
-                            data = json.loads(row['cart_json'])
-                            
-                            if "data" in data:
-                                st.session_state.cart = data["data"]
-                            else:
-                                st.session_state.cart = data
-                            
-                            st.session_state.temp_cust = row['client_name']
-                            
-                            if row['start_p'] and row['end_p']:
-                                st.session_state.loaded_start_p = row['start_p']
-                                st.session_state.loaded_end_p = row['end_p']
-                            if row['year']:
-                                st.session_state.loaded_year = row['year']
-                            
-                            st.success("تم تحميل العرض بنجاح")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"خطأ في تحميل العرض: {str(e)}")
-                
-                if selected_offer != "---" and st.button("🔄 تحميل للسلة"):
+                if selected_offer != "---" and st.button("🔄 تحميل للسلة", key="load_offer_button"):
                     try:
                         offer_id = offer_options[selected_offer]
                         result = pd.read_sql(f'SELECT cart_json, client_name, start_p, end_p, year FROM "offers_history" WHERE id = {offer_id}', conn)
@@ -515,6 +492,9 @@ else:
                                 st.session_state.loaded_end_p = row['end_p']
                             if row['year']:
                                 st.session_state.loaded_year = row['year']
+                            
+                            # تخزين ID العرض الحالي للتحديث لاحقاً عند التثبيت
+                            st.session_state.current_offer_id = offer_id
                             
                             st.success("تم تحميل العرض بنجاح")
                             st.rerun()
