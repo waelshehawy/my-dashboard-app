@@ -798,8 +798,8 @@ else:
             
             st.divider()
             
-            # مخطط دائري
-            st.subheader("🥧 نسبة الإشغال")
+            # ========== مخطط دائري ==========
+            st.subheader("🥧 نسبة الإشغال الكلية")
             fig_pie = go.Figure(data=[go.Pie(
                 labels=['محجوز', 'متاح'],
                 values=[booked_boards_count, available_boards_count],
@@ -809,44 +809,82 @@ else:
             fig_pie.update_layout(height=400)
             st.plotly_chart(fig_pie, use_container_width=True)
             
-            # مخطط شريطي حسب المحافظة
-            st.subheader("📊 حالة الإشغال حسب المحافظة")
-            city_summary = []
-            for city in sorted(all_boards['المحافظة'].unique()):
-                city_data = all_boards[all_boards['المحافظة'] == city]
-                city_total = city_data['العدد'].sum()
-                city_booked = city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum()
-                city_summary.append({
+            # ========== تجميع البيانات حسب المحافظة ==========
+            city_data = []
+            for city in all_boards['المحافظة'].unique():
+                city_df = all_boards[all_boards['المحافظة'] == city]
+                city_total = city_df['العدد'].sum()
+                city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
+                city_available = city_total - city_booked
+                occupancy_rate = (city_booked / city_total * 100) if city_total > 0 else 0
+                city_data.append({
                     'المحافظة': city,
-                    'الأعمدة الكلية': int(city_total),
+                    'الإجمالي': int(city_total),
                     'محجوز': int(city_booked),
-                    'متاح': int(city_total - city_booked),
-                    'نسبة الإشغال': f"{(city_booked/city_total*100):.1f}%" if city_total > 0 else "0%"
+                    'متاح': int(city_available),
+                    'نسبة الإشغال': occupancy_rate
                 })
             
-            city_df = pd.DataFrame(city_summary)
-            st.dataframe(city_df, use_container_width=True)
+            city_stats = pd.DataFrame(city_data)
             
-            # مخطط شريطي
-            fig_bar = go.Figure(data=[
-                go.Bar(name='متاح', x=city_df['المحافظة'], y=city_df['متاح'], marker_color='#22c55e'),
-                go.Bar(name='محجوز', x=city_df['المحافظة'], y=city_df['محجوز'], marker_color='#dc2626')
-            ])
-            fig_bar.update_layout(barmode='stack', height=400)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            # ========== مخطط شريطي بأعمدة تشبه عمود الإعلان ==========
+            st.subheader("📊 نسبة إشغال الأعمدة حسب المحافظة")
             
-            # تفصيل حسب المحافظة والحجم
+            fig = go.Figure()
+            
+            fig.add_trace(go.Bar(
+                x=city_stats['المحافظة'],
+                y=city_stats['نسبة الإشغال'],
+                text=city_stats['نسبة الإشغال'].round(1),
+                textposition='outside',
+                marker=dict(
+                    color=city_stats['نسبة الإشغال'],
+                    colorscale='Reds',
+                    showscale=True,
+                    colorbar=dict(title="نسبة الإشغال %"),
+                    line=dict(width=2, color='black'),
+                ),
+                name='نسبة الإشغال',
+                width=0.5,
+                hovertemplate='<b>%{x}</b><br>نسبة الإشغال: %{y:.1f}%<br>محجوز: %{customdata[0]}<br>متاح: %{customdata[1]}<extra></extra>',
+                customdata=city_stats[['محجوز', 'متاح']].values
+            ))
+            
+            fig.update_traces(
+                marker=dict(
+                    line=dict(width=2, color='#333'),
+                    gradient=dict(type='vertical', color='lightgray')
+                )
+            )
+            
+            fig.update_layout(
+                title="نسبة إشغال الأعمدة الإعلانية حسب المحافظة",
+                xaxis_title="المحافظة",
+                yaxis_title="نسبة الإشغال (%)",
+                yaxis=dict(range=[0, 100], gridcolor='lightgray'),
+                height=500,
+                font=dict(family="Arial", size=14),
+                plot_bgcolor='white'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # ========== جدول تفصيلي ==========
+            st.subheader("📋 تفصيل حسب المحافظة")
+            st.dataframe(city_stats, use_container_width=True)
+            
+            # ========== تفصيل حسب المحافظة والحجم ==========
             st.subheader("📋 تفصيل حسب المحافظة والحجم")
             for city in sorted(all_boards['المحافظة'].unique()):
-                city_data = all_boards[all_boards['المحافظة'] == city]
+                city_data_detail = all_boards[all_boards['المحافظة'] == city]
                 with st.expander(f"📍 محافظة {city}"):
-                    size_data = city_data.groupby(['الحجم', 'الحالة']).agg({
+                    size_data = city_data_detail.groupby(['الحجم', 'الحالة']).agg({
                         'رقم اللوحة': 'count',
                         'العدد': 'sum'
                     }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'}).unstack(fill_value=0)
                     st.dataframe(size_data, use_container_width=True)
             
-            # أزرار التصدير
+            # ========== أزرار التصدير ==========
             st.divider()
             col_exp1, col_exp2 = st.columns(2)
             
