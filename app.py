@@ -480,7 +480,12 @@ else:
                             
                             # استعادة السلة
                             if "data" in data:
-                                st.session_state.cart = data["data"]
+                                                            # تحويل القاموس إلى DataFrame
+                            st.session_state.cart = {}
+                            for city, networks in data["data"].items():
+                                st.session_state.cart[city] = {}
+                                for net, df_dict in networks.items():
+                                    st.session_state.cart[city][net] = pd.DataFrame(df_dict)
                             else:
                                 st.session_state.cart = data
                             
