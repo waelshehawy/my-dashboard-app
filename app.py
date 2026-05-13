@@ -338,100 +338,45 @@ else:
         st.error("❌ لا يمكن الاستمرار بدون اتصال بقاعدة البيانات")
         st.stop()
     
-    # ============================================================
-    # صفحة Dashboard
-    # ============================================================
     if page == "📊 Dashboard":
-        st.title("📊 لوحة التحكم - الخريطة التفاعلية")
+        st.title("📊 لوحة التحكم")
         
-        current_year = datetime.now().year
+        # إضافة صورة عمود إعلان
+        st.image("https://img.icons8.com/color/96/000000/advertising.png", width=80)
         
-        # إجمالي اللوحات الفعلية (مجموع العدد)
-        total_boards = pd.read_sql('SELECT SUM("العدد") as total FROM "اعمدة انارة"', conn).iloc[0,0]
+        # ... الكود السابق لحساب الإحصائيات ...
         
-        # اللوحات المحجوزة (مجموع العدد للحجوزات النشطة)
-        booked_boards = pd.read_sql(f'''
-            SELECT COALESCE(SUM(b."العدد"), 0) as booked
-            FROM "اعمدة انارة" b
-            INNER JOIN (
-                SELECT DISTINCT "رقم اللوحة" 
-                FROM "حجوزات1" 
-                WHERE "العام" = {current_year}
-            ) h ON b."رقم اللوحة" = h."رقم اللوحة"
-        ''', conn).iloc[0,0]
-        
-        available_boards = total_boards - booked_boards
-        
-        # عرض المؤشرات
+        # ========== بطاقات المؤشرات ==========
         col1, col2, col3 = st.columns(3)
-        col1.metric("🏢 إجمالي اللوحات", f"{int(total_boards):,}")
-        col2.metric("🔴 محجوز حالياً", f"{int(booked_boards):,}")
-        col3.metric("🟢 متاح حالياً", f"{int(available_boards):,}")
+        col1.metric("🏢 إجمالي اللوحات", f"{int(total_boards):,}", 
+                    delta=f"{booked_boards/total_boards*100:.1f}%", delta_color="off")
+        col2.metric("🔴 محجوز", f"{int(booked_boards):,}")
+        col3.metric("🟢 متاح", f"{int(available_boards):,}")
         
-        st.progress(booked_boards / total_boards, text=f"📊 نسبة الإشغال: {(booked_boards/total_boards*100):.1f}%")
+        # ========== مخطط دائري ==========
+        fig_pie = go.Figure(data=[go.Pie(
+            labels=['محجوز', 'متاح'],
+            values=[booked_boards, available_boards],
+            hole=0.4,
+            marker_colors=['#dc2626', '#22c55e']
+        )])
+        fig_pie.update_layout(title="نسبة الإشغال الكلية", height=400)
+        st.plotly_chart(fig_pie, use_container_width=True)
         
-        st.divider()
-        
-        # جلب بيانات الخريطة
-        all_columns = pd.read_sql('SELECT * FROM "اعمدة انارة"', conn)
-        booked_numbers = pd.read_sql(f'''
-            SELECT DISTINCT "رقم اللوحة" 
-            FROM "حجوزات1" 
-            WHERE "العام" = {current_year}
-        ''', conn)['رقم اللوحة'].tolist()
-        
-        # تحديد الحالة لكل موقع
-        all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(
-            lambda x: 'محجوز' if x in booked_numbers else 'متاح'
-        )
-        
-        # الخريطة
-        st.subheader("🗺️ توزع اللوحات على الخريطة")
-        
-        m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
-        marker_cluster = MarkerCluster().add_to(m)
-        
-        for _, row in all_columns.iterrows():
-            if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')):
-                color = 'red' if row['الحالة'] == 'محجوز' else 'purple'
-                popup_html = f"""
-                <div dir="rtl" style="font-family: Arial; text-align: right;">
-                    <b>{row['اسم العمود']}</b><br>
-                    المحافظة: {row['المحافظة']}<br>
-                    الشبكة: {row['الشبكة']}<br>
-                    الحجم: {row['الحجم']}<br>
-                    العدد: {row['العدد']}<br>
-                    الحالة: {row['الحالة']}
-                </div>
-                """
-                
-                folium.Marker(
-                    [row['Latitude'], row['Longitude']],
-                    popup=folium.Popup(popup_html, max_width=250),
-                    icon=folium.Icon(color=color)
-                ).add_to(marker_cluster)
-        
-        st_folium(m, width="100%", height=600)
-        
-        # إحصائيات حسب المحافظة
-        st.divider()
-        st.subheader("📊 إحصائيات حسب المحافظة")
-        
-        # حساب الإجمالي والمحجوز لكل محافظة (بالأعداد الفعلية)
-        city_stats = []
-        for city in all_columns['المحافظة'].unique():
+        # ========== مخطط شريطي حسب المحافظة ==========
+        city_booked = []
+        city_total = []
+        for city in stats_df['المحافظة'].tolist():
             city_data = all_columns[all_columns['المحافظة'] == city]
-            total = city_data['العدد'].sum()
-            booked = city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum()
-            city_stats.append({
-                'المحافظة': city,
-                'الإجمالي': int(total),
-                'المحجوز': int(booked),
-                'المتاح': int(total - booked)
-            })
+            city_total.append(city_data['العدد'].sum())
+            city_booked.append(city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum())
         
-        stats_df = pd.DataFrame(city_stats)
-        st.dataframe(stats_df, use_container_width=True)
+        fig_bar = go.Figure(data=[
+            go.Bar(name='متاح', x=stats_df['المحافظة'].tolist(), y=[t-b for t,b in zip(city_total, city_booked)], marker_color='#22c55e'),
+            go.Bar(name='محجوز', x=stats_df['المحافظة'].tolist(), y=city_booked, marker_color='#dc2626')
+        ])
+        fig_bar.update_layout(barmode='stack', title="حالة الإشغال حسب المحافظة", height=400)
+        st.plotly_chart(fig_bar, use_container_width=True)
     
 
     # ============================================================
