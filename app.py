@@ -473,35 +473,35 @@ else:
                     try:
                         offer_id = offer_options[selected_offer]
                         result = pd.read_sql(f'SELECT cart_json, client_name, start_p, end_p, year FROM "offers_history" WHERE id = {offer_id}', conn)
-                        
                             if not result.empty:
                                 row = result.iloc[0]
                                 data = json.loads(row['cart_json'])
                                 
                                 # استعادة السلة (تحويل dict إلى DataFrame)
-                                if "data" in data:
+                            if "data" in data:
                                     cart_raw = data["data"]
-                                else:
+                            else:
                                     cart_raw = data
                                 
                                 st.session_state.cart = {}
-                                for city, networks in cart_raw.items():
+                            for city, networks in cart_raw.items():
                                     st.session_state.cart[city] = {}
-                                    for net, df_dict in networks.items():
+                                for net, df_dict in networks.items():
                                         st.session_state.cart[city][net] = pd.DataFrame(df_dict)
                                 
-                                st.session_state.temp_cust = row['client_name']
+                                 st.session_state.temp_cust = row['client_name']
                                 
-                                if row['start_p'] and row['end_p']:
-                                    st.session_state.loaded_start_p = row['start_p']
-                                    st.session_state.loaded_end_p = row['end_p']
-                                if row['year']:
-                                    st.session_state.loaded_year = row['year']
+                            if row['start_p'] and row['end_p']:
+                               st.session_state.loaded_start_p = row['start_p']
+                               st.session_state.loaded_end_p = row['end_p']
+                            if row['year']:
+                               st.session_state.loaded_year = row['year']
                                 
                                 st.session_state.current_offer_id = offer_id
                                 
                                 st.success("تم تحميل العرض بنجاح")
                                 st.rerun()
+
                     except Exception as e:
                         st.error(f"خطأ في تحميل العرض: {str(e)}")
             
