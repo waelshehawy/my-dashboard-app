@@ -488,7 +488,7 @@ else:
                                     st.session_state.cart[city] = {}                            
 
         except Exception as e:
-            st.error(f"خطأ في تحميل العرض: {str(e)}")
+            st.error(f"حدث خطأ: {str(e)}")        
             import traceback
             st.code(traceback.format_exc())                 
             
