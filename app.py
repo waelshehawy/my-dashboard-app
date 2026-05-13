@@ -50,20 +50,35 @@ def get_engine():
 # ============================================================
 # 3. دوال RTL للـ Word (النسخة النهائية المصححة)
 # ============================================================
-def export_to_excel(df, filename):
-    """تصدير DataFrame إلى Excel مع دعم اللغة العربية"""
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='تقرير', index=False)
-        # ضبط اتجاه الكتابة لليمين
-        workbook = writer.book
-        worksheet = writer.sheets['تقرير']
-        worksheet.right_to_left()
-        
-        # ضبط عرض الأعمدة
-        for i, col in enumerate(df.columns):
-            max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-            worksheet.set_column(i, i, min(max_len, 30))
+# ============================================================
+# 3. دوال RTL للـ Word
+# ============================================================
+def set_table_rtl(table):
+    """تحويل اتجاه الجدول إلى RTL"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
+
+def _force_rtl_style(paragraph):
+    """تطبيق الكتابة من اليمين لليسار على الفقرة"""
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    pPr = paragraph._element.get_or_add_pPr()
+    
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    
+    for run in paragraph.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
+    
+    return paragraph
+
 
 # ============================================================
 # 2. دوال الصلاحيات
