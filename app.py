@@ -74,49 +74,7 @@ def is_admin():
 def is_employee():
     return st.session_state.get('role') == 'employee'
 
-# ============================================================
-# 3. دوال RTL للـ Word (النسخة النهائية المصححة)
-# ============================================================
-def _force_rtl_style(paragraph):
-    """تطبيق الكتابة من اليمين لليسار - نسخة أقوى"""
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-    
-    # محاذاة الفقرة لليمين
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    
-    # الحصول على عنصر خصائص الفقرة
-    pPr = paragraph._element.get_or_add_pPr()
-    
-    # إزالة أي عنصر bidi قديم
-    for elem in pPr.findall(qn('w:bidi')):
-        pPr.remove(elem)
-    
-    # إضافة bidi جديد
-    bidi = OxmlElement('w:bidi')
-    bidi.set(qn('w:val'), '1')
-    pPr.append(bidi)
-    
-    # معالجة كل run
-    for run in paragraph.runs:
-        rPr = run._element.get_or_add_rPr()
-        
-        # إزالة أي عنصر rtl قديم
-        for elem in rPr.findall(qn('w:rtl')):
-            rPr.remove(elem)
-        
-        # إضافة rtl جديد
-        rtl = OxmlElement('w:rtl')
-        rtl.set(qn('w:val'), '1')
-        rPr.append(rtl)
-        
-        # تعيين الخط
-        rFonts = OxmlElement('w:rFonts')
-        rFonts.set(qn('w:cs'), 'Arial')
-        rPr.append(rFonts)
-    
-    return paragraph
+
 
 # ============================================================
 # 4. دوال الأسعار والحسابات
