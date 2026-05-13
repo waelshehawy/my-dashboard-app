@@ -717,38 +717,45 @@ else:
                             st.success("تم الحفظ")
                 
                     with col_btn2:
-                        if st.button("✅ تثبيت نهائي", use_container_width=True):
+                        if st.button("✅ تثبيت نهائي", use_container_width=True, key="confirm_booking"):
                             if not customer_name:
                                 st.error("الرجاء إدخال اسم الزبون")
                             else:
-                                cur = conn.cursor()
-                                for city, networks in st.session_state.cart.items():
-                                    for net, df in networks.items():
-                                        for _, row in df.iterrows():
-                                            if calc_method == "حساب بالأيام":
-                                                cur.execute('''
-                                                    INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "تاريخ البداية", "تاريخ النهاية") 
-                                                    VALUES (%s, %s, %s, %s, %s)
-                                                ''', (str(row['رقم اللوحة']), customer_name, year, start_date, end_date))
-                                            else:  # حساب بالفترات
-                                                # إدراج سجل لكل فترة في النطاق المحدد
-                                                for period in selected_periods:
+                                try:
+                                    cur = conn.cursor()
+                                    
+                                    # إلغاء أي ترانزاكشن معلق
+                                    conn.rollback()
+                                    
+                                    for city, networks in st.session_state.cart.items():
+                                        for net, df in networks.items():
+                                            for _, row in df.iterrows():
+                                                if calc_method == "حساب بالأيام":
                                                     cur.execute('''
-                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
-                                                        VALUES (%s, %s, %s, %s)
-                                                    ''', (str(row['رقم اللوحة']), customer_name, year, period))
-                                                            # تحديث حالة العرض المقابل في offers_history (إذا كان محفوظاً مسبقاً)
-                            # تحديث حالة العرض إذا كان محفوظاً مسبقاً
-                            if 'current_offer_id' in st.session_state:
-                                cur.execute('''
-                                    UPDATE "offers_history" SET status = 'Accepted' WHERE id = %s
-                                ''', (st.session_state.current_offer_id,))
-                                del st.session_state.current_offer_id
-                            
-                            conn.commit()
-                            st.session_state.cart = {}
-                            st.success("تم التثبيت")
-                            st.rerun()
+                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "تاريخ البداية", "تاريخ النهاية") 
+                                                        VALUES (%s, %s, %s, %s, %s)
+                                                    ''', (str(row['رقم اللوحة']), customer_name, year, start_date, end_date))
+                                                else:
+                                                    for period in selected_periods:
+                                                        cur.execute('''
+                                                            INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                                            VALUES (%s, %s, %s, %s)
+                                                        ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                    
+                                    if 'current_offer_id' in st.session_state:
+                                        cur.execute('''
+                                            UPDATE "offers_history" SET status = 'Accepted' WHERE id = %s
+                                        ''', (st.session_state.current_offer_id,))
+                                        del st.session_state.current_offer_id
+                                    
+                                    conn.commit()
+                                    st.session_state.cart = {}
+                                    st.success("تم التثبيت")
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    conn.rollback()
+                                    st.error(f"حدث خطأ: {str(e)}")
                 
                 with col_btn3:
                     if st.button("📝 تصدير Word", use_container_width=True):
