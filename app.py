@@ -18,8 +18,35 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # ============================================================
-# 1. دوال قاعدة البيانات
+# دوال الاتصال بقاعدة البيانات
 # ============================================================
+from sqlalchemy.engine import URL
+
+def get_connection():
+    try:
+        return psycopg2.connect(
+            host="aws-1-eu-north-1.pooler.supabase.com",
+            port="6543",
+            database="postgres",
+            user="postgres.ncuofpvbaglwbdqnpman",
+            password="WaelPreview2026",
+            sslmode="require",
+            connect_timeout=10
+        )
+    except Exception as e:
+        st.error(f"⚠️ فشل الاتصال: {e}")
+        return None
+
+def get_engine():
+    url_obj = URL.create(
+        drivername="postgresql+psycopg2",
+        username="postgres.ncuofpvbaglwbdqnpman",
+        password="WaelPreview2026",
+        host="aws-1-eu-north-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+    )
+    return create_engine(url_obj, connect_args={'sslmode': 'require'})
 # ============================================================
 # 3. دوال RTL للـ Word (النسخة النهائية المصححة)
 # ============================================================
