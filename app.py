@@ -300,21 +300,28 @@ SYRIA_COORDS = {
 }
 
 # حالة تسجيل الدخول
-if "auth" not in st.session_state:
-    st.session_state.auth = False
+def check_login(username, password, conn):
+    df = pd.read_sql(f'''
+        SELECT username, role, full_name FROM "users" 
+        WHERE username = '{username}' AND password = '{password}'
+    ''', conn)
+    if not df.empty:
+        st.session_state.logged_in = True
+        st.session_state.username = df.iloc[0]['username']
+        st.session_state.role = df.iloc[0]['role']
+        st.session_state.full_name = df.iloc[0]['full_name']
+        return True
+    return False
 
-if not st.session_state.auth:
-    st.title("🔒 نظام إدارة الإعلانات - تسجيل الدخول")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        username = st.text_input("اسم المستخدم")
-        password = st.text_input("كلمة المرور", type="password")
-        if st.button("دخول", use_container_width=True):
-            if username == "a" and password == "3900":
-                st.session_state.auth = True
-                st.rerun()
-            else:
-                st.error("اسم المستخدم أو كلمة المرور غير صحيحة")
+# في صفحة تسجيل الدخول
+if not st.session_state.get('logged_in', False):
+    username = st.text_input("اسم المستخدم")
+    password = st.text_input("كلمة المرور", type="password")
+    if st.button("دخول"):
+        if check_login(username, password, conn):
+            st.rerun()
+        else:
+            st.error("بيانات الدخول غير صحيحة")
 else:
     conn = get_connection()
     
