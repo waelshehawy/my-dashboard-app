@@ -19,19 +19,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 from PIL import Image
-def is_admin():
-    return st.session_state.get('role') == 'admin'
 
-def is_employee():
-    return st.session_state.get('role') == 'employee'
-
-def show_for_admin():
-    """تعرض فقط إذا كان المستخدم Admin"""
-    return is_admin()
-
-def show_for_employee():
-    """تعرض فقط إذا كان المستخدم Employee"""
-    return is_employee()
 def export_to_excel(df, filename):
     """تصدير DataFrame إلى Excel مع دعم اللغة العربية"""
     output = io.BytesIO()
@@ -312,28 +300,21 @@ SYRIA_COORDS = {
 }
 
 # حالة تسجيل الدخول
-def check_login(username, password, conn):
-    df = pd.read_sql(f'''
-        SELECT username, role, full_name FROM "users" 
-        WHERE username = '{username}' AND password = '{password}'
-    ''', conn)
-    if not df.empty:
-        st.session_state.logged_in = True
-        st.session_state.username = df.iloc[0]['username']
-        st.session_state.role = df.iloc[0]['role']
-        st.session_state.full_name = df.iloc[0]['full_name']
-        return True
-    return False
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
-# في صفحة تسجيل الدخول
-if not st.session_state.get('logged_in', False):
-    username = st.text_input("اسم المستخدم")
-    password = st.text_input("كلمة المرور", type="password")
-    if st.button("دخول"):
-        if check_login(username, password, conn):
-            st.rerun()
-        else:
-            st.error("بيانات الدخول غير صحيحة")
+if not st.session_state.auth:
+    st.title("🔒 نظام إدارة الإعلانات - تسجيل الدخول")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        username = st.text_input("اسم المستخدم")
+        password = st.text_input("كلمة المرور", type="password")
+        if st.button("دخول", use_container_width=True):
+            if username == "a" and password == "3900":
+                st.session_state.auth = True
+                st.rerun()
+            else:
+                st.error("اسم المستخدم أو كلمة المرور غير صحيحة")
 else:
     conn = get_connection()
     
@@ -672,24 +653,24 @@ else:
                                 st.rerun()
                 
                 st.markdown(f"## 💰 الإجمالي العام: {grand_total:,.2f} $")
-            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-            
-            with col_btn1:
-                if st.button("💾 حفظ كمسودة", use_container_width=True, key="save_draft"):
-                    if not customer_name:
-                        st.error("الرجاء إدخال اسم الزبون")
-                    else:
-                        save_data = {"data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}}
-                        cur = conn.cursor()
-                        cur.execute('''
-                            INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year) 
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                        ''', (customer_name, json.dumps(save_data, ensure_ascii=False), 'Pending', start_p, end_p, year))
-                        conn.commit()
-                        st.success("تم الحفظ")
-            
-            with col_btn2:
-                if is_admin():
+                
+                col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+                
+                with col_btn1:
+                    if st.button("💾 حفظ كمسودة", use_container_width=True):
+                        if not customer_name:
+                            st.error("الرجاء إدخال اسم الزبون")
+                        else:
+                            save_data = {"data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}}
+                            cur = conn.cursor()
+                            cur.execute('''
+                                INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year) 
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                            ''', (customer_name, json.dumps(save_data, ensure_ascii=False), 'Pending', start_p, end_p, year))
+                            conn.commit()
+                            st.success("تم الحفظ")
+                
+                with col_btn2:
                     if st.button("✅ تثبيت نهائي", use_container_width=True, key="confirm_booking"):
                         if not customer_name:
                             st.error("الرجاء إدخال اسم الزبون")
@@ -697,15 +678,20 @@ else:
                             try:
                                 cur = conn.cursor()
                                 conn.rollback()
-                                
                                 for city, networks in st.session_state.cart.items():
                                     for net, df in networks.items():
                                         for _, row in df.iterrows():
-                                            for period in selected_periods:
+                                            if calc_method == "حساب بالأيام":
                                                 cur.execute('''
                                                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
                                                     VALUES (%s, %s, %s, %s)
-                                                ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                                ''', (str(row['رقم اللوحة']), customer_name, year, f"{start_date}_to_{end_date}"))
+                                            else:
+                                                for period in selected_periods:
+                                                    cur.execute('''
+                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                                        VALUES (%s, %s, %s, %s)
+                                                    ''', (str(row['رقم اللوحة']), customer_name, year, period))
                                 
                                 if 'current_offer_id' in st.session_state:
                                     cur.execute('''
@@ -717,24 +703,22 @@ else:
                                 st.session_state.cart = {}
                                 st.success("تم التثبيت")
                                 st.rerun()
-                                
                             except Exception as e:
                                 conn.rollback()
                                 st.error(f"حدث خطأ: {str(e)}")
-                else:
-                    st.button("✅ تثبيت نهائي", use_container_width=True, disabled=True, key="confirm_booking_disabled")
-                    st.caption("🔒 غير مسموح - فقط للمديرين")
-            
-            with col_btn3:
-                if st.button("📝 تصدير Word", use_container_width=True, key="export_word"):
-                    word_file = export_word_old(customer_name, st.session_state.cart, start_p, end_p, grand_total)
-                    st.download_button("📥 تحميل العرض", word_file, f"Offer_{customer_name}.docx", key="download_word")
-            
-            with col_btn4:
-                if st.button("🔴 تفريغ السلة", use_container_width=True, key="clear_cart"):
-                    st.session_state.cart = {}
-                    st.rerun()                                
                 
+                with col_btn3:
+                    if st.button("📝 تصدير Word", use_container_width=True):
+                        word_file = export_word_old(customer_name, st.session_state.cart, start_p, end_p, grand_total)
+                        st.download_button("📥 تحميل العرض", word_file, f"Offer_{customer_name}.docx")
+                
+                with col_btn4:
+                    if st.button("🔴 تفريغ", use_container_width=True):
+                        st.session_state.cart = {}
+                        st.rerun()
+        
+        except Exception as e:
+            st.error(f"حدث خطأ: {str(e)}")
     
     # ============================================================
     # صفحة تقرير الجرد
