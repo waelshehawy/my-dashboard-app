@@ -325,7 +325,7 @@ else:
     
     # الشريط الجانبي
     with st.sidebar:
-        st.image("shoping2.png", width=100)
+        st.image("shooping2.png", width=100)
         st.title("القائمة الرئيسية")
         page = st.radio("القائمة الرئيسية", ["📊 Dashboard", "📄 عرض سعر", "📋 تقرير الجرد", "📅 تقرير التوفر الشهري", "⚙️ الإعدادات"])
         st.divider()
