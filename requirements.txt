@@ -8,3 +8,5 @@ sqlalchemy
 xlsxwriter
 python-dateutil
 lxml
+plotly
+pillow
