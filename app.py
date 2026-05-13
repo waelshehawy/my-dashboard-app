@@ -827,7 +827,7 @@ else:
             
             city_stats = pd.DataFrame(city_data)
             
-            # ========== مخطط شريطي بأعمدة تشبه عمود الإعلان ==========
+            # ========== مخطط شريطي بأعمدة تشبه عمود الإعلان (مصحح) ==========
             st.subheader("📊 نسبة إشغال الأعمدة حسب المحافظة")
             
             fig = go.Figure()
@@ -845,17 +845,10 @@ else:
                     line=dict(width=2, color='black'),
                 ),
                 name='نسبة الإشغال',
-                width=0.5,
+                width=0.6,
                 hovertemplate='<b>%{x}</b><br>نسبة الإشغال: %{y:.1f}%<br>محجوز: %{customdata[0]}<br>متاح: %{customdata[1]}<extra></extra>',
                 customdata=city_stats[['محجوز', 'متاح']].values
             ))
-            
-            fig.update_traces(
-                marker=dict(
-                    line=dict(width=2, color='#333'),
-                    gradient=dict(type='vertical', color='lightgray')
-                )
-            )
             
             fig.update_layout(
                 title="نسبة إشغال الأعمدة الإعلانية حسب المحافظة",
