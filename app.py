@@ -672,24 +672,24 @@ else:
                                 st.rerun()
                 
                 st.markdown(f"## 💰 الإجمالي العام: {grand_total:,.2f} $")
-                
-                col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-                
-                with col_btn1:
-                    if st.button("💾 حفظ كمسودة", use_container_width=True):
-                        if not customer_name:
-                            st.error("الرجاء إدخال اسم الزبون")
-                        else:
-                            save_data = {"data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}}
-                            cur = conn.cursor()
-                            cur.execute('''
-                                INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year) 
-                                VALUES (%s, %s, %s, %s, %s, %s)
-                            ''', (customer_name, json.dumps(save_data, ensure_ascii=False), 'Pending', start_p, end_p, year))
-                            conn.commit()
-                            st.success("تم الحفظ")
-                
-                with col_btn2:
+            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+            
+            with col_btn1:
+                if st.button("💾 حفظ كمسودة", use_container_width=True, key="save_draft"):
+                    if not customer_name:
+                        st.error("الرجاء إدخال اسم الزبون")
+                    else:
+                        save_data = {"data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}}
+                        cur = conn.cursor()
+                        cur.execute('''
+                            INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year) 
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        ''', (customer_name, json.dumps(save_data, ensure_ascii=False), 'Pending', start_p, end_p, year))
+                        conn.commit()
+                        st.success("تم الحفظ")
+            
+            with col_btn2:
+                if is_admin():
                     if st.button("✅ تثبيت نهائي", use_container_width=True, key="confirm_booking"):
                         if not customer_name:
                             st.error("الرجاء إدخال اسم الزبون")
@@ -697,20 +697,15 @@ else:
                             try:
                                 cur = conn.cursor()
                                 conn.rollback()
+                                
                                 for city, networks in st.session_state.cart.items():
                                     for net, df in networks.items():
                                         for _, row in df.iterrows():
-                                            if calc_method == "حساب بالأيام":
+                                            for period in selected_periods:
                                                 cur.execute('''
                                                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
                                                     VALUES (%s, %s, %s, %s)
-                                                ''', (str(row['رقم اللوحة']), customer_name, year, f"{start_date}_to_{end_date}"))
-                                            else:
-                                                for period in selected_periods:
-                                                    cur.execute('''
-                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
-                                                        VALUES (%s, %s, %s, %s)
-                                                    ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                                ''', (str(row['رقم اللوحة']), customer_name, year, period))
                                 
                                 if 'current_offer_id' in st.session_state:
                                     cur.execute('''
@@ -722,22 +717,24 @@ else:
                                 st.session_state.cart = {}
                                 st.success("تم التثبيت")
                                 st.rerun()
+                                
                             except Exception as e:
                                 conn.rollback()
                                 st.error(f"حدث خطأ: {str(e)}")
+                else:
+                    st.button("✅ تثبيت نهائي", use_container_width=True, disabled=True, key="confirm_booking_disabled")
+                    st.caption("🔒 غير مسموح - فقط للمديرين")
+            
+            with col_btn3:
+                if st.button("📝 تصدير Word", use_container_width=True, key="export_word"):
+                    word_file = export_word_old(customer_name, st.session_state.cart, start_p, end_p, grand_total)
+                    st.download_button("📥 تحميل العرض", word_file, f"Offer_{customer_name}.docx", key="download_word")
+            
+            with col_btn4:
+                if st.button("🔴 تفريغ السلة", use_container_width=True, key="clear_cart"):
+                    st.session_state.cart = {}
+                    st.rerun()                                
                 
-                with col_btn3:
-                    if st.button("📝 تصدير Word", use_container_width=True):
-                        word_file = export_word_old(customer_name, st.session_state.cart, start_p, end_p, grand_total)
-                        st.download_button("📥 تحميل العرض", word_file, f"Offer_{customer_name}.docx")
-                
-                with col_btn4:
-                    if st.button("🔴 تفريغ", use_container_width=True):
-                        st.session_state.cart = {}
-                        st.rerun()
-        
-        except Exception as e:
-            st.error(f"حدث خطأ: {str(e)}")
     
     # ============================================================
     # صفحة تقرير الجرد
