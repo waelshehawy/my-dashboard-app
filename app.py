@@ -709,7 +709,6 @@ else:
         st.title("📋 التقرير التجميعي - جرد اللوحات")
         
         try:
-            # التحقق من وجود فترات
             periods_df = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
             
             if periods_df.empty:
@@ -735,14 +734,14 @@ else:
                 st.warning("⚠️ لا توجد فترات في النطاق المحدد")
                 st.stop()
             
-            # جلب بيانات المواقع والأعمدة
+            # جلب البيانات
             all_boards = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم", "العدد" FROM "اعمدة انارة"', conn)
             
             if all_boards.empty:
                 st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
                 st.stop()
             
-            # جلب الحجوزات في الفترة المحددة
+            # جلب الحجوزات
             period_placeholders = ", ".join([f"'{p}'" for p in target_periods])
             booked_query = f'''
                 SELECT DISTINCT "رقم اللوحة" 
@@ -752,78 +751,83 @@ else:
             '''
             booked_in_period = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
             
-            # تحديد الحالة لكل موقع
+            # تحديد الحالة
             all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_in_period else 'متاح')
             
-            # حساب الإحصائيات للمواقع (عدد السجلات)
+            # إحصائيات عامة
             total_sites = len(all_boards)
             booked_sites = len(booked_in_period)
             available_sites = total_sites - booked_sites
             
-            # حساب الإحصائيات للأعمدة (مجموع العدد)
-            total_boards = all_boards['العدد'].sum()
-            booked_boards = all_boards[all_boards['الحالة'] == 'محجوز']['العدد'].sum()
-            available_boards = all_boards[all_boards['الحالة'] == 'متاح']['العدد'].sum()
+            total_boards_count = all_boards['العدد'].sum()
+            booked_boards_count = all_boards[all_boards['الحالة'] == 'محجوز']['العدد'].sum()
+            available_boards_count = total_boards_count - booked_boards_count
             
             # عرض المؤشرات
             st.subheader("📊 إحصائيات عامة")
-            
             col_a, col_b, col_c = st.columns(3)
             with col_a:
                 st.metric("🏢 المواقع الكلية", total_sites)
-                st.metric("📌 الأعمدة الكلية", int(total_boards))
+                st.metric("📌 الأعمدة الكلية", int(total_boards_count))
             with col_b:
                 st.metric("🔴 المواقع المحجوزة", booked_sites)
-                st.metric("🔴 الأعمدة المحجوزة", int(booked_boards))
+                st.metric("🔴 الأعمدة المحجوزة", int(booked_boards_count))
             with col_c:
                 st.metric("🟢 المواقع المتاحة", available_sites)
-                st.metric("🟢 الأعمدة المتاحة", int(available_boards))
+                st.metric("🟢 الأعمدة المتاحة", int(available_boards_count))
+            
+            # شريط نسبة الإشغال
+            st.progress(booked_boards_count / total_boards_count, text=f"📈 نسبة إشغال الأعمدة: {(booked_boards_count/total_boards_count*100):.1f}%")
             
             st.divider()
             
-            # عرض التفاصيل حسب المحافظة
-            st.subheader("📋 تفاصيل حسب المحافظة")
+            # مخطط دائري
+            st.subheader("🥧 نسبة الإشغال")
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=['محجوز', 'متاح'],
+                values=[booked_boards_count, available_boards_count],
+                hole=0.4,
+                marker_colors=['#dc2626', '#22c55e']
+            )])
+            fig_pie.update_layout(height=400)
+            st.plotly_chart(fig_pie, use_container_width=True)
             
+            # مخطط شريطي حسب المحافظة
+            st.subheader("📊 حالة الإشغال حسب المحافظة")
+            city_summary = []
             for city in sorted(all_boards['المحافظة'].unique()):
                 city_data = all_boards[all_boards['المحافظة'] == city]
-                
-                if city_data.empty:
-                    continue
-                
-                # إحصائيات المحافظة
-                city_sites = len(city_data)
-                city_boards = city_data['العدد'].sum()
-                city_booked_sites = city_data[city_data['الحالة'] == 'محجوز'].shape[0]
-                city_booked_boards = city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum()
-                city_available_sites = city_sites - city_booked_sites
-                city_available_boards = city_boards - city_booked_boards
-                
-                st.write(f"### 📍 محافظة {city}")
-                
-                col_s1, col_s2, col_s3 = st.columns(3)
-                with col_s1:
-                    st.metric("المواقع", f"{city_available_sites} / {city_sites}")
-                with col_s2:
-                    st.metric("الأعمدة", f"{int(city_available_boards)} / {int(city_boards)}")
-                with col_s3:
-                    st.metric("نسبة الإشغال", f"{(city_booked_boards/city_boards*100):.1f}%" if city_boards > 0 else "0%")
-                
-                # جدول تفصيلي حسب الحجم
-                table_data = []
-                for size in city_data['الحجم'].unique():
-                    size_data = city_data[city_data['الحجم'] == size]
-                    size_sites = len(size_data)
-                    size_boards = size_data['العدد'].sum()
-                    size_booked = size_data[size_data['الحالة'] == 'محجوز']['العدد'].sum()
-                    table_data.append({
-                        'الحجم': size,
-                        'عدد المواقع': size_sites,
-                        'عدد الأعمدة': int(size_boards),
-                        'محجوز': int(size_booked),
-                        'متاح': int(size_boards - size_booked)
-                    })
-                
-                st.dataframe(pd.DataFrame(table_data), use_container_width=True)
+                city_total = city_data['العدد'].sum()
+                city_booked = city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum()
+                city_summary.append({
+                    'المحافظة': city,
+                    'الأعمدة الكلية': int(city_total),
+                    'محجوز': int(city_booked),
+                    'متاح': int(city_total - city_booked),
+                    'نسبة الإشغال': f"{(city_booked/city_total*100):.1f}%" if city_total > 0 else "0%"
+                })
+            
+            city_df = pd.DataFrame(city_summary)
+            st.dataframe(city_df, use_container_width=True)
+            
+            # مخطط شريطي
+            fig_bar = go.Figure(data=[
+                go.Bar(name='متاح', x=city_df['المحافظة'], y=city_df['متاح'], marker_color='#22c55e'),
+                go.Bar(name='محجوز', x=city_df['المحافظة'], y=city_df['محجوز'], marker_color='#dc2626')
+            ])
+            fig_bar.update_layout(barmode='stack', height=400)
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+            # تفصيل حسب المحافظة والحجم
+            st.subheader("📋 تفصيل حسب المحافظة والحجم")
+            for city in sorted(all_boards['المحافظة'].unique()):
+                city_data = all_boards[all_boards['المحافظة'] == city]
+                with st.expander(f"📍 محافظة {city}"):
+                    size_data = city_data.groupby(['الحجم', 'الحالة']).agg({
+                        'رقم اللوحة': 'count',
+                        'العدد': 'sum'
+                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'}).unstack(fill_value=0)
+                    st.dataframe(size_data, use_container_width=True)
             
             # أزرار التصدير
             st.divider()
@@ -831,41 +835,24 @@ else:
             
             with col_exp1:
                 csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button(
-                    "📊 تصدير إلى Excel",
-                    csv_data,
-                    f"Inventory_Report_{report_year}.csv",
-                    "text/csv",
-                    use_container_width=True
-                )
+                st.download_button("📊 تصدير إلى Excel", csv_data, f"Inventory_Report_{report_year}.csv", "text/csv", use_container_width=True)
             
             with col_exp2:
-                # تصدير Word (نسخة مبسطة)
                 from docx import Document
-                
                 doc = Document()
                 h = doc.add_heading(f"تقرير حالة الإشغال لعام {report_year}", 0)
                 h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                
                 p_period = doc.add_paragraph()
                 p_period.add_run(f"الفترة من: {from_period} لغاية: {to_period}").bold = True
-                
                 doc.add_paragraph()
                 p_summary = doc.add_paragraph()
-                p_summary.add_run(f"المواقع الكلية: {total_sites} | الأعمدة الكلية: {int(total_boards)}")
-                p_summary.add_run(f"\nالمواقع المحجوزة: {booked_sites} | الأعمدة المحجوزة: {int(booked_boards)}")
-                p_summary.add_run(f"\nالمواقع المتاحة: {available_sites} | الأعمدة المتاحة: {int(available_boards)}")
-                
+                p_summary.add_run(f"المواقع الكلية: {total_sites} | الأعمدة الكلية: {int(total_boards_count)}")
+                p_summary.add_run(f"\nالمواقع المحجوزة: {booked_sites} | الأعمدة المحجوزة: {int(booked_boards_count)}")
+                p_summary.add_run(f"\nالمواقع المتاحة: {available_sites} | الأعمدة المتاحة: {int(available_boards_count)}")
                 word_out = io.BytesIO()
                 doc.save(word_out)
-                st.download_button(
-                    "📝 تصدير إلى Word",
-                    word_out.getvalue(),
-                    f"Inventory_Report_{report_year}.docx",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
-                
+                st.download_button("📝 تصدير إلى Word", word_out.getvalue(), f"Inventory_Report_{report_year}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+        
         except Exception as e:
             st.error(f"حدث خطأ في التقرير: {str(e)}")
     # ============================================================
