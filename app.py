@@ -19,7 +19,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 from PIL import Image
+def is_admin():
+    return st.session_state.get('role') == 'admin'
 
+def is_employee():
+    return st.session_state.get('role') == 'employee'
+
+def show_for_admin():
+    """تعرض فقط إذا كان المستخدم Admin"""
+    return is_admin()
+
+def show_for_employee():
+    """تعرض فقط إذا كان المستخدم Employee"""
+    return is_employee()
 def export_to_excel(df, filename):
     """تصدير DataFrame إلى Excel مع دعم اللغة العربية"""
     output = io.BytesIO()
