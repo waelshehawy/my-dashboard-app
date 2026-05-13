@@ -629,18 +629,39 @@ else:
             ''', conn)
             
             # جلب المواقع المحجوزة
-            if calc_method == "حساب بالأيام" and start_date and end_date:
-                booked_query = f'''
-                    SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-                    WHERE "العام" = {year} 
-                    AND "تاريخ البداية" <= '{end_date}' 
-                    AND "تاريخ النهاية" >= '{start_date}'
-                '''
-            else:
-                booked_query = f'''
-                    SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-                    WHERE "العام" = {year} 
-                    AND "فترة الحجز" IN ('{start_p}')
+                # جلب المواقع المحجوزة في نفس الفترة
+                booked_boards = []
+                
+                if calc_method == "حساب بالأيام" and start_date and end_date:
+                    booked_query = f'''
+                        SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
+                        WHERE "العام" = {year} 
+                        AND "تاريخ البداية" <= '{end_date}' 
+                        AND "تاريخ النهاية" >= '{start_date}'
+                    '''
+                    booked_df = pd.read_sql(booked_query, conn)
+                    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+                    
+                else:  # حساب بالفترات
+                    # تجميع جميع الفترات بين start_p و end_p
+                    periods_df = pd.read_sql('SELECT namee FROM "الفترة" ORDER BY no', conn)
+                    period_names = periods_df['namee'].tolist()
+                    start_idx = period_names.index(start_p)
+                    end_idx = period_names.index(end_p)
+                    all_periods = period_names[start_idx:end_idx+1]
+                    
+                    # إنشاء استعلام لجلب اللوحات المحجوزة في أي من هذه الفترات
+                    period_placeholders = ', '.join([f"'{p}'" for p in all_periods])
+                    booked_query = f'''
+                        SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
+                        WHERE "العام" = {year} 
+                        AND "فترة الحجز" IN ({period_placeholders})
+                    '''
+                    booked_df = pd.read_sql(booked_query, conn)
+                    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+                
+                # فلترة المواقع المتاحة (المحجوزة تزال)
+                available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]
                 '''
             
             try:
