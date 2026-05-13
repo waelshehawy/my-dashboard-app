@@ -15,6 +15,11 @@ from docx.oxml import OxmlElement
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from datetime import date
+import plotly.express as px
+import plotly.graph_objects as go
+import base64
+from PIL import Image
+
 def export_to_excel(df, filename):
     """تصدير DataFrame إلى Excel مع دعم اللغة العربية"""
     output = io.BytesIO()
