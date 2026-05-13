@@ -733,4 +733,262 @@ elif page == "📋 تقرير الجرد":
         fig_pie.update_layout(height=400)
         st.plotly_chart(fig_pie, use_container_width=True)
         
-        # تج
+        # تجميع البيانات حسب المحافظة
+        city_data = []
+        for city in all_boards['المحافظة'].unique():
+            city_df = all_boards[all_boards['المحافظة'] == city]
+            city_total = city_df['العدد'].sum()
+            city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
+            city_available = city_total - city_booked
+            occupancy_rate = (city_booked / city_total * 100) if city_total > 0 else 0
+            city_data.append({
+                'المحافظة': city,
+                'الإجمالي': int(city_total),
+                'محجوز': int(city_booked),
+                'متاح': int(city_available),
+                'نسبة الإشغال': occupancy_rate
+            })
+        
+        city_stats = pd.DataFrame(city_data)
+        
+        st.subheader("📊 نسبة إشغال الأعمدة حسب المحافظة")
+        
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=city_stats['المحافظة'],
+            y=city_stats['نسبة الإشغال'],
+            text=city_stats['نسبة الإشغال'].round(1),
+            textposition='outside',
+            marker=dict(
+                color=city_stats['نسبة الإشغال'],
+                colorscale='Reds',
+                showscale=True,
+                colorbar=dict(title="نسبة الإشغال %"),
+                line=dict(width=2, color='black'),
+            ),
+            name='نسبة الإشغال',
+            width=0.6,
+            hovertemplate='<b>%{x}</b><br>نسبة الإشغال: %{y:.1f}%<br>محجوز: %{customdata[0]}<br>متاح: %{customdata[1]}<extra></extra>',
+            customdata=city_stats[['محجوز', 'متاح']].values
+        ))
+        
+        fig.update_layout(
+            title="نسبة إشغال الأعمدة الإعلانية حسب المحافظة",
+            xaxis_title="المحافظة",
+            yaxis_title="نسبة الإشغال (%)",
+            yaxis=dict(range=[0, 100], gridcolor='lightgray'),
+            height=500,
+            font=dict(family="Arial", size=14),
+            plot_bgcolor='white'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.subheader("📋 تفصيل حسب المحافظة")
+        st.dataframe(city_stats, use_container_width=True)
+        
+        st.subheader("📋 تفصيل حسب المحافظة والحجم")
+        for city in sorted(all_boards['المحافظة'].unique()):
+            city_data_detail = all_boards[all_boards['المحافظة'] == city]
+            with st.expander(f"📍 محافظة {city}"):
+                size_data = city_data_detail.groupby(['الحجم', 'الحالة']).agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'}).unstack(fill_value=0)
+                st.dataframe(size_data, use_container_width=True)
+        
+        st.divider()
+        col_exp1, col_exp2 = st.columns(2)
+        
+        with col_exp1:
+            csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button("📊 تصدير إلى Excel", csv_data, f"Inventory_Report_{report_year}.csv", "text/csv", use_container_width=True)
+        
+        with col_exp2:
+            from docx import Document
+            doc = Document()
+            h = doc.add_heading(f"تقرير حالة الإشغال لعام {report_year}", 0)
+            h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_period = doc.add_paragraph()
+            p_period.add_run(f"الفترة من: {from_period} لغاية: {to_period}").bold = True
+            doc.add_paragraph()
+            p_summary = doc.add_paragraph()
+            p_summary.add_run(f"المواقع الكلية: {total_sites} | الأعمدة الكلية: {int(total_boards_count)}")
+            p_summary.add_run(f"\nالمواقع المحجوزة: {booked_sites} | الأعمدة المحجوزة: {int(booked_boards_count)}")
+            p_summary.add_run(f"\nالمواقع المتاحة: {available_sites} | الأعمدة المتاحة: {int(available_boards_count)}")
+            word_out = io.BytesIO()
+            doc.save(word_out)
+            st.download_button("📝 تصدير إلى Word", word_out.getvalue(), f"Inventory_Report_{report_year}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+    
+    except Exception as e:
+        st.error(f"حدث خطأ في التقرير: {str(e)}")
+
+# ============================================================
+# صفحة تقرير التوفر الشهري
+# ============================================================
+elif page == "📅 تقرير التوفر الشهري":
+    st.title("📋 تقرير الأعمدة المتاحة")
+    st.info("يعرض هذا التقرير الأعمدة المتاحة حالياً")
+    
+    from datetime import date, timedelta
+    
+    def export_available_word(df, total_count):
+        doc = Document()
+        title = doc.add_heading("تقرير الأعمدة المتاحة", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        p = doc.add_paragraph()
+        p.add_run(f"التاريخ: {date.today().strftime('%d/%m/%Y')}")
+        _force_rtl_style(p)
+        doc.add_paragraph()
+        
+        p = doc.add_paragraph()
+        p.add_run(f"إجمالي الأعمدة المتاحة: {total_count} عمود").bold = True
+        _force_rtl_style(p)
+        doc.add_paragraph()
+        
+        for city in sorted(df['المحافظة'].unique()):
+            city_df = df[df['المحافظة'] == city]
+            city_count = len(city_df)
+            city_total_boards = city_df['العدد'].sum() if 'العدد' in city_df.columns else city_count
+            
+            p = doc.add_paragraph()
+            p.add_run(f"■ محافظة {city}").bold = True
+            p.runs[0].font.size = Pt(14)
+            _force_rtl_style(p)
+            
+            table = doc.add_table(rows=1, cols=3)
+            table.style = 'Table Grid'
+            set_table_rtl(table)
+            
+            hdr = table.rows[0].cells
+            hdr[0].text = "رقم اللوحة"
+            hdr[1].text = "اسم العمود"
+            hdr[2].text = "العدد"
+            for cell in hdr:
+                for para in cell.paragraphs:
+                    _force_rtl_style(para)
+                tc_pr = cell._element.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:fill'), '660099')
+                tc_pr.append(shd)
+                if cell.paragraphs[0].runs:
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+            
+            for _, row in city_df.iterrows():
+                cells = table.add_row().cells
+                cells[0].text = str(row['رقم اللوحة'])
+                cells[1].text = str(row['اسم العمود'])
+                cells[2].text = str(row['العدد']) if 'العدد' in row else "1"
+                for cell in cells:
+                    for para in cell.paragraphs:
+                        _force_rtl_style(para)
+            
+            doc.add_paragraph()
+            p = doc.add_paragraph()
+            p.add_run(f"إجمالي محافظة {city}: {city_total_boards} لوحة").bold = True
+            _force_rtl_style(p)
+            doc.add_paragraph()
+            doc.add_paragraph()
+        
+        p = doc.add_paragraph()
+        p.add_run("═" * 40).bold = True
+        _force_rtl_style(p)
+        
+        p = doc.add_paragraph()
+        p.add_run(f"المجموع الكلي للأعمدة المتاحة: {total_count} لوحة").bold = True
+        p.runs[0].font.size = Pt(14)
+        _force_rtl_style(p)
+        
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return output
+    
+    current_year = date.today().year
+    today = date.today()
+    
+    all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"', conn)
+    
+    bookings_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}'
+    booked_df = pd.read_sql(bookings_query, conn)
+    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+    
+    available_df = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
+    total_available = len(available_df)
+    total_boards_count = available_df['العدد'].sum() if 'العدد' in available_df.columns else total_available
+    
+    st.success(f"✅ {total_available} موقعاً ({int(total_boards_count)} لوحة) متاحة")
+    
+    st.subheader("📊 ملخص حسب المحافظة")
+    summary = available_df.groupby('المحافظة').agg({
+        'رقم اللوحة': 'count',
+        'العدد': 'sum'
+    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
+    st.dataframe(summary, use_container_width=True)
+    
+    st.subheader("📋 قائمة الأعمدة المتاحة")
+    st.dataframe(available_df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True, height=400)
+    
+    word_file = export_available_word(available_df, int(total_boards_count))
+    st.download_button(
+        "📝 تحميل التقرير (Word)",
+        word_file,
+        f"available_columns_{date.today().strftime('%Y%m%d')}.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        use_container_width=True
+    )
+
+# ============================================================
+# صفحة الإعدادات
+# ============================================================
+elif page == "⚙️ الإعدادات":
+    if not is_admin():
+        st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
+        st.stop()
+    
+    st.title("⚙️ إعدادات النظام - إدارة الجداول الثابتة")
+    st.warning("⚠️ تحذير: تعديل هذه الجداول يؤثر مباشرة على النظام. يرجى الحذر.")
+    
+    try:
+        engine = get_engine()
+        tab1, tab2, tab3 = st.tabs(["🗄️ أعمدة الإنارة", "📅 سجل الحجوزات", "💰 أجور الرسم"])
+        
+        with tab1:
+            st.subheader("إدارة بيانات أعمدة الإنارة")
+            df_boards = pd.read_sql('SELECT * FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"', conn)
+            edited_boards = st.data_editor(df_boards, num_rows="dynamic", key="edit_boards")
+            if st.button("💾 حفظ أعمدة الإنارة", key="save_boards"):
+                with engine.begin() as cn:
+                    cn.execute(text('DELETE FROM "اعمدة انارة"'))
+                    edited_boards.to_sql("اعمدة انارة", cn, if_exists="append", index=False)
+                st.success("✅ تم تحديث أعمدة الإنارة")
+        
+        with tab2:
+            st.subheader("إدارة سجل الحجوزات")
+            df_bookings = pd.read_sql('SELECT * FROM "حجوزات1" LIMIT 500', conn)
+            edited_bookings = st.data_editor(df_bookings, num_rows="dynamic", key="edit_bookings")
+            if st.button("💾 حفظ سجل الحجوزات", key="save_bookings"):
+                with engine.begin() as cn:
+                    cn.execute(text('DELETE FROM "حجوزات1"'))
+                    edited_bookings.to_sql("حجوزات1", cn, if_exists="append", index=False)
+                st.success("✅ تم تحديث سجل الحجوزات")
+        
+        with tab3:
+            st.subheader("إدارة أجور الرسم")
+            st.info("💡 أضف 'عرض شهري' للعملاء العاديين أو 'اجنبي شهري' للعملاء الأجانب")
+            df_fees = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
+            edited_fees = st.data_editor(df_fees, num_rows="dynamic", key="edit_fees")
+            if st.button("💾 حفظ أجور الرسم", key="save_fees"):
+                with engine.begin() as cn:
+                    cn.execute(text('DELETE FROM "اسماء الرسم"'))
+                    edited_fees.to_sql("اسماء الرسم", cn, if_exists="append", index=False)
+                st.success("✅ تم تحديث أجور الرسم")
+    
+    except Exception as e:
+        st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
+
+# ============================================================
+# إغلاق الاتصال
+# ============================================================
+conn.close()
