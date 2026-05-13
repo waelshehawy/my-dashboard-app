@@ -487,8 +487,10 @@ else:
                                 for city, networks in cart_raw.items():
                                     st.session_state.cart[city] = {}                            
 
-                    except Exception as e:
+                     except Exception as e:
                         st.error(f"خطأ في تحميل العرض: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
             
             st.divider()
             
