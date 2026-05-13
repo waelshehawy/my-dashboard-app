@@ -514,7 +514,8 @@ else:
             with col_opt2:
                 st.write("")
             
-            calc_method = st.radio("طريقة الحساب:", ["حساب بالأيام", "حساب بالفترات"], horizontal=True)
+            calc_method = "حساب بالفترات"  # تثبيت القيمة بدون اختيار من المستخدم
+           #calc_method = st.radio("طريقة الحساب:", ["حساب بالأيام", "حساب بالفترات"], horizontal=True)  # مؤجل
             
             days_count = 14
             start_date = None
