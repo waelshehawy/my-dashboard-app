@@ -720,13 +720,20 @@ else:
         st.title("📋 التقرير التجميعي - جرد اللوحات")
         
         try:
+            # التحقق من وجود فترات
             periods_df = pd.read_sql('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"', conn)
+            
+            if periods_df.empty:
+                st.error("❌ لا توجد فترات في جدول الفترة")
+                st.stop()
+            
+            period_names = periods_df['namee'].tolist()
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                from_period = st.selectbox("من فترة:", periods_df['namee'].tolist(), key="from_period")
+                from_period = st.selectbox("من فترة:", period_names, key="from_period")
             with col2:
-                to_period = st.selectbox("إلى فترة:", periods_df['namee'].tolist(), index=len(periods_df)-1, key="to_period")
+                to_period = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1, key="to_period")
             with col3:
                 report_year = st.number_input("العام:", value=datetime.now().year, key="report_year")
             
@@ -735,8 +742,16 @@ else:
             to_idx = int(periods_df[periods_df['namee'] == to_period]['no'].iloc[0])
             target_periods = periods_df[(periods_df['no'] >= from_idx) & (periods_df['no'] <= to_idx)]['namee'].tolist()
             
+            if not target_periods:
+                st.warning("⚠️ لا توجد فترات في النطاق المحدد")
+                st.stop()
+            
             # جلب بيانات المواقع والأعمدة
             all_boards = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الحجم", "العدد" FROM "اعمدة انارة"', conn)
+            
+            if all_boards.empty:
+                st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
+                st.stop()
             
             # جلب الحجوزات في الفترة المحددة
             period_placeholders = ", ".join([f"'{p}'" for p in target_periods])
@@ -777,65 +792,14 @@ else:
             
             st.divider()
             
-            # أزرار التصدير
-            col_exp1, col_exp2 = st.columns(2)
-            
-            with col_exp1:
-                csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button(
-                    "📊 تصدير إلى Excel",
-                    csv_data,
-                    f"Inventory_Report_{report_year}.csv",
-                    "text/csv",
-                    use_container_width=True
-                )
-            
-            with col_exp2:
-                # تصدير Word
-                from docx import Document
-                from docx.shared import Pt
-                
-                doc = Document()
-                h = doc.add_heading(f"تقرير حالة الإشغال لعام {report_year}", 0)
-                h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                
-                p_period = doc.add_paragraph()
-                p_period.add_run(f"الفترة من: {from_period} لغاية: {to_period}").bold = True
-                
-                # جدول الإحصائيات
-                table = doc.add_table(rows=5, cols=2)
-                table.style = 'Table Grid'
-                
-                rows = [
-                    ("المواقع الكلية", total_sites),
-                    ("الأعمدة الكلية", int(total_boards)),
-                    ("المواقع المحجوزة", booked_sites),
-                    ("الأعمدة المحجوزة", int(booked_boards)),
-                    ("المواقع المتاحة", available_sites),
-                    ("الأعمدة المتاحة", int(available_boards))
-                ]
-                
-                for i, (label, value) in enumerate(rows):
-                    cells = table.rows[i].cells
-                    cells[0].text = label
-                    cells[1].text = str(value)
-                
-                word_out = io.BytesIO()
-                doc.save(word_out)
-                st.download_button(
-                    "📝 تصدير إلى Word",
-                    word_out.getvalue(),
-                    f"Inventory_Report_{report_year}.docx",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
-            
             # عرض التفاصيل حسب المحافظة
-            st.divider()
             st.subheader("📋 تفاصيل حسب المحافظة")
             
             for city in sorted(all_boards['المحافظة'].unique()):
                 city_data = all_boards[all_boards['المحافظة'] == city]
+                
+                if city_data.empty:
+                    continue
                 
                 # إحصائيات المحافظة
                 city_sites = len(city_data)
@@ -856,12 +820,62 @@ else:
                     st.metric("نسبة الإشغال", f"{(city_booked_boards/city_boards*100):.1f}%" if city_boards > 0 else "0%")
                 
                 # جدول تفصيلي حسب الحجم
-                city_stats = city_data.groupby(['الحجم', 'الحالة']).agg({
-                    'رقم اللوحة': 'count',
-                    'العدد': 'sum'
-                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'}).unstack(fill_value=0)
+                table_data = []
+                for size in city_data['الحجم'].unique():
+                    size_data = city_data[city_data['الحجم'] == size]
+                    size_sites = len(size_data)
+                    size_boards = size_data['العدد'].sum()
+                    size_booked = size_data[size_data['الحالة'] == 'محجوز']['العدد'].sum()
+                    table_data.append({
+                        'الحجم': size,
+                        'عدد المواقع': size_sites,
+                        'عدد الأعمدة': int(size_boards),
+                        'محجوز': int(size_booked),
+                        'متاح': int(size_boards - size_booked)
+                    })
                 
-                st.dataframe(city_stats, use_container_width=True)
+                st.dataframe(pd.DataFrame(table_data), use_container_width=True)
+            
+            # أزرار التصدير
+            st.divider()
+            col_exp1, col_exp2 = st.columns(2)
+            
+            with col_exp1:
+                csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    "📊 تصدير إلى Excel",
+                    csv_data,
+                    f"Inventory_Report_{report_year}.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+            
+            with col_exp2:
+                # تصدير Word (نسخة مبسطة)
+                from docx import Document
+                
+                doc = Document()
+                h = doc.add_heading(f"تقرير حالة الإشغال لعام {report_year}", 0)
+                h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                p_period = doc.add_paragraph()
+                p_period.add_run(f"الفترة من: {from_period} لغاية: {to_period}").bold = True
+                
+                doc.add_paragraph()
+                p_summary = doc.add_paragraph()
+                p_summary.add_run(f"المواقع الكلية: {total_sites} | الأعمدة الكلية: {int(total_boards)}")
+                p_summary.add_run(f"\nالمواقع المحجوزة: {booked_sites} | الأعمدة المحجوزة: {int(booked_boards)}")
+                p_summary.add_run(f"\nالمواقع المتاحة: {available_sites} | الأعمدة المتاحة: {int(available_boards)}")
+                
+                word_out = io.BytesIO()
+                doc.save(word_out)
+                st.download_button(
+                    "📝 تصدير إلى Word",
+                    word_out.getvalue(),
+                    f"Inventory_Report_{report_year}.docx",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
                 
         except Exception as e:
             st.error(f"حدث خطأ في التقرير: {str(e)}")
