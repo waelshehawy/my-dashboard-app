@@ -889,7 +889,7 @@ elif page == "📅 تقرير التوفر الشهري":
             hdr[1].text = "اسم العمود"
             hdr[2].text = "العدد"
             for cell in hdr:
-                 for p in cell.paragraphs:
+                for p in cell.paragraphs:
                     _force_rtl_style(p)
                 tc_pr = cell._element.get_or_add_tcPr()
                 shd = OxmlElement('w:shd')
