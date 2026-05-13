@@ -338,45 +338,84 @@ else:
         st.error("❌ لا يمكن الاستمرار بدون اتصال بقاعدة البيانات")
         st.stop()
     
+    # ============================================================
+    # صفحة Dashboard
+    # ============================================================
     if page == "📊 Dashboard":
-        st.title("📊 لوحة التحكم")
+        st.title("📊 لوحة التحكم - نظام إدارة الإعلانات")
         
-        # إضافة صورة عمود إعلان
+        # صورة عمود إعلان
         st.image("https://img.icons8.com/color/96/000000/advertising.png", width=80)
         
-        # ... الكود السابق لحساب الإحصائيات ...
+        current_year = datetime.now().year
+        
+        # جلب البيانات
+        all_columns = pd.read_sql('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"', conn)
+        
+        # جلب الحجوزات في العام الحالي
+        booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}'
+        booked_df = pd.read_sql(booked_query, conn)
+        booked_boards_list = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+        
+        # تحديد الحالة
+        all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_boards_list else 'متاح')
+        
+        # إجمالي الأعمدة (اللوحات)
+        total_boards = all_columns['العدد'].sum()
+        booked_boards = all_columns[all_columns['الحالة'] == 'محجوز']['العدد'].sum()
+        available_boards = total_boards - booked_boards
         
         # ========== بطاقات المؤشرات ==========
+        st.subheader("📊 إحصائيات عامة")
         col1, col2, col3 = st.columns(3)
-        col1.metric("🏢 إجمالي اللوحات", f"{int(total_boards):,}", 
-                    delta=f"{booked_boards/total_boards*100:.1f}%", delta_color="off")
+        col1.metric("🏢 إجمالي اللوحات", f"{int(total_boards):,}")
         col2.metric("🔴 محجوز", f"{int(booked_boards):,}")
         col3.metric("🟢 متاح", f"{int(available_boards):,}")
         
+        # شريط نسبة الإشغال
+        st.progress(booked_boards / total_boards, text=f"📈 نسبة الإشغال: {(booked_boards/total_boards*100):.1f}%")
+        
+        st.divider()
+        
         # ========== مخطط دائري ==========
+        st.subheader("🥧 نسبة الإشغال")
         fig_pie = go.Figure(data=[go.Pie(
             labels=['محجوز', 'متاح'],
             values=[booked_boards, available_boards],
             hole=0.4,
             marker_colors=['#dc2626', '#22c55e']
         )])
-        fig_pie.update_layout(title="نسبة الإشغال الكلية", height=400)
+        fig_pie.update_layout(height=400)
         st.plotly_chart(fig_pie, use_container_width=True)
         
         # ========== مخطط شريطي حسب المحافظة ==========
-        city_booked = []
-        city_total = []
-        for city in stats_df['المحافظة'].tolist():
-            city_data = all_columns[all_columns['المحافظة'] == city]
-            city_total.append(city_data['العدد'].sum())
-            city_booked.append(city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum())
+        st.subheader("📊 حالة الإشغال حسب المحافظة")
+        
+        city_data = []
+        for city in all_columns['المحافظة'].unique():
+            city_df = all_columns[all_columns['المحافظة'] == city]
+            city_total = city_df['العدد'].sum()
+            city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
+            city_data.append({
+                'المحافظة': city,
+                'الإجمالي': int(city_total),
+                'محجوز': int(city_booked),
+                'متاح': int(city_total - city_booked),
+                'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
+            })
+        
+        city_stats = pd.DataFrame(city_data)
         
         fig_bar = go.Figure(data=[
-            go.Bar(name='متاح', x=stats_df['المحافظة'].tolist(), y=[t-b for t,b in zip(city_total, city_booked)], marker_color='#22c55e'),
-            go.Bar(name='محجوز', x=stats_df['المحافظة'].tolist(), y=city_booked, marker_color='#dc2626')
+            go.Bar(name='متاح', x=city_stats['المحافظة'], y=city_stats['متاح'], marker_color='#22c55e'),
+            go.Bar(name='محجوز', x=city_stats['المحافظة'], y=city_stats['محجوز'], marker_color='#dc2626')
         ])
-        fig_bar.update_layout(barmode='stack', title="حالة الإشغال حسب المحافظة", height=400)
+        fig_bar.update_layout(barmode='stack', height=400)
         st.plotly_chart(fig_bar, use_container_width=True)
+        
+        # عرض الجدول التفصيلي
+        st.subheader("📋 تفصيل حسب المحافظة")
+        st.dataframe(city_stats, use_container_width=True)
     
 
     # ============================================================
