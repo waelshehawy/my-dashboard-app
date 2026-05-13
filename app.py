@@ -661,7 +661,7 @@ else:
                     booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
                 
                 # فلترة المواقع المتاحة (المحجوزة تزال)
-                available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]
+                available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]              
                 '''
             
             try:
