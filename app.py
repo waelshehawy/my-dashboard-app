@@ -20,34 +20,36 @@ import plotly.express as px
 # ============================================================
 # 1. دوال قاعدة البيانات
 # ============================================================
-from sqlalchemy.engine import URL
+# ============================================================
+# 3. دوال RTL للـ Word (النسخة النهائية المصححة)
+# ============================================================
+def set_table_rtl(table):
+    """تحويل اتجاه الجدول إلى RTL"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
 
-def get_connection():
-    try:
-        return psycopg2.connect(
-            host="aws-1-eu-north-1.pooler.supabase.com",
-            port="6543",
-            database="postgres",
-            user="postgres.ncuofpvbaglwbdqnpman",
-            password="WaelPreview2026",
-            sslmode="require",
-            connect_timeout=10
-        )
-    except Exception as e:
-        st.error(f"⚠️ فشل الاتصال: {e}")
-        return None
-
-def get_engine():
-    url_obj = URL.create(
-        drivername="postgresql+psycopg2",
-        username="postgres.ncuofpvbaglwbdqnpman",
-        password="WaelPreview2026",
-        host="aws-1-eu-north-1.pooler.supabase.com",
-        port="6543",
-        database="postgres",
-    )
-    return create_engine(url_obj, connect_args={'sslmode': 'require'})
-
+def _force_rtl_style(paragraph):
+    """تطبيق الكتابة من اليمين لليسار على الفقرة"""
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    pPr = paragraph._element.get_or_add_pPr()
+    
+    # إضافة عنصر bidi للفقرة
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    
+    # معالجة كل run في الفقرة
+    for run in paragraph.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
+    
+    return paragraph
 # ============================================================
 # 2. دوال الصلاحيات
 # ============================================================
