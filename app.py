@@ -51,7 +51,25 @@ def get_engine():
 # 3. دوال RTL للـ Word (النسخة النهائية المصححة)
 # ============================================================
 
-
+def _force_rtl_style(p):
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    pPr = p._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    for run in p.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:cs'), 'Arial')
+        rPr.append(rFonts)
+def set_table_rtl(table):
+    """تحويل اتجاه الجدول إلى RTL"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
 def force_rtl_paragraph(p):
     """تطبيق الكتابة من اليمين لليسار على الفقرة"""
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
