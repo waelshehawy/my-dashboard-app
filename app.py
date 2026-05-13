@@ -428,11 +428,9 @@ else:
         stats_df = pd.DataFrame(city_stats)
         st.dataframe(stats_df, use_container_width=True)
     
+
     # ============================================================
-    # صفحة عرض سعر (النسخة النهائية المصححة)
-    # ============================================================
-    # ============================================================
-    # صفحة عرض سعر (النسخة النهائية المصححة)
+    # صفحة عرض سعر
     # ============================================================
     elif page == "📄 عرض سعر":
         st.title("📄 بناء عرض سعر جديد")
@@ -443,12 +441,10 @@ else:
                 manage_expired_offers(conn)
             
             # استرجاع عرض محفوظ
-            # استرجاع عرض محفوظ
             st.subheader("📂 استرجاع عرض محفوظ")
             saved_offers = pd.read_sql('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = \'Pending\' ORDER BY id DESC', conn)
             
             if not saved_offers.empty:
-                # معالجة آمنة للتاريخ
                 def safe_offer_date(date_val):
                     if date_val is None:
                         return "بدون تاريخ"
@@ -457,11 +453,7 @@ else:
                     if hasattr(date_val, 'strftime'):
                         return date_val.strftime('%Y-%m-%d')
                     return str(date_val)[:10]
-            # استرجاع عرض محفوظ
-            st.subheader("📂 استرجاع عرض محفوظ")
-            saved_offers = pd.read_sql('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = \'Pending\' ORDER BY id DESC', conn)
-            
-            if not saved_offers.empty:
+                
                 offer_options = {}
                 for _, row in saved_offers.iterrows():
                     date_str = safe_offer_date(row['offer_date'])
@@ -478,12 +470,7 @@ else:
                             row = result.iloc[0]
                             data = json.loads(row['cart_json'])
                             
-                            # استعادة السلة
-                            if "data" in data:
-                                cart_raw = data["data"]
-                            else:
-                                cart_raw = data
-                            
+                            cart_raw = data.get("data", data)
                             st.session_state.cart = {}
                             for city, networks in cart_raw.items():
                                 st.session_state.cart[city] = {}
@@ -491,50 +478,36 @@ else:
                                     st.session_state.cart[city][net] = pd.DataFrame(df_dict)
                             
                             st.session_state.temp_cust = row['client_name']
-                            
-                            if row['start_p'] and row['end_p']:
-                                st.session_state.loaded_start_p = row['start_p']
-                                st.session_state.loaded_end_p = row['end_p']
-                            if row['year']:
-                                st.session_state.loaded_year = row['year']
-                            
                             st.session_state.current_offer_id = offer_id
                             
                             st.success("تم تحميل العرض بنجاح")
                             st.rerun()
                     except Exception as e:
                         st.error(f"خطأ في تحميل العرض: {str(e)}")
-                        import traceback
-                        st.code(traceback.format_exc())            
             
             st.divider()
             
             # تحميل البيانات الأساسية
             draw_df = pd.read_sql('SELECT * FROM "اسماء الرسم"', conn)
             
-            # بيانات العميل
             customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""))
             st.session_state.temp_cust = customer_name
             
-            # خيارات الإعلان
             col1, col2, col3 = st.columns(3)
             with col1:
                 selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
             with col2:
                 print_type = st.radio("🖨️ نوع الطباعة:", ["عادي", "سكوتش"], horizontal=True)
             with col3:
-                # استعادة العام المحفوظ
                 default_year = st.session_state.get('loaded_year', 2026)
                 year = st.number_input("📅 العام:", min_value=2024, max_value=2030, value=default_year)
             
-            # خيارات الحساب
             col_opt1, col_opt2 = st.columns(2)
             with col_opt1:
-                is_foreign = st.checkbox("🌍 منتج أجنبي ")
+                is_foreign = st.checkbox("🌍 منتج أجنبي")
             with col_opt2:
                 st.write("")
             
-            # اختيار التاريخ - مع دعم الفترات أو التواريخ
             calc_method = st.radio("طريقة الحساب:", ["حساب بالأيام", "حساب بالفترات"], horizontal=True)
             
             days_count = 14
@@ -542,11 +515,10 @@ else:
             end_date = None
             start_p = ""
             end_p = ""
-            selected_periods = []  # <--- أضف هذا السطر
+            selected_periods = []
             
             if calc_method == "حساب بالأيام":
                 import datetime as dt
-                
                 col_date1, col_date2 = st.columns(2)
                 with col_date1:
                     start_date_str = st.text_input("📅 تاريخ البداية (YYYY-MM-DD)", f"{year}-04-01")
@@ -554,18 +526,13 @@ else:
                     end_date_str = st.text_input("📅 تاريخ النهاية (YYYY-MM-DD)", f"{year}-04-10")
                 
                 try:
-                    # التحقق من الصيغة
                     dt.datetime.strptime(start_date_str, '%Y-%m-%d')
                     dt.datetime.strptime(end_date_str, '%Y-%m-%d')
-                    
                     start_date = start_date_str
                     end_date = end_date_str
-                    
-                    # حساب الأيام
                     d1 = dt.datetime.strptime(start_date_str, '%Y-%m-%d').date()
                     d2 = dt.datetime.strptime(end_date_str, '%Y-%m-%d').date()
                     days_count = (d2 - d1).days + 1
-                    
                     start_p = start_date_str
                     end_p = end_date_str
                     st.info(f"📅 عدد الأيام: {days_count} يوم")
@@ -573,11 +540,9 @@ else:
                     st.error("❌ صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD")
                     st.stop()
             
-            else:  # حساب بالفترات
-                # جلب قائمة الفترات من قاعدة البيانات
+            else:
                 periods_df = pd.read_sql('SELECT namee, no FROM "الفترة" ORDER BY no', conn)
                 period_names = periods_df['namee'].tolist()
-                
                 if not period_names:
                     st.error("❌ لا توجد فترات في جدول الفترة")
                     st.stop()
@@ -588,24 +553,15 @@ else:
                 with col_p2:
                     end_p = st.selectbox("📅 إلى فترة:", period_names, index=len(period_names)-1, key="end_period")
                 
-                # حساب عدد الفترات والأيام التقريبية
                 start_idx = period_names.index(start_p)
                 end_idx = period_names.index(end_p)
                 periods_count = abs(end_idx - start_idx) + 1
-                days_count = periods_count * 15  # كل فترة = 15 يوم
-                
-                # تخزين الفترات لاستخدامها عند التثبيت
+                days_count = periods_count * 15
                 selected_periods = period_names[start_idx:end_idx+1]
-                
                 st.info(f"📅 عدد الفترات: {periods_count} | عدد الأيام التقريبي: {days_count} يوم")
-                st.write(f"📋 الفترات المحددة: {', '.join(selected_periods)}")
             
-            # جلب الأسعار
             fee_print, fee_ads = get_fees(draw_df, selected_size, print_type, is_foreign)
             per_column_price = fee_print + (fee_ads / 28 * days_count)
-            
-            st.info(f"💰 أجر الطباعة: {fee_print}$ | أجر العرض الشهري: {fee_ads}$")
-            st.info(f"💵 الإجمالي لكل عمود: {per_column_price:.2f}$")
             
             st.success(f"""
             💰 **تفاصيل الأسعار:**
@@ -614,14 +570,12 @@ else:
             - **الإجمالي لكل عمود: {per_column_price:.2f}$**
             """)
             
-            # اختيار المحافظة والشبكات
             st.divider()
             st.subheader("📍 اختيار المواقع")
             
             cities = pd.read_sql('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"', conn)['المحافظة'].tolist()
             selected_city = st.selectbox("اختر المحافظة:", cities)
             
-            # جلب المواقع المتاحة
             available_columns = pd.read_sql(f'''
                 SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم" 
                 FROM "اعمدة انارة" 
@@ -629,61 +583,38 @@ else:
             ''', conn)
             
             # جلب المواقع المحجوزة
-              # جلب المواقع المحجوزة في نفس الفترة
-booked_boards = []
-
-if calc_method == "حساب بالأيام" and start_date and end_date:
-    booked_query = f'''
-        SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-        WHERE "العام" = {year} 
-        AND "تاريخ البداية" <= '{end_date}' 
-        AND "تاريخ النهاية" >= '{start_date}'
-    '''
-    booked_df = pd.read_sql(booked_query, conn)
-    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
-    
-else:
-    # حساب بالفترات
-    periods_df = pd.read_sql('SELECT namee FROM "الفترة" ORDER BY no', conn)
-    period_names = periods_df['namee'].tolist()
-    start_idx = period_names.index(start_p)
-    end_idx = period_names.index(end_p)
-    all_periods = period_names[start_idx:end_idx+1]
-    
-    period_placeholders = ', '.join([f"'{p}'" for p in all_periods])
-    booked_query = f'''
-        SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-        WHERE "العام" = {year} 
-        AND "فترة الحجز" IN ({period_placeholders})
-    '''
-    booked_df = pd.read_sql(booked_query, conn)
-    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
-
-# فلترة المواقع المتاحة
-available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]              
+            booked_boards = []
+            if calc_method == "حساب بالأيام" and start_date and end_date:
+                booked_query = f'''
+                    SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
+                    WHERE "العام" = {year} 
+                    AND "تاريخ البداية" <= '{end_date}' 
+                    AND "تاريخ النهاية" >= '{start_date}'
                 '''
-            
-            try:
-                booked_boards = pd.read_sql(booked_query, conn)['رقم اللوحة'].tolist()
-            except:
-                booked_boards = []
+                booked_df = pd.read_sql(booked_query, conn)
+                booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+            else:
+                period_placeholders = ', '.join([f"'{p}'" for p in selected_periods])
+                booked_query = f'''
+                    SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
+                    WHERE "العام" = {year} 
+                    AND "فترة الحجز" IN ({period_placeholders})
+                '''
+                booked_df = pd.read_sql(booked_query, conn)
+                booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
             
             available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]
             
             if not available_columns.empty:
                 networks = st.multiselect("اختر الشبكات:", available_columns['الشبكة'].unique().tolist())
-                
                 if st.button("➕ إضافة إلى السلة", type="primary", use_container_width=True):
                     if selected_city not in st.session_state.cart:
                         st.session_state.cart[selected_city] = {}
-                    
                     for net in networks:
                         net_data = available_columns[available_columns['الشبكة'] == net].copy()
                         net_data['fee_print'] = fee_print
                         net_data['fee_ads'] = fee_ads
-                        net_data['fee_ads_monthly'] = fee_ads  # للتوافق مع القديم
                         st.session_state.cart[selected_city][net] = net_data
-                    
                     st.success(f"تمت الإضافة")
                     st.rerun()
             else:
@@ -693,7 +624,6 @@ available_columns = available_columns[~available_columns['رقم اللوحة'].
             if st.session_state.cart:
                 st.divider()
                 st.subheader("🛒 سلة العروض")
-                
                 grand_total = 0.0
                 
                 for city, networks in list(st.session_state.cart.items()):
@@ -709,7 +639,6 @@ available_columns = available_columns[~available_columns['رقم اللوحة'].
                             per_col = fp + (fam / 28 * days_count)
                             section_total = qty * per_col
                             grand_total += section_total
-                            
                             st.info(f"العدد: {qty} | لكل عمود: {per_col:.2f}$ | الإجمالي: {section_total:.2f}$")
                             
                             if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
@@ -725,9 +654,7 @@ available_columns = available_columns[~available_columns['رقم اللوحة'].
                         if not customer_name:
                             st.error("الرجاء إدخال اسم الزبون")
                         else:
-                            save_data = {
-                                "data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}
-                            }
+                            save_data = {"data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}}
                             cur = conn.cursor()
                             cur.execute('''
                                 INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year) 
@@ -736,56 +663,46 @@ available_columns = available_columns[~available_columns['رقم اللوحة'].
                             conn.commit()
                             st.success("تم الحفظ")
                 
-                    with col_btn2:
-                        if st.button("✅ تثبيت نهائي", use_container_width=True, key="confirm_booking"):
-                            if not customer_name:
-                                st.error("الرجاء إدخال اسم الزبون")
-                            else:
-                                try:
-                                    cur = conn.cursor()
-                                    
-                                    # إلغاء أي ترانزاكشن معلق
-                                    conn.rollback()
-                                    
-                                    for city, networks in st.session_state.cart.items():
-                                        for net, df in networks.items():
-                                            for _, row in df.iterrows():
-                                                if calc_method == "حساب بالأيام":
+                with col_btn2:
+                    if st.button("✅ تثبيت نهائي", use_container_width=True, key="confirm_booking"):
+                        if not customer_name:
+                            st.error("الرجاء إدخال اسم الزبون")
+                        else:
+                            try:
+                                cur = conn.cursor()
+                                conn.rollback()
+                                for city, networks in st.session_state.cart.items():
+                                    for net, df in networks.items():
+                                        for _, row in df.iterrows():
+                                            if calc_method == "حساب بالأيام":
+                                                cur.execute('''
+                                                    INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                                    VALUES (%s, %s, %s, %s)
+                                                ''', (str(row['رقم اللوحة']), customer_name, year, f"{start_date}_to_{end_date}"))
+                                            else:
+                                                for period in selected_periods:
                                                     cur.execute('''
-                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "تاريخ البداية", "تاريخ النهاية") 
-                                                        VALUES (%s, %s, %s, %s, %s)
-                                                    ''', (str(row['رقم اللوحة']), customer_name, year, start_date, end_date))
-                                                else:
-                                                    for period in selected_periods:
-                                                        cur.execute('''
-                                                            INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
-                                                            VALUES (%s, %s, %s, %s)
-                                                        ''', (str(row['رقم اللوحة']), customer_name, year, period))
-                                    
-                                    if 'current_offer_id' in st.session_state:
-                                        cur.execute('''
-                                            UPDATE "offers_history" SET status = 'Accepted' WHERE id = %s
-                                        ''', (st.session_state.current_offer_id,))
-                                        del st.session_state.current_offer_id
-                                    
-                                    conn.commit()
-                                    st.session_state.cart = {}
-                                    st.success("تم التثبيت")
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    conn.rollback()
-                                    st.error(f"حدث خطأ: {str(e)}")
+                                                        INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                                        VALUES (%s, %s, %s, %s)
+                                                    ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                
+                                if 'current_offer_id' in st.session_state:
+                                    cur.execute('''
+                                        UPDATE "offers_history" SET status = 'Accepted' WHERE id = %s
+                                    ''', (st.session_state.current_offer_id,))
+                                    del st.session_state.current_offer_id
+                                
+                                conn.commit()
+                                st.session_state.cart = {}
+                                st.success("تم التثبيت")
+                                st.rerun()
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"حدث خطأ: {str(e)}")
                 
                 with col_btn3:
                     if st.button("📝 تصدير Word", use_container_width=True):
-                        word_file = export_word_old(
-                            customer_name, 
-                            st.session_state.cart, 
-                            start_p, 
-                            end_p, 
-                            grand_total
-                        )
+                        word_file = export_word_old(customer_name, st.session_state.cart, start_p, end_p, grand_total)
                         st.download_button("📥 تحميل العرض", word_file, f"Offer_{customer_name}.docx")
                 
                 with col_btn4:
