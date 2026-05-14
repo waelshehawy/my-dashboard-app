@@ -333,6 +333,7 @@ with st.sidebar:
         "📋 تقرير الجرد",
         "📅 تقرير التوفر الشهري",
         "🗺️ تقرير جميع المواقع",
+        "📐 تقرير تجميعي حسب الحجوم",
         "⚙️ الإعدادات"
     ], key="main_menu")
     
@@ -1247,6 +1248,303 @@ elif page == "🗺️ تقرير جميع المواقع":
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
+
+# ============================================================
+# صفحة تقرير تجميعي حسب الحجوم
+# ============================================================
+elif page == "📐 تقرير تجميعي حسب الحجوم":
+    st.title("📐 تقرير تجميعي حسب الحجوم")
+    st.info("يعرض هذا التقرير توزع اللوحات حسب الحجوم المقسمة إلى ثلاث مجموعات")
+    
+    from datetime import date
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    import io
+    import pandas as pd
+    
+    # دوال RTL
+    def set_table_rtl(table):
+        tblPr = table._element.xpath('w:tblPr')[0]
+        bidi = OxmlElement('w:bidiVisual')
+        tblPr.append(bidi)
+    
+    def force_rtl_style(p):
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        pPr = p._element.get_or_add_pPr()
+        bidi = OxmlElement('w:bidi')
+        bidi.set(qn('w:val'), '1')
+        pPr.append(bidi)
+        for run in p.runs:
+            rPr = run._element.get_or_add_rPr()
+            rtl = OxmlElement('w:rtl')
+            rtl.set(qn('w:val'), '1')
+            rPr.append(rtl)
+            rFonts = OxmlElement('w:rFonts')
+            rFonts.set(qn('w:cs'), 'Arial')
+            rPr.append(rFonts)
+    
+    # جلب البيانات
+    all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"', conn)
+    
+    if all_columns.empty:
+        st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
+        st.stop()
+    
+    # تعريف مجموعات الحجوم
+    group1_sizes = ['3*6', '3x6', '3 × 6']  # الحجم 3x6
+    group2_sizes = ['2*1', '2x1', '2 × 1', '125*185', '125x185', '125 × 185']  # الحجمين 2x1 و 125x185
+    # باقي الحجوم تلقائياً في group3
+    
+    # تصنيف البيانات
+    def classify_size(size):
+        size_str = str(size).strip()
+        if size_str in group1_sizes or size_str.replace(' ', '') in ['3*6', '3x6']:
+            return 'المجموعة الأولى: حجم 3×6'
+        elif size_str in group2_sizes or size_str.replace(' ', '') in ['2*1', '2x1', '125*185', '125x185']:
+            return 'المجموعة الثانية: حجمي 2×1 و 125×185'
+        else:
+            return 'المجموعة الثالثة: باقي الحجوم'
+    
+    all_columns['المجموعة'] = all_columns['الحجم'].apply(classify_size)
+    
+    # إحصائيات عامة
+    st.subheader("📊 إحصائيات عامة")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📌 إجمالي الأعمدة", f"{int(all_columns['العدد'].sum()):,}")
+    col2.metric("🗺️ إجمالي المواقع", len(all_columns))
+    col3.metric("📏 عدد الأحجام المختلفة", all_columns['الحجم'].nunique())
+    
+    st.divider()
+    
+    # ملخص المجموعات
+    st.subheader("📊 ملخص المجموعات")
+    group_summary = all_columns.groupby('المجموعة').agg({
+        'رقم اللوحة': 'count',
+        'العدد': 'sum'
+    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+    group_summary['عدد الأعمدة'] = group_summary['عدد الأعمدة'].astype(int)
+    st.dataframe(group_summary, use_container_width=True)
+    
+    st.divider()
+    
+    # دالة لعرض تفاصيل مجموعة
+    def display_group_details(df, group_name):
+        st.header(f"📌 {group_name}")
+        
+        group_df = df[df['المجموعة'] == group_name]
+        if group_df.empty:
+            st.info(f"لا توجد بيانات في {group_name}")
+            return
+        
+        # إحصائيات المجموعة
+        total_sites = len(group_df)
+        total_boards = group_df['العدد'].sum()
+        st.info(f"📊 إجمالي المواقع: {total_sites} | إجمالي الأعمدة: {int(total_boards)}")
+        
+        # تفصيل حسب المحافظة
+        st.subheader(f"📍 توزع {group_name} حسب المحافظة")
+        city_summary = group_df.groupby('المحافظة').agg({
+            'رقم اللوحة': 'count',
+            'العدد': 'sum'
+        }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+        city_summary['عدد الأعمدة'] = city_summary['عدد الأعمدة'].astype(int)
+        st.dataframe(city_summary, use_container_width=True)
+        
+        # تفصيل حسب المحافظة والشبكة
+        st.subheader(f"📡 توزع {group_name} حسب المحافظة والشبكة")
+        for city in sorted(group_df['المحافظة'].unique()):
+            city_df = group_df[group_df['المحافظة'] == city]
+            with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)"):
+                
+                # تفصيل حسب الشبكة
+                network_summary = city_df.groupby('الشبكة').agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                network_summary['عدد الأعمدة'] = network_summary['عدد الأعمدة'].astype(int)
+                st.write("**📡 تفصيل حسب الشبكة:**")
+                st.dataframe(network_summary, use_container_width=True)
+                
+                # قائمة المواقع
+                st.write("**📍 قائمة المواقع:**")
+                st.dataframe(city_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+    
+    # عرض المجموعات الثلاث
+    display_group_details(all_columns, 'المجموعة الأولى: حجم 3×6')
+    st.divider()
+    display_group_details(all_columns, 'المجموعة الثانية: حجمي 2×1 و 125×185')
+    st.divider()
+    display_group_details(all_columns, 'المجموعة الثالثة: باقي الحجوم')
+    
+    # أزرار التصدير
+    st.divider()
+    st.subheader("📥 تصدير التقرير")
+    
+    # دالة تصدير Word
+    def export_group_report_word(df, group_name):
+        doc = Document()
+        
+        title = doc.add_heading(f"تقرير {group_name}", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        p = doc.add_paragraph()
+        p.add_run(f"التاريخ: {date.today().strftime('%d/%m/%Y')}")
+        force_rtl_style(p)
+        doc.add_paragraph()
+        
+        group_df = df[df['المجموعة'] == group_name]
+        total_sites = len(group_df)
+        total_boards = group_df['العدد'].sum()
+        
+        p = doc.add_paragraph()
+        p.add_run(f"📊 إجمالي المواقع: {total_sites} | إجمالي الأعمدة: {int(total_boards)}").bold = True
+        force_rtl_style(p)
+        doc.add_paragraph()
+        
+        for city in sorted(group_df['المحافظة'].unique()):
+            city_df = group_df[group_df['المحافظة'] == city]
+            city_sites = len(city_df)
+            city_boards = city_df['العدد'].sum()
+            
+            p = doc.add_paragraph()
+            p.add_run(f"■ محافظة {city}").bold = True
+            p.runs[0].font.size = Pt(14)
+            force_rtl_style(p)
+            
+            for network in sorted(city_df['الشبكة'].unique()):
+                net_df = city_df[city_df['الشبكة'] == network]
+                net_sites = len(net_df)
+                net_boards = net_df['العدد'].sum()
+                
+                p_net = doc.add_paragraph()
+                p_net.add_run(f"▸ شبكة: {network} ({net_sites} موقع - {int(net_boards)} لوحة)").bold = True
+                force_rtl_style(p_net)
+                
+                table = doc.add_table(rows=1, cols=3)
+                table.style = 'Table Grid'
+                set_table_rtl(table)
+                
+                hdr = table.rows[0].cells
+                hdr[0].text = "رقم اللوحة"
+                hdr[1].text = "اسم العمود"
+                hdr[2].text = "العدد"
+                for cell in hdr:
+                    for para in cell.paragraphs:
+                        force_rtl_style(para)
+                    tc_pr = cell._element.get_or_add_tcPr()
+                    shd = OxmlElement('w:shd')
+                    shd.set(qn('w:fill'), '660099')
+                    tc_pr.append(shd)
+                    if cell.paragraphs[0].runs:
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                
+                for _, row in net_df.iterrows():
+                    cells = table.add_row().cells
+                    cells[0].text = str(row['رقم اللوحة'])
+                    cells[1].text = str(row['اسم العمود'])
+                    cells[2].text = str(row['العدد']) if 'العدد' in row else "1"
+                    for cell in cells:
+                        for para in cell.paragraphs:
+                            force_rtl_style(para)
+                
+                doc.add_paragraph()
+            
+            p = doc.add_paragraph()
+            p.add_run(f"إجمالي محافظة {city}: {city_sites} موقعاً ({int(city_boards)} لوحة)").bold = True
+            force_rtl_style(p)
+            doc.add_paragraph()
+            doc.add_paragraph()
+        
+        p = doc.add_paragraph()
+        p.add_run(f"المجموع الكلي لـ {group_name}: {total_sites} موقعاً ({int(total_boards)} لوحة)").bold = True
+        p.runs[0].font.size = Pt(14)
+        force_rtl_style(p)
+        
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return output
+    
+    # أزرار التصدير لكل مجموعة
+    col_exp1, col_exp2, col_exp3 = st.columns(3)
+    
+    with col_exp1:
+        group1_df = all_columns[all_columns['المجموعة'] == 'المجموعة الأولى: حجم 3×6']
+        if not group1_df.empty:
+            csv1 = group1_df.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                "📊 Excel - مجموعة 3×6",
+                csv1,
+                f"group_3x6_{date.today().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+    
+    with col_exp2:
+        group2_df = all_columns[all_columns['المجموعة'] == 'المجموعة الثانية: حجمي 2×1 و 125×185']
+        if not group2_df.empty:
+            csv2 = group2_df.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                "📊 Excel - مجموعة 2×1 و 125×185",
+                csv2,
+                f"group_2x1_125x185_{date.today().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+    
+    with col_exp3:
+        group3_df = all_columns[all_columns['المجموعة'] == 'المجموعة الثالثة: باقي الحجوم']
+        if not group3_df.empty:
+            csv3 = group3_df.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                "📊 Excel - باقي الحجوم",
+                csv3,
+                f"group_others_{date.today().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+    
+    # تصدير Word لكل مجموعة
+    st.divider()
+    st.subheader("📝 تصدير Word لكل مجموعة")
+    
+    col_word1, col_word2, col_word3 = st.columns(3)
+    
+    with col_word1:
+        if not group1_df.empty:
+            word1 = export_group_report_word(all_columns, 'المجموعة الأولى: حجم 3×6')
+            st.download_button(
+                "📝 Word - مجموعة 3×6",
+                word1,
+                f"group_3x6_{date.today().strftime('%Y%m%d')}.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+    
+    with col_word2:
+        if not group2_df.empty:
+            word2 = export_group_report_word(all_columns, 'المجموعة الثانية: حجمي 2×1 و 125×185')
+            st.download_button(
+                "📝 Word - مجموعة 2×1 و 125×185",
+                word2,
+                f"group_2x1_125x185_{date.today().strftime('%Y%m%d')}.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+    
+    with col_word3:
+        if not group3_df.empty:
+            word3 = export_group_report_word(all_columns, 'المجموعة الثالثة: باقي الحجوم')
+            st.download_button(
+                "📝 Word - باقي الحجوم",
+                word3,
+                f"group_others_{date.today().strftime('%Y%m%d')}.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
 # ============================================================
 # إغلاق الاتصال
 # ============================================================
