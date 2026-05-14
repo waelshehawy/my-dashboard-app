@@ -1037,6 +1037,201 @@ elif page == "⚙️ الإعدادات":
         st.error(f"⚠️ خطأ في صفحة الإعدادات: {e}")
 
 # ============================================================
+# صفحة تقرير جميع المواقع والأعمدة
+# ============================================================
+elif page == "🗺️ تقرير جميع المواقع":
+    st.title("🗺️ تقرير جميع المواقع والأعمدة")
+    st.info("يعرض هذا التقرير جميع المواقع والأعمدة الموجودة في النظام بشكل تفصيلي حسب المحافظات، بغض النظر عن حالة الحجز")
+    
+    from datetime import date
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    
+    # دوال RTL
+    def set_table_rtl(table):
+        tblPr = table._element.xpath('w:tblPr')[0]
+        bidi = OxmlElement('w:bidiVisual')
+        tblPr.append(bidi)
+    
+    def force_rtl_style(p):
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        pPr = p._element.get_or_add_pPr()
+        bidi = OxmlElement('w:bidi')
+        bidi.set(qn('w:val'), '1')
+        pPr.append(bidi)
+        for run in p.runs:
+            rPr = run._element.get_or_add_rPr()
+            rtl = OxmlElement('w:rtl')
+            rtl.set(qn('w:val'), '1')
+            rPr.append(rtl)
+            rFonts = OxmlElement('w:rFonts')
+            rFonts.set(qn('w:cs'), 'Arial')
+            rPr.append(rFonts)
+    
+    def export_all_boards_word(df, total_sites, total_boards):
+        doc = Document()
+        
+        title = doc.add_heading("تقرير جميع المواقع والأعمدة", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        p = doc.add_paragraph()
+        p.add_run(f"التاريخ: {date.today().strftime('%d/%m/%Y')}")
+        force_rtl_style(p)
+        doc.add_paragraph()
+        
+        p = doc.add_paragraph()
+        p.add_run(f"📊 إجمالي المواقع (السجلات): {total_sites}").bold = True
+        force_rtl_style(p)
+        p = doc.add_paragraph()
+        p.add_run(f"📌 إجمالي الأعمدة (اللوحات الفعلية): {int(total_boards)}").bold = True
+        force_rtl_style(p)
+        doc.add_paragraph()
+        
+        for city in sorted(df['المحافظة'].unique()):
+            city_df = df[df['المحافظة'] == city]
+            city_sites = len(city_df)
+            city_boards = city_df['العدد'].sum() if 'العدد' in city_df.columns else city_sites
+            
+            p = doc.add_paragraph()
+            p.add_run(f"■ محافظة {city}").bold = True
+            p.runs[0].font.size = Pt(14)
+            force_rtl_style(p)
+            
+            table = doc.add_table(rows=1, cols=3)
+            table.style = 'Table Grid'
+            set_table_rtl(table)
+            
+            hdr = table.rows[0].cells
+            hdr[0].text = "رقم اللوحة"
+            hdr[1].text = "اسم العمود"
+            hdr[2].text = "العدد"
+            for cell in hdr:
+                for para in cell.paragraphs:
+                    force_rtl_style(para)
+                tc_pr = cell._element.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:fill'), '660099')
+                tc_pr.append(shd)
+                if cell.paragraphs[0].runs:
+                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+            
+            for _, row in city_df.iterrows():
+                cells = table.add_row().cells
+                cells[0].text = str(row['رقم اللوحة'])
+                cells[1].text = str(row['اسم العمود'])
+                cells[2].text = str(row['العدد']) if 'العدد' in row else "1"
+                for cell in cells:
+                    for para in cell.paragraphs:
+                        force_rtl_style(para)
+            
+            doc.add_paragraph()
+            p = doc.add_paragraph()
+            p.add_run(f"إجمالي محافظة {city}: {city_sites} موقعاً ({int(city_boards)} لوحة)").bold = True
+            force_rtl_style(p)
+            doc.add_paragraph()
+            doc.add_paragraph()
+        
+        p = doc.add_paragraph()
+        p.add_run("═" * 40).bold = True
+        force_rtl_style(p)
+        
+        p = doc.add_paragraph()
+        p.add_run(f"المجموع الكلي: {total_sites} موقعاً ({int(total_boards)} لوحة)").bold = True
+        p.runs[0].font.size = Pt(14)
+        force_rtl_style(p)
+        
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return output
+    
+    # جلب البيانات
+    all_columns = pd.read_sql('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"', conn)
+    
+    if all_columns.empty:
+        st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
+        st.stop()
+    
+    total_sites = len(all_columns)
+    total_boards = all_columns['العدد'].sum() if 'العدد' in all_columns.columns else total_sites
+    
+    # عرض الإحصائيات
+    st.subheader("📊 إحصائيات عامة")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🗺️ إجمالي المواقع", total_sites)
+    col2.metric("📌 إجمالي الأعمدة", int(total_boards))
+    col3.metric("🏢 عدد المحافظات", all_columns['المحافظة'].nunique())
+    
+    st.divider()
+    
+    # ملخص حسب المحافظة
+    st.subheader("📊 ملخص حسب المحافظة")
+    summary = all_columns.groupby('المحافظة').agg({
+        'رقم اللوحة': 'count',
+        'العدد': 'sum'
+    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+    summary['عدد الأعمدة'] = summary['عدد الأعمدة'].astype(int)
+    st.dataframe(summary, use_container_width=True)
+    
+    st.divider()
+    
+    # عرض تفصيلي حسب المحافظة
+    st.subheader("📋 تفصيل حسب المحافظة")
+    
+    for city in sorted(all_columns['المحافظة'].unique()):
+        city_df = all_columns[all_columns['المحافظة'] == city]
+        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)"):
+            
+            # تفصيل حسب الشبكة
+            network_summary = city_df.groupby('الشبكة').agg({
+                'رقم اللوحة': 'count',
+                'العدد': 'sum'
+            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+            st.write("**📡 تفصيل حسب الشبكة:**")
+            st.dataframe(network_summary, use_container_width=True)
+            
+            # تفصيل حسب الحجم
+            size_summary = city_df.groupby('الحجم').agg({
+                'رقم اللوحة': 'count',
+                'العدد': 'sum'
+            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+            st.write("**📏 تفصيل حسب الحجم:**")
+            st.dataframe(size_summary, use_container_width=True)
+            
+            # قائمة جميع المواقع
+            st.write("**📍 قائمة جميع المواقع:**")
+            st.dataframe(city_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+    
+    # أزرار التصدير
+    st.divider()
+    st.subheader("📥 تصدير التقرير")
+    
+    col_exp1, col_exp2 = st.columns(2)
+    
+    with col_exp1:
+        csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            "📊 تصدير إلى Excel",
+            csv_data,
+            f"all_columns_{date.today().strftime('%Y%m%d')}.csv",
+            "text/csv",
+            use_container_width=True
+        )
+    
+    with col_exp2:
+        word_file = export_all_boards_word(all_columns, total_sites, total_boards)
+        st.download_button(
+            "📝 تصدير إلى Word",
+            word_file,
+            f"all_columns_{date.today().strftime('%Y%m%d')}.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
+
+# ============================================================
 # إغلاق الاتصال
 # ============================================================
 conn.close()
