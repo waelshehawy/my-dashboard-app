@@ -1042,7 +1042,7 @@ elif page == "⚙️ الإعدادات":
 # ============================================================
 elif page == "🗺️ تقرير جميع المواقع":
     st.title("🗺️ تقرير جميع المواقع والأعمدة")
-    st.info("يعرض هذا التقرير جميع المواقع والأعمدة الموجودة في النظام بشكل تفصيلي حسب المحافظات، بغض النظر عن حالة الحجز")
+    st.info("يعرض هذا التقرير جميع المواقع والأعمدة الموجودة في النظام بشكل تفصيلي حسب المحافظات والشبكات، بغض النظر عن حالة الحجز")
     
     from datetime import date
     from docx import Document
@@ -1101,34 +1101,45 @@ elif page == "🗺️ تقرير جميع المواقع":
             p.runs[0].font.size = Pt(14)
             force_rtl_style(p)
             
-            table = doc.add_table(rows=1, cols=3)
-            table.style = 'Table Grid'
-            set_table_rtl(table)
-            
-            hdr = table.rows[0].cells
-            hdr[0].text = "رقم اللوحة"
-            hdr[1].text = "اسم العمود"
-            hdr[2].text = "العدد"
-            for cell in hdr:
-                for para in cell.paragraphs:
-                    force_rtl_style(para)
-                tc_pr = cell._element.get_or_add_tcPr()
-                shd = OxmlElement('w:shd')
-                shd.set(qn('w:fill'), '660099')
-                tc_pr.append(shd)
-                if cell.paragraphs[0].runs:
-                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
-            
-            for _, row in city_df.iterrows():
-                cells = table.add_row().cells
-                cells[0].text = str(row['رقم اللوحة'])
-                cells[1].text = str(row['اسم العمود'])
-                cells[2].text = str(row['العدد']) if 'العدد' in row else "1"
-                for cell in cells:
+            # تفصيل حسب الشبكات داخل المحافظة
+            for network in sorted(city_df['الشبكة'].unique()):
+                net_df = city_df[city_df['الشبكة'] == network]
+                net_sites = len(net_df)
+                net_boards = net_df['العدد'].sum() if 'العدد' in net_df.columns else net_sites
+                
+                p_net = doc.add_paragraph()
+                p_net.add_run(f"▸ شبكة: {network} ({net_sites} موقع - {int(net_boards)} لوحة)").bold = True
+                force_rtl_style(p_net)
+                
+                table = doc.add_table(rows=1, cols=3)
+                table.style = 'Table Grid'
+                set_table_rtl(table)
+                
+                hdr = table.rows[0].cells
+                hdr[0].text = "رقم اللوحة"
+                hdr[1].text = "اسم العمود"
+                hdr[2].text = "العدد"
+                for cell in hdr:
                     for para in cell.paragraphs:
                         force_rtl_style(para)
+                    tc_pr = cell._element.get_or_add_tcPr()
+                    shd = OxmlElement('w:shd')
+                    shd.set(qn('w:fill'), '660099')
+                    tc_pr.append(shd)
+                    if cell.paragraphs[0].runs:
+                        cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                
+                for _, row in net_df.iterrows():
+                    cells = table.add_row().cells
+                    cells[0].text = str(row['رقم اللوحة'])
+                    cells[1].text = str(row['اسم العمود'])
+                    cells[2].text = str(row['العدد']) if 'العدد' in row else "1"
+                    for cell in cells:
+                        for para in cell.paragraphs:
+                            force_rtl_style(para)
+                
+                doc.add_paragraph()
             
-            doc.add_paragraph()
             p = doc.add_paragraph()
             p.add_run(f"إجمالي محافظة {city}: {city_sites} موقعاً ({int(city_boards)} لوحة)").bold = True
             force_rtl_style(p)
@@ -1179,32 +1190,37 @@ elif page == "🗺️ تقرير جميع المواقع":
     
     st.divider()
     
-    # عرض تفصيلي حسب المحافظة
-    st.subheader("📋 تفصيل حسب المحافظة")
+    # عرض تفصيلي حسب المحافظة والشبكة
+    st.subheader("📋 تفصيل حسب المحافظة والشبكة")
     
     for city in sorted(all_columns['المحافظة'].unique()):
         city_df = all_columns[all_columns['المحافظة'] == city]
         with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)"):
             
-            # تفصيل حسب الشبكة
+            # ملخص الشبكات في هذه المحافظة
             network_summary = city_df.groupby('الشبكة').agg({
                 'رقم اللوحة': 'count',
                 'العدد': 'sum'
             }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-            st.write("**📡 تفصيل حسب الشبكة:**")
+            st.write("**📡 توزع الشبكات في المحافظة:**")
             st.dataframe(network_summary, use_container_width=True)
             
-            # تفصيل حسب الحجم
-            size_summary = city_df.groupby('الحجم').agg({
-                'رقم اللوحة': 'count',
-                'العدد': 'sum'
-            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-            st.write("**📏 تفصيل حسب الحجم:**")
-            st.dataframe(size_summary, use_container_width=True)
-            
-            # قائمة جميع المواقع
-            st.write("**📍 قائمة جميع المواقع:**")
-            st.dataframe(city_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+            # تفصيل لكل شبكة على حدة
+            for network in sorted(city_df['الشبكة'].unique()):
+                net_df = city_df[city_df['الشبكة'] == network]
+                with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
+                    
+                    # تفصيل حسب الحجم داخل الشبكة
+                    size_summary = net_df.groupby('الحجم').agg({
+                        'رقم اللوحة': 'count',
+                        'العدد': 'sum'
+                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                    st.write("**📏 تفصيل حسب الحجم:**")
+                    st.dataframe(size_summary, use_container_width=True)
+                    
+                    # قائمة جميع المواقع في هذه الشبكة
+                    st.write("**📍 قائمة المواقع:**")
+                    st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
     
     # أزرار التصدير
     st.divider()
@@ -1231,7 +1247,6 @@ elif page == "🗺️ تقرير جميع المواقع":
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
-
 # ============================================================
 # إغلاق الاتصال
 # ============================================================
