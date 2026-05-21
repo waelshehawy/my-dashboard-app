@@ -572,14 +572,13 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 
 def get_company_bookings(conn):
     """استرجاع بيانات الشركات المحجوزة - متوافق مع PostgreSQL"""
+    
+    # استعلام مبسط وأكثر أماناً
     query = '''
         SELECT 
             "اسم الزبون" as company_name,
             COUNT(DISTINCT "رقم اللوحة") as total_boards,
             COUNT(DISTINCT "فترة الحجز") as total_periods,
-            STRING_AGG(DISTINCT "فترة الحجز", ',') as periods,
-            STRING_AGG(DISTINCT "المحافظة", ',') as cities,
-            STRING_AGG(DISTINCT "الحجم", ',') as sizes,
             MAX("العام") as last_year
         FROM "حجوزات1"
         GROUP BY "اسم الزبون"
@@ -588,19 +587,57 @@ def get_company_bookings(conn):
     
     df = pd.read_sql_query(query, conn)
     
-    # معالجة القيم الفارغة بأمان
-    df['periods'] = df['periods'].fillna('').astype(str)
-    df['cities'] = df['cities'].fillna('').astype(str)
-    df['sizes'] = df['sizes'].fillna('').astype(str)
+    # جلب المحافظات والقياسات بشكل منفصل (لتجنب مشاكل STRING_AGG)
+    def get_cities(company_name):
+        query2 = f'''
+            SELECT DISTINCT "المحافظة" 
+            FROM "حجوزات1" 
+            WHERE "اسم الزبون" = '{company_name}'
+            AND "المحافظة" IS NOT NULL
+        '''
+        try:
+            cities_df = pd.read_sql_query(query2, conn)
+            return ','.join(cities_df['المحافظة'].tolist()) if not cities_df.empty else ''
+        except:
+            return ''
     
+    def get_sizes(company_name):
+        query3 = f'''
+            SELECT DISTINCT "الحجم" 
+            FROM "حجوزات1" 
+            WHERE "اسم الزبون" = '{company_name}'
+            AND "الحجم" IS NOT NULL
+        '''
+        try:
+            sizes_df = pd.read_sql_query(query3, conn)
+            return ','.join(sizes_df['الحجم'].tolist()) if not sizes_df.empty else ''
+        except:
+            return ''
+    
+    def get_periods(company_name):
+        query4 = f'''
+            SELECT DISTINCT "فترة الحجز" 
+            FROM "حجوزات1" 
+            WHERE "اسم الزبون" = '{company_name}'
+            AND "فترة الحجز" IS NOT NULL
+            ORDER BY "فترة الحجز" DESC
+            LIMIT 1
+        '''
+        try:
+            period_df = pd.read_sql_query(query4, conn)
+            return period_df['فترة الحجز'].iloc[0] if not period_df.empty else ''
+        except:
+            return ''
+    
+    # تطبيق الدوال على كل شركة
+    df['cities'] = df['company_name'].apply(get_cities)
+    df['sizes'] = df['company_name'].apply(get_sizes)
+    df['last_period'] = df['company_name'].apply(get_periods)
+    
+    # إنشاء تاريخ الانتهاء
     def get_end_date(row):
-        periods_str = row.get('periods', '')
-        if periods_str and periods_str not in ['', 'nan', 'None', 'NaN']:
-            periods_list = str(periods_str).split(',')
-            if periods_list:
-                last_period = periods_list[-1].strip()
-                last_year = row.get('last_year', '')
-                return f"{last_period} / {last_year}" if last_year else last_period
+        if row['last_period'] and row['last_period'] != '':
+            return f"{row['last_period']} / {row['last_year']}"
         return "غير محدد"
     
     df['end_date'] = df.apply(get_end_date, axis=1)
