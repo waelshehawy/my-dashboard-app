@@ -169,7 +169,7 @@ def get_engine():
 
 # تهيئة قاعدة البيانات
 if 'db_initialized' not in st.session_state:
-    init_local_db()
+    #init_local_db() علقتها لانها مخصصة فقط للمحلية
     st.session_state.db_initialized = True
 
 # ============================================================
