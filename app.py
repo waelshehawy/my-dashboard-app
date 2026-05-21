@@ -1237,7 +1237,7 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
     st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"grouped_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 # ============================================================
-# صفحة المزامنة السحابية (مكتملة)
+# صفحة المزامنة السحابية (مكتملة - نسخة مصححة)
 # ============================================================
 
 elif page == "☁️ مزامنة سحابية":
@@ -1253,7 +1253,7 @@ elif page == "☁️ مزامنة سحابية":
     """)
     
     if not supabase_available:
-        st.error("❌ مكتبة supabase غير مثبتة. للتثبيت: `pip install supabase-python`")
+        st.error("❌ مكتبة supabase غير مثبتة. للتثبيت: pip install supabase-python")
         st.stop()
     
     # إحصائيات المحلية
@@ -1299,18 +1299,13 @@ elif page == "☁️ مزامنة سحابية":
     # تعليمات الإعداد
     with st.expander("📖 تعليمات إعداد Supabase", expanded=False):
         st.markdown("""
-        ### إعداد Supabase:
+        **إعداد Supabase**
         
         1. **إنشاء مشروع** في [Supabase](https://supabase.com)
-        
         2. **إنشاء الجداول** (نفس هيكل SQLite)
-        
         3. **الحصول على المفاتيح** من Settings → API
-        
-        4. **تحديث المتغيرات** في بداية هذا الملف:
-        ```python
-        SUPABASE_URL = "https://your-project.supabase.co"
-        SUPABASE_KEY = "your-anon-key"
+        4. **تحديث المتغيرات** في بداية هذا الملف
+        """)
 # ============================================================
 # صفحة الإعدادات (المتبقية)
 # ============================================================
