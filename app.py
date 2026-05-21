@@ -35,18 +35,34 @@ except ImportError:
     st.info("💡 للتثبيت: pip install supabase-python")
 
 # ============================================================
-# الاتصال بقاعدة البيانات المحلية (SQLite)
+# دوال الاتصال بقاعدة البيانات (Supabase)
 # ============================================================
-DB_PATH = "ads_erp_local.db"
 
 def get_connection():
-    """اتصال بقاعدة البيانات المحلية"""
-    return sqlite3.connect(DB_PATH)
+    try:
+        return psycopg2.connect(
+            host="aws-1-eu-north-1.pooler.supabase.com",
+            port="6543",
+            database="postgres",
+            user="postgres.ncuofpvbaglwbdqnpman",
+            password="WaelPreview2026",
+            sslmode="require",
+            connect_timeout=10
+        )
+    except Exception as e:
+        st.error(f"⚠️ فشل الاتصال: {e}")
+        return None
 
-def init_local_db():
-    """إنشاء قاعدة البيانات المحلية بكل الجداول"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+def get_engine():
+    url_obj = URL.create(
+        drivername="postgresql+psycopg2",
+        username="postgres.ncuofpvbaglwbdqnpman",
+        password="WaelPreview2026",
+        host="aws-1-eu-north-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+    )
+    return create_engine(url_obj, connect_args={'sslmode': 'require'})
     
     # جدول أعمدة الإنارة
     cursor.execute('''
