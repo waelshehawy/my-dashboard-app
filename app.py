@@ -312,10 +312,7 @@ def safe_split(value):
 # الاتصال بـ Supabase فقط (لا يوجد SQLite محلي)
 # ============================================================
 
-import psycopg2
-import pandas as pd
-from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
+
 
 def get_connection():
     """اتصال مباشر بـ Supabase"""
