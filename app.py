@@ -466,7 +466,7 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # دوال الشركات والأعمدة المتاحة
 # ============================================================
 
-def get_company_bookings(conn):
+
 def get_company_bookings():
     """استرجاع بيانات الشركات المحجوزة من Supabase"""
     conn = get_connection()
