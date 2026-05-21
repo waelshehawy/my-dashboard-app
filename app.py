@@ -397,7 +397,7 @@ def init_local_db():
     
     # جدول المستخدمين
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "users" (
+        CREATE TABLE IF NOT EXISTS "app_users" (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT,
@@ -408,10 +408,10 @@ def init_local_db():
     ''')
     
     # إضافة المستخدم الافتراضي
-    cursor.execute("SELECT COUNT(*) FROM users")
+    cursor.execute("SELECT COUNT(*) FROM app_users")
     if cursor.fetchone()[0] == 0:
         cursor.execute('''
-            INSERT INTO users (username, password, role, full_name, created_at) 
+            INSERT INTO app_users (username, password, role, full_name, created_at) 
             VALUES 
             ('admin', 'admin123', 'admin', 'مدير النظام', datetime('now')),
             ('employee', 'emp123', 'employee', 'موظف', datetime('now'))
@@ -808,7 +808,7 @@ if not st.session_state.auth:
         if submitted:
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT username, password, role FROM users WHERE username = ? AND password = ?", (username, password))
+            cursor.execute("SELECT username, password, role FROM app_users WHERE username = ? AND password = ?", (username, password))
             user = cursor.fetchone()
             conn.close()
             
@@ -2074,7 +2074,7 @@ elif page == "⚙️ الإعدادات":
     
     with tab4:
         st.subheader("👥 إدارة المستخدمين")
-        df_users = pd.read_sql_query('SELECT id, username, role, full_name, created_at FROM "users"', conn)
+        df_users = pd.read_sql_query('SELECT id, username, role, full_name, created_at FROM "app_users"', conn)
         edited_users = st.data_editor(df_users, num_rows="dynamic", key="edit_users", use_container_width=True)
         
         col1, col2 = st.columns(2)
@@ -2083,7 +2083,7 @@ elif page == "⚙️ الإعدادات":
                 cursor = conn.cursor()
                 for _, row in edited_users.iterrows():
                     cursor.execute('''
-                        UPDATE "users" SET username=?, role=?, full_name=? WHERE id=?
+                        UPDATE "app_users" SET username=?, role=?, full_name=? WHERE id=?
                     ''', (row['username'], row['role'], row['full_name'], row['id']))
                 conn.commit()
                 st.success("✅ تم تحديث المستخدمين")
@@ -2099,7 +2099,7 @@ elif page == "⚙️ الإعدادات":
                     cursor = conn.cursor()
                     try:
                         cursor.execute('''
-                            INSERT INTO "users" (username, password, role, full_name, created_at)
+                            INSERT INTO "app_users" (username, password, role, full_name, created_at)
                             VALUES (?, ?, ?, ?, datetime('now'))
                         ''', (new_username, new_password, new_role, new_full_name))
                         conn.commit()
@@ -2117,7 +2117,7 @@ if USE_SUPABASE and st.sidebar.button("☁️ مزامنة مع Supabase", use_c
         from supabase import create_client
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
-        tables = ['اعمدة انارة', 'حجوزات1', 'اسماء الرسم', 'الفترة', 'offers_history', 'users']
+        tables = ['اعمدة انارة', 'حجوزات1', 'اسماء الرسم', 'الفترة', 'offers_history', 'app_users']
         
         for table in tables:
             try:
