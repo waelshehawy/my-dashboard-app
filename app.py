@@ -850,9 +850,9 @@ with st.sidebar:
     
     # إحصائيات سريعة في الشريط الجانبي
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM 'اعمدة انارة'")
+    cursor.execute("SELECT COUNT(*) FROM"اعمدة انارة"")
     total_boards_sidebar = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(DISTINCT 'اسم الزبون') FROM 'حجوزات1'")
+    cursor.execute("SELECT COUNT(DISTINCT 'اسم الزبون') FROM"حجوزات1"")
     total_clients = cursor.fetchone()[0]
     
     col_s1, col_s2 = st.columns(2)
@@ -1952,9 +1952,9 @@ elif page == "⚙️ الإعدادات":
     
     # عرض إحصائيات سريعة
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM 'اعمدة انارة'")
+    cursor.execute("SELECT COUNT(*) FROM"اعمدة انارة"")
     boards_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM 'حجوزات1'")
+    cursor.execute("SELECT COUNT(*) FROM"حجوزات1"")
     bookings_count = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM 'اسماء الرسم'")
     fees_count = cursor.fetchone()[0]
@@ -1977,7 +1977,7 @@ elif page == "⚙️ الإعدادات":
         edited_boards = st.data_editor(df_boards, num_rows="dynamic", key="edit_boards", use_container_width=True)
         if st.button("💾 حفظ أعمدة الإنارة", key="save_boards", use_container_width=True):
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM 'اعمدة انارة'")
+            cursor.execute("DELETE FROM"اعمدة انارة"")
             for _, row in edited_boards.iterrows():
                 cursor.execute('''
                     INSERT INTO "اعمدة انارة" ("رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد", "Latitude", "Longitude")
@@ -1994,7 +1994,7 @@ elif page == "⚙️ الإعدادات":
         edited_bookings = st.data_editor(df_bookings, num_rows="dynamic", key="edit_bookings", use_container_width=True)
         if st.button("💾 حفظ سجل الحجوزات", key="save_bookings", use_container_width=True):
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM 'حجوزات1'")
+            cursor.execute("DELETE FROM"حجوزات1"")
             for _, row in edited_bookings.iterrows():
                 cursor.execute('''
                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية")
@@ -2066,7 +2066,7 @@ if USE_SUPABASE and st.sidebar.button("☁️ مزامنة مع Supabase", use_c
         from supabase import create_client
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
-        tables = ['اعمدة انارة', 'حجوزات1', 'اسماء الرسم', 'الفترة', 'offers_history', 'app_users']
+        tables = ['اعمدة انارة',"حجوزات1", 'اسماء الرسم', 'الفترة', 'offers_history', 'app_users']
         
         for table in tables:
             try:
