@@ -308,12 +308,9 @@ def safe_split(value):
 # دوال قاعدة البيانات الأساسية
 # ============================================================
 
-# ============================================================
-# الاتصال بـ Supabase فقط (لا يوجد SQLite محلي)
-# ============================================================
-
-
-
+import psycopg2
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 def get_connection():
     """اتصال مباشر بـ Supabase"""
     return psycopg2.connect(
