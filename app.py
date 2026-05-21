@@ -852,7 +852,7 @@ with st.sidebar:
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*) FROM"اعمدة انارة"')
     total_boards_sidebar = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(DISTINCT 'اسم الزبون') FROM"حجوزات1"")
+    cursor.execute('SELECT COUNT(DISTINCT 'اسم الزبون') FROM"حجوزات1"')
     total_clients = cursor.fetchone()[0]
     
     col_s1, col_s2 = st.columns(2)
