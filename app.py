@@ -308,142 +308,38 @@ def safe_split(value):
 # دوال قاعدة البيانات الأساسية
 # ============================================================
 
-DB_PATH = "ads_erp_local.db"
+# ============================================================
+# الاتصال بـ Supabase فقط (لا يوجد SQLite محلي)
+# ============================================================
+
+import psycopg2
+import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 
 def get_connection():
-    """اتصال بقاعدة البيانات المحلية (SQLite)"""
-    return sqlite3.connect(DB_PATH)
+    """اتصال مباشر بـ Supabase"""
+    return psycopg2.connect(
+        host="aws-1-eu-north-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+        user="postgres.ncuofpvbaglwbdqnpman",
+        password="WaelPreview2026",
+        sslmode="require",
+        connect_timeout=30
+    )
 
-def get_supabase_client():
-    """الحصول على عميل Supabase إذا كان متاحاً"""
-    if USE_SUPABASE:
-        return create_client(SUPABASE_URL, SUPABASE_KEY)
-    return None
-
-def get_data(table_name, use_supabase=False):
-    """قراءة البيانات من المصدر المناسب"""
-    if use_supabase and USE_SUPABASE:
-        client = get_supabase_client()
-        response = client.table(table_name).select('*').execute()
-        return pd.DataFrame(response.data)
-    else:
-        conn = get_connection()
-        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
-        conn.close()
-        return df
-
-def init_local_db():
-    """إنشاء قاعدة البيانات المحلية بكل الجداول"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # جدول أعمدة الإنارة
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "اعمدة انارة" (
-            "رقم اللوحة" TEXT PRIMARY KEY,
-            "اسم العمود" TEXT,
-            "المحافظة" TEXT,
-            "الشبكة" TEXT,
-            "الحجم" TEXT,
-            "العدد" INTEGER,
-            "Latitude" REAL,
-            "Longitude" REAL
-        )
-    ''')
-    
-    # جدول الحجوزات
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "حجوزات1" (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            "رقم اللوحة" TEXT,
-            "اسم الزبون" TEXT,
-            "العام" INTEGER,
-            "فترة الحجز" TEXT,
-            "تاريخ النهاية" DATE
-        )
-    ''')
-    
-    # جدول أجور الرسم
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "اسماء الرسم" (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            "اسم الرسم" TEXT,
-            "الحجم" TEXT,
-            "اجرة الرسم" REAL
-        )
-    ''')
-    
-    # جدول الفترات
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "الفترة" (
-            no INTEGER PRIMARY KEY,
-            namee TEXT
-        )
-    ''')
-    
-    # جدول عروض الأسعار
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "offers_history" (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_name TEXT,
-            cart_json TEXT,
-            status TEXT,
-            start_p TEXT,
-            end_p TEXT,
-            year INTEGER,
-            offer_date TIMESTAMP
-        )
-    ''')
-    
-    # جدول المستخدمين
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS "app_users" (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT,
-            role TEXT,
-            full_name TEXT,
-            created_at TIMESTAMP
-        )
-    ''')
-    
-    # إضافة المستخدم الافتراضي
-    cursor.execute("SELECT COUNT(*) FROM app_users")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute('''
-            INSERT INTO app_users (username, password, role, full_name, created_at) 
-            VALUES 
-            ('admin', 'admin123', 'admin', 'مدير النظام', datetime('now')),
-            ('employee', 'emp123', 'employee', 'موظف', datetime('now'))
-        ''')
-    
-    # إضافة الفترات إذا كانت فارغة
-    cursor.execute("SELECT COUNT(*) FROM 'الفترة'")
-    if cursor.fetchone()[0] == 0:
-        periods = [
-            (1, '1-15 كانون الثاني'), (2, '16-31 كانون الثاني'),
-            (3, '1-15 شباط'), (4, '16-28 شباط'),
-            (5, '1-15 آذار'), (6, '16-31 آذار'),
-            (7, '1-15 نيسان'), (8, '16-30 نيسان'),
-            (9, '1-15 أيار'), (10, '16-31 أيار'),
-            (11, '1-15 حزيران'), (12, '16-30 حزيران'),
-            (13, '1-15 تموز'), (14, '16-31 تموز'),
-            (15, '1-15 آب'), (16, '16-31 آب'),
-            (17, '1-15 أيلول'), (18, '16-30 أيلول'),
-            (19, '1-15 تشرين الأول'), (20, '16-31 تشرين الأول'),
-            (21, '1-15 تشرين الثاني'), (22, '16-30 تشرين الثاني'),
-            (23, '1-15 كانون الأول'), (24, '16-31 كانون الأول')
-        ]
-        cursor.executemany("INSERT INTO 'الفترة' (no, namee) VALUES (?, ?)", periods)
-    
-    conn.commit()
-    conn.close()
-    return True
-
-# تهيئة قاعدة البيانات
-if 'db_initialized' not in st.session_state:
-    init_local_db()
-    st.session_state.db_initialized = True
+def get_engine():
+    """محرك SQLAlchemy للاتصال بـ Supabase"""
+    url_obj = URL.create(
+        drivername="postgresql+psycopg2",
+        username="postgres.ncuofpvbaglwbdqnpman",
+        password="WaelPreview2026",
+        host="aws-1-eu-north-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+    )
+    return create_engine(url_obj, connect_args={'sslmode': 'require'})
 
 # ============================================================
 # دوال الصلاحيات
@@ -571,23 +467,36 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # ============================================================
 
 def get_company_bookings(conn):
-    """استرجاع بيانات الشركات المحجوزة - متوافق مع PostgreSQL"""
+def get_company_bookings():
+    """استرجاع بيانات الشركات المحجوزة من Supabase"""
+    conn = get_connection()
     
-    # استعلام مبسط وأكثر أماناً
     query = '''
         SELECT 
             "اسم الزبون" as company_name,
             COUNT(DISTINCT "رقم اللوحة") as total_boards,
             COUNT(DISTINCT "فترة الحجز") as total_periods,
-            MAX("العام") as last_year
+            MAX("العام") as last_year,
+            MAX("فترة الحجز") as last_period
         FROM "حجوزات1"
         GROUP BY "اسم الزبون"
         ORDER BY "اسم الزبون"
     '''
     
     df = pd.read_sql_query(query, conn)
+    conn.close()
     
-    # جلب المحافظات والقياسات بشكل منفصل (لتجنب مشاكل STRING_AGG)
+    # إضافة عمود تاريخ الانتهاء
+    df['end_date'] = df.apply(
+        lambda x: f"{x['last_period']} / {x['last_year']}" if x['last_period'] else "غير محدد", 
+        axis=1
+    )
+    
+    # أعمدة فارغة للمحافظات والقياسات (لن تستخدم حالياً)
+    df['cities'] = ''
+    df['sizes'] = ''
+    
+    return df
     def get_cities(company_name):
         query2 = f'''
             SELECT DISTINCT "المحافظة" 
