@@ -758,7 +758,7 @@ elif page == "📄 عرض سعر":
                         cur.execute('''
                             INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year, offer_date) 
                             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-                        ''', (customer_name, json
+                        ''', (customer_name, json)
 
                         save_data = {"data": {c: {n: df.to_dict() for n, df in ns.items()} for c, ns in st.session_state.cart.items()}}
                         cur = conn.cursor()
