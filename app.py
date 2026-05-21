@@ -850,7 +850,7 @@ with st.sidebar:
     
     # إحصائيات سريعة في الشريط الجانبي
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM"اعمدة انارة"")
+    cursor.execute('SELECT COUNT(*) FROM"اعمدة انارة"')
     total_boards_sidebar = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(DISTINCT 'اسم الزبون') FROM"حجوزات1"")
     total_clients = cursor.fetchone()[0]
