@@ -1,5 +1,6 @@
 streamlit
 pandas
+import psycopg2
 psycopg2-binary
 folium
 streamlit-folium
