@@ -1,10 +1,9 @@
 streamlit
 pandas
-import psycopg2
 psycopg2-binary
+sqlalchemy
 folium
 streamlit-folium
 python-docx
-sqlalchemy
 plotly
 pillow
