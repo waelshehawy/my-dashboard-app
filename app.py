@@ -571,31 +571,40 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # ============================================================
 
 def get_company_bookings(conn):
-    """استرجاع بيانات الشركات المحجوزة من جدول حجوزات1 مباشرة"""
+    """استرجاع بيانات الشركات المحجوزة - متوافق مع PostgreSQL"""
     query = '''
         SELECT 
             "اسم الزبون" as company_name,
             COUNT(DISTINCT "رقم اللوحة") as total_boards,
             COUNT(DISTINCT "فترة الحجز") as total_periods,
-            GROUP_CONCAT(DISTINCT "فترة الحجز") as periods,
-            GROUP_CONCAT(DISTINCT "المحافظة") as cities,
-            GROUP_CONCAT(DISTINCT "الحجم") as sizes,
-            MAX("العام") as last_year,
-            "فترة الحجز" as last_period
+            STRING_AGG(DISTINCT "فترة الحجز", ',') as periods,
+            STRING_AGG(DISTINCT "المحافظة", ',') as cities,
+            STRING_AGG(DISTINCT "الحجم", ',') as sizes,
+            MAX("العام") as last_year
         FROM "حجوزات1"
         GROUP BY "اسم الزبون"
         ORDER BY "اسم الزبون"
     '''
+    
     df = pd.read_sql_query(query, conn)
     
+    # معالجة القيم الفارغة بأمان
+    df['periods'] = df['periods'].fillna('').astype(str)
+    df['cities'] = df['cities'].fillna('').astype(str)
+    df['sizes'] = df['sizes'].fillna('').astype(str)
+    
     def get_end_date(row):
-        if row['periods'] and row['periods'] != 'None':
-            periods_list = row['periods'].split(',')
-            last_period = periods_list[-1].strip()
-            return f"{last_period} / {row['last_year']}"
+        periods_str = row.get('periods', '')
+        if periods_str and periods_str not in ['', 'nan', 'None', 'NaN']:
+            periods_list = str(periods_str).split(',')
+            if periods_list:
+                last_period = periods_list[-1].strip()
+                last_year = row.get('last_year', '')
+                return f"{last_period} / {last_year}" if last_year else last_period
         return "غير محدد"
     
     df['end_date'] = df.apply(get_end_date, axis=1)
+    
     return df
 
 def get_company_locations_with_map(conn, company_name):
