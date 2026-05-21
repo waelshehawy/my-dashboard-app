@@ -20,7 +20,8 @@ from datetime import datetime, timedelta, date
 import plotly.graph_objects as go
 import plotly.express as px
 import base64
-
+import psycopg2
+import streamlit as st
 # ============================================================
 # إعدادات Supabase (للنسخ الاحتياطي والتقارير - اختياري)
 # ============================================================
