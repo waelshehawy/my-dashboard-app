@@ -424,14 +424,14 @@ def manage_expired_offers(conn):
         if is_admin():
             if col2.button("✅ تمديد 48 ساعة", key=f"ext_{row['id']}"):
                 cur = conn.cursor()
-                cur.execute('UPDATE "offers_history" SET offer_date = datetime("now") WHERE id = ?', (row['id'],))
+                cur.execute('UPDATE "offers_history" SET offer_date = datetime("now") WHERE id = %s', (row['id'],))
                 conn.commit()
                 st.success("تم التمديد بنجاح")
                 st.rerun()
             
             if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}"):
                 cur = conn.cursor()
-                cur.execute('UPDATE "offers_history" SET status = "Cancelled" WHERE id = ?', (row['id'],))
+                cur.execute('UPDATE "offers_history" SET status = "Cancelled" WHERE id = %s', (row['id'],))
                 conn.commit()
                 st.success("تم إلغاء العرض")
                 st.rerun()
@@ -757,7 +757,7 @@ if not st.session_state.auth:
         if submitted:
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT username, password, role FROM app_users WHERE username = ? AND password = ?", (username, password))
+            cursor.execute("SELECT username, password, role FROM app_users WHERE username = %s AND password = %s", (username, password))
             user = cursor.fetchone()
             conn.close()
             
@@ -987,7 +987,7 @@ if page == "📊 Dashboard":
             cursor.execute("""
                 SELECT [اسم الزبون], [فترة الحجز], [العام]
                 FROM [حجوزات1] 
-                WHERE [رقم اللوحة] = ?
+                WHERE [رقم اللوحة] = %s
                 ORDER BY [العام] DESC
                 LIMIT 1
             """, (row['رقم اللوحة'],))
@@ -1431,7 +1431,7 @@ elif page == "📄 عرض سعر":
                         cur = conn.cursor()
                         cur.execute('''
                             INSERT INTO "offers_history" (client_name, cart_json, status, start_p, end_p, year, offer_date) 
-                            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                            VALUES (%s, %s, %s, %s, %s, %s, datetime('now'))
                         ''', (customer_name, json.dumps(save_data, ensure_ascii=False), 'Pending', start_p, end_p, year))
                         conn.commit()
                         st.success("✅ تم الحفظ كمسودة")
@@ -1450,7 +1450,7 @@ elif page == "📄 عرض سعر":
                                             for period in selected_periods:
                                                 cur.execute('''
                                                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
-                                                    VALUES (?, ?, ?, ?)
+                                                    VALUES (%s, %s, %s, %s)
                                                 ''', (str(row['رقم اللوحة']), customer_name, year, period))
                                 
                                 conn.commit()
@@ -1981,7 +1981,7 @@ elif page == "⚙️ الإعدادات":
             for _, row in edited_boards.iterrows():
                 cursor.execute('''
                     INSERT INTO "اعمدة انارة" ("رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد", "Latitude", "Longitude")
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (row['رقم اللوحة'], row['اسم العمود'], row['المحافظة'], row['الشبكة'], row['الحجم'], row['العدد'], 
                       row.get('Latitude'), row.get('Longitude')))
             conn.commit()
@@ -1998,7 +1998,7 @@ elif page == "⚙️ الإعدادات":
             for _, row in edited_bookings.iterrows():
                 cursor.execute('''
                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية")
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                 ''', (row['رقم اللوحة'], row['اسم الزبون'], row['العام'], row['فترة الحجز'], row.get('تاريخ النهاية')))
             conn.commit()
             st.success("✅ تم تحديث سجل الحجوزات")
@@ -2015,7 +2015,7 @@ elif page == "⚙️ الإعدادات":
             for _, row in edited_fees.iterrows():
                 cursor.execute('''
                     INSERT INTO "اسماء الرسم" ("اسم الرسم", "الحجم", "اجرة الرسم")
-                    VALUES (?, ?, ?)
+                    VALUES (%s, %s, %s)
                 ''', (row['اسم الرسم'], row['الحجم'], row['اجرة الرسم']))
             conn.commit()
             st.success("✅ تم تحديث أجور الرسم")
@@ -2049,7 +2049,7 @@ elif page == "⚙️ الإعدادات":
                     try:
                         cursor.execute('''
                             INSERT INTO "app_users" (username, password, role, full_name, created_at)
-                            VALUES (?, ?, ?, ?, datetime('now'))
+                            VALUES (%s, %s, %s, %s, datetime('now'))
                         ''', (new_username, new_password, new_role, new_full_name))
                         conn.commit()
                         st.success("✅ تم إضافة المستخدم")
