@@ -372,7 +372,21 @@ def run_query(query, params=None, fetch=True):
         if fetch and query.strip().upper().startswith('SELECT'):
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
-            return pd.DataFrame(rows, columns=columns)
+            # تحويل الصفوف إلى قاموس مع معالجة خاصة
+            data = []
+            for row in rows:
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    val = row[i]
+                    # تحويل كائنات datetime إلى string
+                    if hasattr(val, 'strftime'):
+                        val = val.strftime('%Y-%m-%d %H:%M:%S')
+                    # معالجة الشبكة الفارغة
+                    if col == 'الشبكة' and (val is None or val == ''):
+                        val = '0'
+                    row_dict[col] = val
+                data.append(row_dict)
+            return pd.DataFrame(data)
         else:
             conn.commit()
             return cursor.rowcount
