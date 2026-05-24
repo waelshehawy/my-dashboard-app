@@ -1016,12 +1016,32 @@ elif page == "📄 عرض سعر":
             for city, networks in list(st.session_state.cart.items()):
                 for net, df_cart in list(networks.items()):
                     with st.expander(f"📍 {city} - {net}", expanded=True):
-                        edited_df = st.data_editor(df_cart, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
+                        # التأكد من وجود جميع الأعمدة المطلوبة قبل العرض
+                        display_df = df_cart.copy()
+                        if 'رقم اللوحة' not in display_df.columns:
+                            display_df['رقم اللوحة'] = display_df.index.astype(str)
+                        if 'العدد' not in display_df.columns:
+                            display_df['العدد'] = 1
+                        
+                        edited_df = st.data_editor(display_df, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
                         st.session_state.cart[city][net] = edited_df
                         
-                        qty = int(edited_df['العدد'].sum())
-                        fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else per_column_print
-                        fd = float(edited_df['fee_display'].iloc[0]) if 'fee_display' in edited_df.columns else per_column_display
+                        # حساب الكميات بأمان
+                        if 'العدد' in edited_df.columns:
+                            qty = int(edited_df['العدد'].sum())
+                        else:
+                            qty = len(edited_df)
+                        
+                        # حساب الأسعار بأمان
+                        if 'fee_print' in edited_df.columns and not edited_df['fee_print'].empty:
+                            fp = float(edited_df['fee_print'].iloc[0])
+                        else:
+                            fp = per_column_print
+                        
+                        if 'fee_display' in edited_df.columns and not edited_df['fee_display'].empty:
+                            fd = float(edited_df['fee_display'].iloc[0])
+                        else:
+                            fd = per_column_display
                         
                         section_print = qty * fp
                         section_display = qty * fd
