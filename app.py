@@ -1059,6 +1059,7 @@ elif page == "📄 عرض سعر":
         else:
             st.warning("⚠️ لا توجد مواقع متاحة")
         
+        # عرض السلة والحسابات
         if st.session_state.cart:
             st.divider()
             st.subheader("🛒 سلة العروض")
@@ -1069,32 +1070,23 @@ elif page == "📄 عرض سعر":
             for city, networks in list(st.session_state.cart.items()):
                 for net, df_cart in list(networks.items()):
                     with st.expander(f"📍 {city} - {net}", expanded=True):
-                        # التأكد من وجود جميع الأعمدة المطلوبة قبل العرض
-                        display_df = df_cart.copy()
-                        if 'رقم اللوحة' not in display_df.columns:
-                            display_df['رقم اللوحة'] = display_df.index.astype(str)
-                        if 'العدد' not in display_df.columns:
-                            display_df['العدد'] = 1
+                        # تنظيف DataFrame قبل العرض
+                        clean_df = fix_dataframe(df_cart, default_net=net)
                         
-                        edited_df = st.data_editor(display_df, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
-                        st.session_state.cart[city][net] = edited_df
+                        if clean_df.empty:
+                            st.warning("لا توجد بيانات")
+                            continue
                         
-                        # حساب الكميات بأمان
-                        if 'العدد' in edited_df.columns:
-                            qty = int(edited_df['العدد'].sum())
-                        else:
-                            qty = len(edited_df)
+                        # عرض محرر البيانات
+                        edited_df = st.data_editor(clean_df, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
                         
-                        # حساب الأسعار بأمان
-                        if 'fee_print' in edited_df.columns and not edited_df['fee_print'].empty:
-                            fp = float(edited_df['fee_print'].iloc[0])
-                        else:
-                            fp = per_column_print
+                        # حفظ التعديلات
+                        st.session_state.cart[city][net] = fix_dataframe(edited_df, default_net=net)
                         
-                        if 'fee_display' in edited_df.columns and not edited_df['fee_display'].empty:
-                            fd = float(edited_df['fee_display'].iloc[0])
-                        else:
-                            fd = per_column_display
+                        # حساب الإجماليات
+                        qty = int(edited_df['العدد'].sum())
+                        fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else 0
+                        fd = float(edited_df['fee_display'].iloc[0]) if 'fee_display' in edited_df.columns else 0
                         
                         section_print = qty * fp
                         section_display = qty * fd
@@ -1105,21 +1097,13 @@ elif page == "📄 عرض سعر":
                         st.info(f"📊 العدد: {qty} | الطباعة: {section_print:.2f}$ | العرض: {section_display:.2f}$")
                         
                         if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
-                            # حساب عدد المواقع التي سيتم حذفها
-                            deleted_count = len(df_cart)
-                            deleted_boards = df_cart['الموقع'].tolist() if 'الموقع' in df_cart.columns else df_cart['اسم العمود'].tolist()
+                            deleted_count = len(edited_df)
+                            st.warning(f"⚠️ سيتم حذف {deleted_count} عمود من الشبكة {net} (ستصبح شبكتهم 0)")
                             
-                            # عرض رسالة تحذير
-                            st.warning(f"⚠️ **تنبيه:** أنت تريد حذف {deleted_count} عمود من الشبكة `{net}`")
-                            st.info(f"📋 الأعمدة التي سيتم حذفها: {', '.join(deleted_boards[:5])}{'...' if len(deleted_boards) > 5 else ''}")
-                            st.warning(f"🔴 بعد الحذف، هذه الأعمدة ستصبح في الشبكة **0**")
-                            
-                            # تأكيد الحذف
                             col_confirm, col_cancel = st.columns(2)
                             with col_confirm:
-                                if st.button("✅ نعم، تأكيد الحذف", key=f"confirm_del_{city}_{net}"):
+                                if st.button("✅ تأكيد الحذف", key=f"confirm_del_{city}_{net}"):
                                     del st.session_state.cart[city][net]
-                                    st.success(f"✅ تم حذف {deleted_count} عمود من الشبكة {net}")
                                     st.rerun()
                             with col_cancel:
                                 if st.button("❌ إلغاء", key=f"cancel_del_{city}_{net}"):
