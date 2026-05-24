@@ -928,7 +928,7 @@ elif page == "📄 عرض سعر":
 
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
 
-        st.write("تشخيص 5: قبل تعريف الدالة")
+    st.write("تشخيص 5: قبل تعريف الدالة")
     
     def prepare_dataframe(df, net_name=""):
         if df is None:
