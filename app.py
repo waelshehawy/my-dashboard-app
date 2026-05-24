@@ -889,31 +889,10 @@ elif page == "📄 عرض سعر":
                         row = result.iloc[0]
                         data = json.loads(row['cart_json'])
                         cart_raw = data.get("data", data)
-                        st.session_state.cart = {}
                         
-                        for city, networks in cart_raw.items():
-                            st.session_state.cart[city] = {}
-                            for net, df_dict in networks.items():
-                                df = pd.DataFrame(df_dict)
-                                
-                                # إعادة تسمية الأعمدة إذا لزم الأمر
-                                if 'رقم اللوحة' not in df.columns:
-                                    # محاولة إيجاد عمود يحوي رقم اللوحة
-                                    for col in df.columns:
-                                        if 'board' in col.lower() or 'لوحة' in col or 'number' in col.lower():
-                                            df['رقم اللوحة'] = df[col]
-                                            break
-                                    else:
-                                        # إنشاء عمود افتراضي
-                                        df['رقم اللوحة'] = [f"UNKNOWN_{i}" for i in range(len(df))]
-                                
-                                # التأكد من وجود عمود 'الموقع'
-                                if 'الموقع' not in df.columns and 'اسم العمود' in df.columns:
-                                    df['الموقع'] = df['اسم العمود']
-                                elif 'الموقع' not in df.columns:
-                                    df['الموقع'] = df['رقم اللوحة']
-                                
-                                st.session_state.cart[city][net] = df
+                        # هنا يتم استدعاء الدالة المساعدة
+                        fixed_cart = fix_loaded_cart_data(cart_raw)
+                        st.session_state.cart = fixed_cart
                         
                         st.session_state.temp_cust = row['client_name']
                         st.success("✅ تم تحميل العرض بنجاح")
