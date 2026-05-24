@@ -868,32 +868,32 @@ elif page == "📄 عرض سعر":
                         for city, networks in cart_raw.items():
                             st.session_state.cart[city] = {}
                             for net, df_dict in networks.items():
-                                # تحويل القاموس إلى DataFrame مع معالجة الأعمدة
                                 df = pd.DataFrame(df_dict)
                                 
-                                # التأكد من وجود الأعمدة المطلوبة
-                                required_columns = ['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة', 'الحجم', 'fee_print', 'fee_display']
-                                for col in required_columns:
-                                    if col not in df.columns:
-                                        if col == 'رقم اللوحة' and 'رقم اللوحة' not in df.columns:
-                                            # محاولة إيجاد عمود مشابه
-                                            if 'board_number' in df.columns:
-                                                df['رقم اللوحة'] = df['board_number']
-                                            elif 'id' in df.columns:
-                                                df['رقم اللوحة'] = df['id']
-                                            else:
-                                                df['رقم اللوحة'] = ''
+                                # إعادة تسمية الأعمدة إذا لزم الأمر
+                                if 'رقم اللوحة' not in df.columns:
+                                    # محاولة إيجاد عمود يحوي رقم اللوحة
+                                    for col in df.columns:
+                                        if 'board' in col.lower() or 'لوحة' in col or 'number' in col.lower():
+                                            df['رقم اللوحة'] = df[col]
+                                            break
+                                    else:
+                                        # إنشاء عمود افتراضي
+                                        df['رقم اللوحة'] = [f"UNKNOWN_{i}" for i in range(len(df))]
+                                
+                                # التأكد من وجود عمود 'الموقع'
+                                if 'الموقع' not in df.columns and 'اسم العمود' in df.columns:
+                                    df['الموقع'] = df['اسم العمود']
+                                elif 'الموقع' not in df.columns:
+                                    df['الموقع'] = df['رقم اللوحة']
                                 
                                 st.session_state.cart[city][net] = df
                         
                         st.session_state.temp_cust = row['client_name']
-                        st.session_state.current_offer_id = offer_id
                         st.success("✅ تم تحميل العرض بنجاح")
                         st.rerun()
                 except Exception as e:
-                    st.error(f"خطأ في تحميل العرض: {str(e)}")
-                    st.write("تفاصيل الخطأ:", e)  # للمساعدة في التصحيح
-        
+                    st.error(f"خطأ في تحميل العرض: {str(e)}")        
         st.divider()
         
         draw_df = run_query('SELECT * FROM "اسماء الرسم"')
