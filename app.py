@@ -1113,17 +1113,22 @@ elif page == "📄 عرض سعر":
                         
                         st.info(f"📊 العدد: {qty} | الطباعة: {section_print:.2f}$ | العرض: {section_display:.2f}$")
                         
-                        if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
+                        if st.button("🗑️ حذف الشبكة كاملة", key=f"delete_{city}_{net}"):
                             deleted_count = len(edited_df)
-                            st.warning(f"⚠️ سيتم حذف {deleted_count} عمود من الشبكة {net} (ستصبح شبكتهم 0)")
+                            
+                            # رسالة مختلفة لحذف الشبكة كاملة
+                            st.warning(f"⚠️ **تنبيه:** أنت تريد حذف الشبكة `{net}` بالكامل ({deleted_count} عمود)")
+                            st.info(f"📋 ملاحظة: هذه الأعمدة ستبقى في الشبكة `{net}` ولن تتغير")
+                            st.warning(f"🔵 بعد الحذف، لن يتم حجز هذه الأعمدة، ولكن شبكتها ستبقى {net}")
                             
                             col_confirm, col_cancel = st.columns(2)
                             with col_confirm:
-                                if st.button("✅ تأكيد الحذف", key=f"confirm_del_{city}_{net}"):
+                                if st.button("✅ نعم، حذف الشبكة", key=f"confirm_del_net_{city}_{net}"):
                                     del st.session_state.cart[city][net]
+                                    st.success(f"✅ تم حذف الشبكة {net} من العرض")
                                     st.rerun()
                             with col_cancel:
-                                if st.button("❌ إلغاء", key=f"cancel_del_{city}_{net}"):
+                                if st.button("❌ إلغاء", key=f"cancel_del_net_{city}_{net}"):
                                     st.rerun()
             
             st.divider()
