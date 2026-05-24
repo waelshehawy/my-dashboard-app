@@ -548,12 +548,14 @@ def manage_expired_offers():
         st.success("✅ لا توجد عروض منتهية الصلاحية.")
         return
     
-    for _, row in expired_df.iterrows():
+    # استخدام enumerate لتوليد مفاتيح فريدة
+    for idx, row in expired_df.iterrows():
         col1, col2, col3 = st.columns([3, 1, 1])
         col1.write(f"👤 الزبون: **{row['client_name']}** - تاريخ العرض: {row['offer_date']}")
         
         if is_admin():
-            if col2.button("✅ تمديد 48 ساعة", key=f"ext_{row['id']}"):
+            # استخدام idx في المفتاح لجعله فريداً
+            if col2.button("✅ تمديد 48 ساعة", key=f"ext_{row['id']}_{idx}"):
                 cur = conn.cursor()
                 cur.execute('UPDATE "offers_history" SET offer_date = NOW() WHERE id = %s', (row['id'],))
                 conn.commit()
@@ -561,7 +563,7 @@ def manage_expired_offers():
                 st.success("تم التمديد بنجاح")
                 st.rerun()
             
-            if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}"):
+            if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}_{idx}"):
                 cur = conn.cursor()
                 cur.execute('UPDATE "offers_history" SET status = %s WHERE id = %s', ('Cancelled', row['id']))
                 conn.commit()
