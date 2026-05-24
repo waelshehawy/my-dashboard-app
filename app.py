@@ -859,6 +859,52 @@ elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
     
     # ============================================================
+    # تشخيص دقيق جداً
+    # ============================================================
+    import traceback
+    
+    try:
+        st.write("1 - بداية الصفحة")
+        
+        # تعريف الدالة
+        def prepare_dataframe(df, net_name=""):
+            st.write(f"  1.1 - داخل الدالة، net_name={net_name}")
+            # ... محتوى الدالة ...
+            return df_clean
+        
+        st.write("2 - بعد تعريف الدالة")
+        
+        # تنظيف السلة
+        if st.session_state.cart:
+            st.write("3 - السلة غير فارغة")
+            new_cart = {}
+            for city, networks in st.session_state.cart.items():
+                st.write(f"  3.1 - مدينة: {city}")
+                for net, df in networks.items():
+                    st.write(f"    3.2 - شبكة: {net}, نوع df: {type(df)}")
+                    st.write(f"    3.3 - أعمدة df: {df.columns.tolist() if hasattr(df, 'columns') else 'ليس DataFrame'}")
+                    new_cart[city][net] = prepare_dataframe(df, net)
+            st.session_state.cart = new_cart
+            st.write("4 - انتهى تنظيف السلة")
+        else:
+            st.write("3 - السلة فارغة")
+        
+        st.write("5 - قبل st.markdown")
+        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+        st.write("6 - بعد st.markdown")
+        
+        st.write("7 - قبل try")
+        
+    except Exception as e:
+        st.error(f"خطأ في التشخيص: {e}")
+        st.code(traceback.format_exc())
+        st.stop()
+    
+    try:
+        st.write("8 - داخل try")
+        # ... باقي الكود ...
+    
+    # ============================================================
     # تعريف الدالة - داخل الصفحة
     # ============================================================
     def prepare_dataframe(df, net_name=""):
@@ -905,68 +951,9 @@ elif page == "📄 عرض سعر":
         
         df_clean = df_clean.reset_index(drop=True)
         return df_clean
-    
-    # ============================================================
-    # تنظيف السلة
-    # ============================================================
-    if st.session_state.cart:
-        new_cart = {}
-        for city, networks in st.session_state.cart.items():
-            new_cart[city] = {}
-            for net, df in networks.items():
-                new_cart[city][net] = prepare_dataframe(df, net)
-        st.session_state.cart = new_cart
 
-    ###
-    elif page == "📄 عرض سعر":
-    st.title("📄 بناء عرض سعر جديد")
-    
-    # ============================================================
-    # تشخيص دقيق جداً
-    # ============================================================
-    import traceback
-    
-    try:
-        st.write("1 - بداية الصفحة")
-        
-        # تعريف الدالة
-        def prepare_dataframe(df, net_name=""):
-            st.write(f"  1.1 - داخل الدالة، net_name={net_name}")
-            # ... محتوى الدالة ...
-            return df_clean
-        
-        st.write("2 - بعد تعريف الدالة")
-        
-        # تنظيف السلة
-        if st.session_state.cart:
-            st.write("3 - السلة غير فارغة")
-            new_cart = {}
-            for city, networks in st.session_state.cart.items():
-                st.write(f"  3.1 - مدينة: {city}")
-                for net, df in networks.items():
-                    st.write(f"    3.2 - شبكة: {net}, نوع df: {type(df)}")
-                    st.write(f"    3.3 - أعمدة df: {df.columns.tolist() if hasattr(df, 'columns') else 'ليس DataFrame'}")
-                    new_cart[city][net] = prepare_dataframe(df, net)
-            st.session_state.cart = new_cart
-            st.write("4 - انتهى تنظيف السلة")
-        else:
-            st.write("3 - السلة فارغة")
-        
-        st.write("5 - قبل st.markdown")
-        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-        st.write("6 - بعد st.markdown")
-        
-        st.write("7 - قبل try")
-        
-    except Exception as e:
-        st.error(f"خطأ في التشخيص: {e}")
-        st.code(traceback.format_exc())
-        st.stop()
-    
-    try:
-        st.write("8 - داخل try")
-        # ... باقي الكود ...
-    ###
+
+
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
     try:
