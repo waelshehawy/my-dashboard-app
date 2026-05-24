@@ -585,8 +585,7 @@ def manage_expired_offers():
         st.write("تشخيص 19: بعد draw_df")
         
         st.write("تشخيص 20: قبل customer_name")
-        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون")
-        st.session_state.temp_cust = customer_name
+        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون", key="customer_name_input")
         st.write("تشخيص 21: بعد customer_name")
         
         st.write("تشخيص 22: قبل col1, col2, col3")
