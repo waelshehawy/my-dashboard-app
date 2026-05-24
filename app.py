@@ -856,9 +856,6 @@ elif page == "📊 Dashboard":
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
     
-    # ============================================================
-    # تعريف الدالة (تنتهي هنا)
-    # ============================================================
 def prepare_dataframe(df, net_name=""):
     """تجهيز DataFrame وإضافة جميع الأعمدة المطلوبة"""
     if df is None:
@@ -909,16 +906,7 @@ def prepare_dataframe(df, net_name=""):
     
     return df_clean
     
-    # ============================================================
-    # تنظيف السلة (هذا خارج الدالة)
-    # ============================================================
-    if st.session_state.cart:
-        new_cart = {}
-        for city, networks in st.session_state.cart.items():
-            new_cart[city] = {}
-            for net, df in networks.items():
-                new_cart[city][net] = prepare_dataframe(df, net)
-        st.session_state.cart = new_cart
+
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
         # ============================================================
