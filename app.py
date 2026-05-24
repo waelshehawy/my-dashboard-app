@@ -573,7 +573,33 @@ def manage_expired_offers():
         else:
             col2.write("🔒")
             col3.write("🔒")
-
+# تشخيص
+        st.write("تشخيص 15: بعد expander")
+        
+        st.write("تشخيص 16: قبل saved_offers query")
+        saved_offers = run_query('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = %s ORDER BY id DESC', ('Pending',))
+        st.write("تشخيص 17: بعد saved_offers query")
+        
+        st.write("تشخيص 18: قبل draw_df")
+        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+        st.write("تشخيص 19: بعد draw_df")
+        
+        st.write("تشخيص 20: قبل customer_name")
+        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون")
+        st.session_state.temp_cust = customer_name
+        st.write("تشخيص 21: بعد customer_name")
+        
+        st.write("تشخيص 22: قبل col1, col2, col3")
+        col1, col2, col3 = st.columns(3)
+        st.write("تشخيص 23: بعد col1, col2, col3")
+        
+        with col1:
+            st.write("تشخيص 24: داخل col1")
+            selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
+        st.write("تشخيص 25: بعد col1")
+    
+        
+        # ... وهكذا
 def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
     """تصفية البيانات للحصول على الإحداثيات الصالحة فقط"""
     if df.empty:
