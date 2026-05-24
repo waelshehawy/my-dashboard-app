@@ -170,64 +170,11 @@ st.set_page_config(
 )
 
 st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
-# ============================================================
-# تهيئة حالة الجلسة - يجب أن تكون في بداية الملف
-# ============================================================
 
-# تهيئة جميع متغيرات الجلسة بشكل آمن
-if 'auth' not in st.session_state:
-    st.session_state.auth = False
-if 'role' not in st.session_state:
-    st.session_state.role = None
-if 'username' not in st.session_state:
-    st.session_state.username = None
-if 'cart' not in st.session_state:
-    st.session_state.cart = {}
-if 'temp_cust' not in st.session_state:
-    st.session_state.temp_cust = ""
-if 'db_initialized' not in st.session_state:
-    st.session_state.db_initialized = False
-if 'selected_company' not in st.session_state:
-    st.session_state.selected_company = None
-if 'show_company_map' not in st.session_state:
-    st.session_state.show_company_map = False
-if 'selected_city' not in st.session_state:
-    st.session_state.selected_city = None
-if 'show_city_details' not in st.session_state:
-    st.session_state.show_city_details = False
-if 'current_offer_id' not in st.session_state:
-    st.session_state.current_offer_id = None
 # ============================================================
 # دوال مساعدة
 # ============================================================
-def convert_json_to_df(items):
-    """تحويل JSON المخزن إلى DataFrame"""
-    # إذا كان items هو list من الصفوف
-    if isinstance(items, list):
-        return pd.DataFrame(items)
-    
-    # إذا كان items هو dict بمفاتيح هي أسماء الأعمدة وقيمها dict من indexes
-    if isinstance(items, dict):
-        first_key = list(items.keys())[0] if items else None
-        if first_key and isinstance(items[first_key], dict):
-            # تنسيق: {'رقم اللوحة': {0: 1436, 1: 1437, ...}}
-            rows = []
-            num_rows = max([len(v) for v in items.values()]) if items else 0
-            for i in range(num_rows):
-                row = {}
-                for col, values in items.items():
-                    if i in values:
-                        row[col] = values[i]
-                    elif str(i) in values:
-                        row[col] = values[str(i)]
-                rows.append(row)
-            return pd.DataFrame(rows)
-    
-    return pd.DataFrame()
-def show_delete_warning(network_name, board_name):
-    """عرض رسالة تحذير عند حذف موقع"""
-    st.warning(f"⚠️ **تنبيه:** أنت أزلت العمود `{board_name}` من الشبكة `{network_name}` وسيصبح في الشبكة 0", icon="⚠️")
-    st.info("💡 ملاحظة: الشبكة 0 تعني أن هذا العمود غير مرتبط بأي شبكة حالياً")
+
 def create_metric_card_3d(title, value, icon, color_gradient="primary"):
     gradients = {
         "primary": "linear-gradient(135deg, #667eea, #764ba2)",
@@ -425,24 +372,7 @@ def run_query(query, params=None, fetch=True):
         if fetch and query.strip().upper().startswith('SELECT'):
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
-            # تحويل الصفوف إلى قاموس مع معالجة خاصة
-            data = []
-            for row in rows:
-                row_dict = {}
-                for i, col in enumerate(columns):
-                    val = row[i]
-                    # تحويل كائنات datetime إلى string
-                    if hasattr(val, 'strftime'):
-                        val = val.strftime('%Y-%m-%d %H:%M:%S')
-                    # معالجة الشبكة الفارغة
-                    if col == 'الشبكة' and (val is None or val == ''):
-                        val = '0'
-                    # معالجة رقم اللوحة الفارغ
-                    if col == 'رقم اللوحة' and (val is None or val == ''):
-                        val = 'UNKNOWN'
-                    row_dict[col] = val
-                data.append(row_dict)
-            return pd.DataFrame(data)
+            return pd.DataFrame(rows, columns=columns)
         else:
             conn.commit()
             return cursor.rowcount
@@ -451,6 +381,7 @@ def run_query(query, params=None, fetch=True):
         raise e
     finally:
         cursor.close()
+
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
     
@@ -548,14 +479,12 @@ def manage_expired_offers():
         st.success("✅ لا توجد عروض منتهية الصلاحية.")
         return
     
-    # استخدام enumerate لتوليد مفاتيح فريدة
-    for idx, row in expired_df.iterrows():
+    for _, row in expired_df.iterrows():
         col1, col2, col3 = st.columns([3, 1, 1])
         col1.write(f"👤 الزبون: **{row['client_name']}** - تاريخ العرض: {row['offer_date']}")
         
         if is_admin():
-            # استخدام idx في المفتاح لجعله فريداً
-            if col2.button("✅ تمديد 48 ساعة", key=f"ext_{row['id']}_{idx}"):
+            if col2.button("✅ تمديد 48 ساعة", key=f"ext_{row['id']}"):
                 cur = conn.cursor()
                 cur.execute('UPDATE "offers_history" SET offer_date = NOW() WHERE id = %s', (row['id'],))
                 conn.commit()
@@ -563,7 +492,7 @@ def manage_expired_offers():
                 st.success("تم التمديد بنجاح")
                 st.rerun()
             
-            if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}_{idx}"):
+            if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}"):
                 cur = conn.cursor()
                 cur.execute('UPDATE "offers_history" SET status = %s WHERE id = %s', ('Cancelled', row['id']))
                 conn.commit()
@@ -573,32 +502,7 @@ def manage_expired_offers():
         else:
             col2.write("🔒")
             col3.write("🔒")
-# تشخيص
-        st.write("تشخيص 15: بعد expander")
-        
-        st.write("تشخيص 16: قبل saved_offers query")
-        saved_offers = run_query('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = %s ORDER BY id DESC', ('Pending',))
-        st.write("تشخيص 17: بعد saved_offers query")
-        
-        st.write("تشخيص 18: قبل draw_df")
-        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
-        st.write("تشخيص 19: بعد draw_df")
-        
-        st.write("تشخيص 20: قبل customer_name")
-        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون", key="customer_name_input")
-        st.write("تشخيص 21: بعد customer_name")
-        
-        st.write("تشخيص 22: قبل col1, col2, col3")
-        col1, col2, col3 = st.columns(3)
-        st.write("تشخيص 23: بعد col1, col2, col3")
-        
-        with col1:
-            st.write("تشخيص 24: داخل col1")
-            selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
-        st.write("تشخيص 25: بعد col1")
-    
-        
-        # ... وهكذا
+
 def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
     """تصفية البيانات للحصول على الإحداثيات الصالحة فقط"""
     if df.empty:
@@ -881,7 +785,7 @@ elif page == "📊 Dashboard":
             ).add_to(marker_cluster)
     
     st_folium(m, width="100%", height=500)
-#=======================
+
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -1258,6 +1162,115 @@ elif page == "📄 عرض سعر":
     except Exception as e:
         st.error(f"❌ حدث خطأ: {str(e)}")
 
+elif page == "📋 تقرير الجرد":
+    st.title("📋 التقرير التجميعي - جرد اللوحات")
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    
+    try:
+        periods_df = run_query('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"')
+        period_names = periods_df['namee'].tolist()
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            from_period = st.selectbox("من فترة:", period_names, key="from_period")
+        with col2:
+            to_period = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1, key="to_period")
+        with col3:
+            report_year = st.number_input("العام:", value=datetime.now().year, key="report_year")
+        
+        from_idx = int(periods_df[periods_df['namee'] == from_period]['no'].iloc[0])
+        to_idx = int(periods_df[periods_df['namee'] == to_period]['no'].iloc[0])
+        target_periods = periods_df[(periods_df['no'] >= from_idx) & (periods_df['no'] <= to_idx)]['namee'].tolist()
+        
+        all_boards = run_query('SELECT "رقم اللوحة", "المحافظة", "الحجم", "العدد" FROM "اعمدة انارة"')
+        
+        period_placeholders = ','.join([f"'{p}'" for p in target_periods])
+        booked_query = f'''
+            SELECT DISTINCT "رقم اللوحة" 
+            FROM "حجوزات1" 
+            WHERE "العام" = %s 
+            AND "فترة الحجز" IN ({period_placeholders})
+        '''
+        booked_in_period = run_query(booked_query, (report_year,))['رقم اللوحة'].tolist()
+        
+        all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_in_period else 'متاح')
+        
+        total_sites = len(all_boards)
+        booked_sites = len(booked_in_period)
+        available_sites = total_sites - booked_sites
+        total_boards_count = all_boards['العدد'].sum()
+        booked_boards_count = all_boards[all_boards['الحالة'] == 'محجوز']['العدد'].sum()
+        available_boards_count = total_boards_count - booked_boards_count
+        
+        cols = st.columns(4)
+        metrics_data = [
+            ("🏢 إجمالي المواقع", total_sites, "🗺️", "primary"),
+            ("🔴 المواقع المحجوزة", booked_sites, "📌", "danger"),
+            ("🟢 المواقع المتاحة", available_sites, "✅", "success"),
+            ("📈 نسبة الإشغال", f"{(booked_sites/total_sites*100):.1f}%", "📊", "warning")
+        ]
+        
+        for idx, (title, value, icon, color) in enumerate(metrics_data):
+            with cols[idx]:
+                st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
+        
+        st.divider()
+        
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=['محجوز', 'متاح'],
+                values=[booked_boards_count, available_boards_count],
+                hole=0.4,
+                marker_colors=['#dc2626', '#22c55e'],
+                textinfo='percent+label'
+            )])
+            fig_pie.update_layout(title="نسبة إشغال الأعمدة", height=400)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col_chart2:
+            city_data = []
+            for city in all_boards['المحافظة'].unique():
+                city_df = all_boards[all_boards['المحافظة'] == city]
+                city_total = city_df['العدد'].sum()
+                city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
+                city_data.append({
+                    'المحافظة': city,
+                    'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
+                })
+            
+            city_df = pd.DataFrame(city_data)
+            fig_bar = px.bar(city_df, x='المحافظة', y='نسبة الإشغال', 
+                           color='نسبة الإشغال', color_continuous_scale='RdYlGn')
+            fig_bar.update_layout(height=400)
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        st.divider()
+        
+        st.subheader("📋 تفصيل حسب المحافظة")
+        city_details = []
+        for city in all_boards['المحافظة'].unique():
+            city_df = all_boards[all_boards['المحافظة'] == city]
+            city_total = city_df['العدد'].sum()
+            city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
+            city_details.append({
+                'المحافظة': city,
+                'الإجمالي': int(city_total),
+                'محجوز': int(city_booked),
+                'متاح': int(city_total - city_booked),
+                'نسبة الإشغال': f"{(city_booked/city_total*100):.1f}%" if city_total > 0 else "0%"
+            })
+        
+        st.dataframe(pd.DataFrame(city_details), use_container_width=True)
+        
+        st.divider()
+        csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button("📊 تصدير إلى CSV", csv_data, f"Inventory_Report_{report_year}.csv", "text/csv", use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"حدث خطأ في التقرير: {str(e)}")
+
 elif page == "📅 تقرير التوفر الشهري":
     st.title("📋 تقرير الأعمدة المتاحة")
     st.info("📌 يعرض هذا التقرير الأعمدة المتاحة حالياً أو التي ستصبح متاحة بعد تاريخ محدد")
@@ -1344,39 +1357,31 @@ elif page == "🗺️ تقرير جميع المواقع":
     
     st.subheader("📋 تفصيل حسب المحافظة والشبكة")
     
-    # حلقة عبر المحافظات - بدون expander متداخل
     for city in sorted(all_columns['المحافظة'].unique()):
         city_df = all_columns[all_columns['المحافظة'] == city]
-        
-        # استخدام markdown بدلاً من expander للمحافظة
-        st.markdown(f"### 📍 محافظة {city}")
-        st.markdown(f"**الإجمالي:** {len(city_df)} موقع - {city_df['العدد'].sum()} لوحة")
-        
-        # عرض الشبكات في المحافظة
-        networks_list = city_df['الشبكة'].dropna().astype(str).unique()
-        
-        for network in sorted(networks_list):
-            net_df = city_df[city_df['الشبكة'] == network]
+        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)", expanded=False):
+            network_summary = city_df.groupby('الشبكة').agg({
+                'رقم اللوحة': 'count',
+                'العدد': 'sum'
+            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+            st.write("**📡 توزع الشبكات في المحافظة:**")
+            st.dataframe(network_summary, use_container_width=True)
             
-            # استخدام expander للشبكة فقط (مستوى واحد)
-            with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
-                # تفصيل حسب الحجم
-                size_summary = net_df.groupby('الحجم').agg({
-                    'رقم اللوحة': 'count',
-                    'العدد': 'sum'
-                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-                st.write("**📏 تفصيل حسب الحجم:**")
-                st.dataframe(size_summary, use_container_width=True)
-                
-                st.write("**📍 قائمة المواقع:**")
-                st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
-        
-        st.markdown("---")  # فاصل بين المحافظات
+            networks_list = city_df['الشبكة'].dropna().astype(str).unique()
+            for network in sorted(networks_list):
+                net_df = city_df[city_df['الشبكة'] == network]
+                with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
+                    size_summary = net_df.groupby('الحجم').agg({
+                        'رقم اللوحة': 'count',
+                        'العدد': 'sum'
+                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                    st.write("**📏 تفصيل حسب الحجم:**")
+                    st.dataframe(size_summary, use_container_width=True)
+                    st.write("**📍 قائمة المواقع:**")
+                    st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
     
     st.divider()
     
-    # تصدير التقرير
-    st.subheader("📥 تصدير التقرير")
     csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
     st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"full_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
