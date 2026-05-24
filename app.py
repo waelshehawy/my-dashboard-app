@@ -1092,6 +1092,9 @@ elif page == "📄 عرض سعر":
                             continue
                         
                         # عرض محرر البيانات
+                        # Diagnostic قبل data_editor
+                        st.write(f"Debug - Before data_editor: columns = {df_cart.columns.tolist()}")
+                        st.write(f"Debug - 'رقم اللوحة' in columns: {'رقم اللوحة' in df_cart.columns}")
                         edited_df = st.data_editor(clean_df, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
                         
                         # حفظ التعديلات
