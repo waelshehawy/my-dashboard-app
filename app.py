@@ -170,7 +170,33 @@ st.set_page_config(
 )
 
 st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
+# ============================================================
+# تهيئة حالة الجلسة - يجب أن تكون في بداية الملف
+# ============================================================
 
+# تهيئة جميع متغيرات الجلسة بشكل آمن
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'cart' not in st.session_state:
+    st.session_state.cart = {}
+if 'temp_cust' not in st.session_state:
+    st.session_state.temp_cust = ""
+if 'db_initialized' not in st.session_state:
+    st.session_state.db_initialized = False
+if 'selected_company' not in st.session_state:
+    st.session_state.selected_company = None
+if 'show_company_map' not in st.session_state:
+    st.session_state.show_company_map = False
+if 'selected_city' not in st.session_state:
+    st.session_state.selected_city = None
+if 'show_city_details' not in st.session_state:
+    st.session_state.show_city_details = False
+if 'current_offer_id' not in st.session_state:
+    st.session_state.current_offer_id = None
 # ============================================================
 # دوال مساعدة
 # ============================================================
