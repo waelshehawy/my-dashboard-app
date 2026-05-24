@@ -986,23 +986,6 @@ elif page == "📄 عرض سعر":
     st.write("تشخيص 10: بعد st.markdown")
     ## انتهاء التشخيص
     try:
-    ## تشخيص اضافي
-            try:
-        st.write("تشخيص 11: داخل try - قبل أي شيء")
-        
-        st.write("تشخيص 12: قبل manage_expired_offers")
-        with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
-            st.write("تشخيص 13: داخل expander - قبل manage_expired_offers")
-            manage_expired_offers()
-            st.write("تشخيص 14: داخل expander - بعد manage_expired_offers")
-        st.write("تشخيص 15: بعد expander")
-        
-        st.write("تشخيص 16: قبل saved_offers query")
-        saved_offers = run_query('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = %s ORDER BY id DESC', ('Pending',))
-        st.write("تشخيص 17: بعد saved_offers query")
-        
-        # ... باقي الكود ...
-# انتهاء التشخيص
 
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
