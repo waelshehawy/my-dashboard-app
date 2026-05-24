@@ -852,59 +852,54 @@ elif page == "📊 Dashboard":
             ).add_to(marker_cluster)
     
     st_folium(m, width="100%", height=500)
-
+#=======================
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
+#=======================    
+def prepare_dataframe(df, net_name=""):
+    """تجهيز DataFrame وإضافة جميع الأعمدة المطلوبة"""
+    if df is None:
+        return pd.DataFrame()
     
-    # ============================================================
-    # التنظيف الفوري للسلة - أول شيء في الصفحة
-    # ============================================================
-    def fix_df_immediately(df, net_name=""):
-        """إصلاح DataFrame فوراً"""
-        if df is None:
-            return pd.DataFrame()
-        
-        if isinstance(df, pd.DataFrame):
-            df_copy = df.copy()
+    if isinstance(df, pd.DataFrame):
+        df_clean = df.copy()
+    else:
+        df_clean = pd.DataFrame(df)
+    
+    # إضافة عمود رقم اللوحة
+    if 'رقم اللوحة' not in df_clean.columns:
+        if 'board_number' in df_clean.columns:
+            df_clean['رقم اللوحة'] = df_clean['board_number']
+        elif 'id' in df_clean.columns:
+            df_clean['رقم اللوحة'] = df_clean['id']
         else:
-            df_copy = pd.DataFrame(df)
-        
-        # إضافة عمود رقم اللوحة إذا لم يوجد
-        if 'رقم اللوحة' not in df_copy.columns:
-            # محاولة إيجاد أي عمود بديل
-            found = False
-            for col in df_copy.columns:
-                if 'board' in col.lower() or 'لوحة' in col or 'id' in col.lower():
-                    df_copy['رقم اللوحة'] = df_copy[col]
-                    found = True
-                    break
-            if not found:
-                df_copy['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_copy))]
-        
-        # إضافة الأعمدة المفقودة الأخرى
-        if 'العدد' not in df_copy.columns:
-            df_copy['العدد'] = 1
-        if 'fee_print' not in df_copy.columns:
-            df_copy['fee_print'] = 0
-        if 'fee_display' not in df_copy.columns:
-            df_copy['fee_display'] = 0
-        if 'الموقع' not in df_copy.columns and 'اسم العمود' in df_copy.columns:
-            df_copy['الموقع'] = df_copy['اسم العمود']
-        elif 'الموقع' not in df_copy.columns:
-            df_copy['الموقع'] = df_copy['رقم اللوحة']
-        
-        return df_copy
+            df_clean['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_clean))]
     
-    # تطبيق التنظيف على السلة فوراً
-    if 'cart' in st.session_state and st.session_state.cart:
-        cleaned_cart = {}
+    # إضافة باقي الأعمدة
+    if 'العدد' not in df_clean.columns:
+        df_clean['العدد'] = 1
+    if 'fee_print' not in df_clean.columns:
+        df_clean['fee_print'] = 0
+    if 'fee_display' not in df_clean.columns:
+        df_clean['fee_display'] = 0
+    if 'الشبكة' not in df_clean.columns:
+        df_clean['الشبكة'] = net_name
+    if 'الموقع' not in df_clean.columns:
+        if 'اسم العمود' in df_clean.columns:
+            df_clean['الموقع'] = df_clean['اسم العمود']
+        else:
+            df_clean['الموقع'] = df_clean['رقم اللوحة']
+    
+    return df_clean
+    # تنظيف السلة
+    if st.session_state.cart:
+        new_cart = {}
         for city, networks in st.session_state.cart.items():
-            cleaned_cart[city] = {}
+            new_cart[city] = {}
             for net, df in networks.items():
-                cleaned_cart[city][net] = fix_df_immediately(df, net)
-        st.session_state.cart = cleaned_cart
+                new_cart[city][net] = prepare_dataframe(df, net)
+        st.session_state.cart = new_cart
     
-    # ثم باقي الكود
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
 
@@ -1071,7 +1066,7 @@ elif page == "📄 عرض سعر":
                 for net, df_cart in list(networks.items()):
                     with st.expander(f"📍 {city} - {net}", expanded=True):
                         # تنظيف DataFrame قبل العرض
-                        clean_df = fix_dataframe(df_cart, default_net=net)
+                        clean_df = prepare_dataframe(df_cart, net)
                         
                         if clean_df.empty:
                             st.warning("لا توجد بيانات")
@@ -1081,7 +1076,7 @@ elif page == "📄 عرض سعر":
                         edited_df = st.data_editor(clean_df, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
                         
                         # حفظ التعديلات
-                        st.session_state.cart[city][net] = fix_dataframe(edited_df, default_net=net)
+                        st.session_state.cart[city][net] = prepare_dataframe(edited_df, net)
                         
                         # حساب الإجماليات
                         qty = int(edited_df['العدد'].sum())
