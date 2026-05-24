@@ -1192,7 +1192,16 @@ elif page == "📄 عرض سعر":
                                                 cur.execute('''
                                                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
                                                     VALUES (%s, %s, %s, %s)
-                                                ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                                ''', (# الحصول على رقم اللوحة بأمان
+board_number = row.get('رقم اللوحة')
+if board_number is None or board_number == '':
+    board_number = row.get('board_number', row.get('id', 'UNKNOWN'))
+board_number = str(board_number)
+
+cur.execute('''
+    INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+    VALUES (%s, %s, %s, %s)
+''', (board_number, customer_name, year, period)), customer_name, year, period))
                                 
                                 conn.commit()
                                 st.session_state.cart = {}
