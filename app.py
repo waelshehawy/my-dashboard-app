@@ -986,6 +986,29 @@ elif page == "📄 عرض سعر":
     st.write("تشخيص 10: بعد st.markdown")
     ## انتهاء التشخيص
     try:
+        st.write("تشخيص 11: داخل try - قبل أي شيء")
+        
+        st.write("تشخيص 12: قبل manage_expired_offers")
+        with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
+            st.write("تشخيص 13: داخل expander - قبل manage_expired_offers")
+            manage_expired_offers()
+            st.write("تشخيص 14: داخل expander - بعد manage_expired_offers")
+        st.write("تشخيص 15: بعد expander")
+        
+        st.write("تشخيص 16: قبل saved_offers query")
+        saved_offers = run_query('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = %s ORDER BY id DESC', ('Pending',))
+        st.write("تشخيص 17: بعد saved_offers query")
+        
+        st.write("تشخيص 18: قبل draw_df")
+        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+        st.write("تشخيص 19: بعد draw_df")
+        
+        st.write("تشخيص 20: قبل customer_name")
+        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون")
+        st.session_state.temp_cust = customer_name
+        st.write("تشخيص 21: بعد customer_name")
+        
+        # ... باقي الكود مع نفس المسافة البادئة (8 مسافات)
 
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
