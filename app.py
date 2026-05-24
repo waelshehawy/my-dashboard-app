@@ -909,7 +909,7 @@ elif page == "📄 عرض سعر":
                                 st.session_state.cart[city][net] = df
                         
                         st.session_state.temp_cust = row['client_name']
-                        st.success("✅ تم تحميل العرض بنجاح")
+                        st.success("✅ تم استرجاع العرض بنجاح")
                         st.rerun()
                 except Exception as e:
                     st.error(f"خطأ في تحميل العرض: {str(e)}")        
@@ -997,6 +997,9 @@ elif page == "📄 عرض سعر":
                     net_data = available_columns[available_columns['الشبكة'] == net].copy()
                     net_data['fee_print'] = per_column_print
                     net_data['fee_display'] = per_column_display
+                    # التأكد من وجود عمود 'رقم اللوحة'
+                    if 'رقم اللوحة' not in net_data.columns:
+                        net_data['رقم اللوحة'] = net_data.index.astype(str)
                     st.session_state.cart[selected_city][net] = net_data
                 st.success("✅ تمت الإضافة")
                 st.rerun()
