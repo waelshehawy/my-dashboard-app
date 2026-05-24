@@ -907,9 +907,23 @@ elif page == "📄 عرض سعر":
         st.session_state.cart = new_cart
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
+        # ============================================================
+    # Diagnostic - لمعرفة مصدر الخطأ
+    # ============================================================
+    import traceback
+    st.write("=== Diagnostic: Checking cart structure ===")
+    if st.session_state.cart:
+        for city, networks in st.session_state.cart.items():
+            st.write(f"City: {city}")
+            for net, df in networks.items():
+                st.write(f"  Network: {net}")
+                st.write(f"    DataFrame columns: {df.columns.tolist() if hasattr(df, 'columns') else 'Not a DataFrame'}")
+                st.write(f"    Type: {type(df)}")
+    else:
+        st.write("Cart is empty")
+    st.write("=== End Diagnostic ===")
     try:
-        # باقي الكود هنا...
+
 
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
