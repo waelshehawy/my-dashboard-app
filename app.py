@@ -1357,31 +1357,39 @@ elif page == "🗺️ تقرير جميع المواقع":
     
     st.subheader("📋 تفصيل حسب المحافظة والشبكة")
     
+    # حلقة عبر المحافظات - بدون expander متداخل
     for city in sorted(all_columns['المحافظة'].unique()):
         city_df = all_columns[all_columns['المحافظة'] == city]
-        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)", expanded=False):
-            network_summary = city_df.groupby('الشبكة').agg({
-                'رقم اللوحة': 'count',
-                'العدد': 'sum'
-            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-            st.write("**📡 توزع الشبكات في المحافظة:**")
-            st.dataframe(network_summary, use_container_width=True)
+        
+        # استخدام markdown بدلاً من expander للمحافظة
+        st.markdown(f"### 📍 محافظة {city}")
+        st.markdown(f"**الإجمالي:** {len(city_df)} موقع - {city_df['العدد'].sum()} لوحة")
+        
+        # عرض الشبكات في المحافظة
+        networks_list = city_df['الشبكة'].dropna().astype(str).unique()
+        
+        for network in sorted(networks_list):
+            net_df = city_df[city_df['الشبكة'] == network]
             
-            networks_list = city_df['الشبكة'].dropna().astype(str).unique()
-            for network in sorted(networks_list):
-                net_df = city_df[city_df['الشبكة'] == network]
-                with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
-                    size_summary = net_df.groupby('الحجم').agg({
-                        'رقم اللوحة': 'count',
-                        'العدد': 'sum'
-                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-                    st.write("**📏 تفصيل حسب الحجم:**")
-                    st.dataframe(size_summary, use_container_width=True)
-                    st.write("**📍 قائمة المواقع:**")
-                    st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
+            # استخدام expander للشبكة فقط (مستوى واحد)
+            with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
+                # تفصيل حسب الحجم
+                size_summary = net_df.groupby('الحجم').agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                st.write("**📏 تفصيل حسب الحجم:**")
+                st.dataframe(size_summary, use_container_width=True)
+                
+                st.write("**📍 قائمة المواقع:**")
+                st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
+        
+        st.markdown("---")  # فاصل بين المحافظات
     
     st.divider()
     
+    # تصدير التقرير
+    st.subheader("📥 تصدير التقرير")
     csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
     st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"full_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
