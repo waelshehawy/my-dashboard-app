@@ -855,24 +855,70 @@ elif page == "📊 Dashboard":
 #=======================
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-        # ============================================================
-    # Diagnostic - لمعرفة مصدر الخطأ
+    
     # ============================================================
-    import traceback
-    st.write("=== Diagnostic: Checking cart structure ===")
+    # تعريف الدالة - داخل الصفحة
+    # ============================================================
+    def prepare_dataframe(df, net_name=""):
+        """تجهيز DataFrame وإضافة جميع الأعمدة المطلوبة"""
+        if df is None:
+            return pd.DataFrame()
+        
+        if isinstance(df, pd.DataFrame):
+            df_clean = df.copy()
+        else:
+            df_clean = pd.DataFrame(df)
+        
+        if 'رقم اللوحة' not in df_clean.columns:
+            if 'board_number' in df_clean.columns:
+                df_clean['رقم اللوحة'] = df_clean['board_number']
+            elif 'id' in df_clean.columns:
+                df_clean['رقم اللوحة'] = df_clean['id']
+            else:
+                df_clean['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_clean))]
+        
+        if 'العدد' not in df_clean.columns:
+            df_clean['العدد'] = 1
+        if 'fee_print' not in df_clean.columns:
+            df_clean['fee_print'] = 0
+        if 'fee_display' not in df_clean.columns:
+            df_clean['fee_display'] = 0
+        if 'الشبكة' not in df_clean.columns:
+            df_clean['الشبكة'] = net_name
+        if 'الموقع' not in df_clean.columns:
+            if 'اسم العمود' in df_clean.columns:
+                df_clean['الموقع'] = df_clean['اسم العمود']
+            else:
+                df_clean['الموقع'] = df_clean['رقم اللوحة']
+        
+        # إزالة الصفوف الفارغة
+        if 'رقم اللوحة' in df_clean.columns:
+            df_clean = df_clean[df_clean['رقم اللوحة'].notna()]
+            df_clean = df_clean[df_clean['رقم اللوحة'] != '']
+            df_clean = df_clean[df_clean['رقم اللوحة'] != 0]
+        
+        if 'الموقع' in df_clean.columns:
+            df_clean = df_clean[df_clean['الموقع'].notna()]
+            df_clean = df_clean[df_clean['الموقع'] != '']
+        
+        df_clean = df_clean.reset_index(drop=True)
+        return df_clean
+    
+    # ============================================================
+    # تنظيف السلة
+    # ============================================================
     if st.session_state.cart:
+        new_cart = {}
         for city, networks in st.session_state.cart.items():
-            st.write(f"City: {city}")
+            new_cart[city] = {}
             for net, df in networks.items():
-                st.write(f"  Network: {net}")
-                st.write(f"    DataFrame columns: {df.columns.tolist() if hasattr(df, 'columns') else 'Not a DataFrame'}")
-                st.write(f"    Type: {type(df)}")
-    else:
-        st.write("Cart is empty")
-    st.write("=== End Diagnostic ===")
+                new_cart[city][net] = prepare_dataframe(df, net)
+        st.session_state.cart = new_cart
+    
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    
     try:
-
+    
 
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
