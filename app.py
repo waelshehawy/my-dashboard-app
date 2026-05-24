@@ -1,4 +1,4 @@
-# app.py - نسخة الإنترنت فقط مع Supabase
+# app.py - النسخة النهائية للإنترنت مع Supabase
 import streamlit as st
 import pandas as pd
 import os
@@ -294,6 +294,12 @@ if not st.session_state.auth:
     st.stop()
 
 # ============================================================
+# الاتصال بقاعدة البيانات بعد تسجيل الدخول
+# ============================================================
+
+conn = get_connection()
+
+# ============================================================
 # الشريط الجانبي
 # ============================================================
 
@@ -333,16 +339,26 @@ with st.sidebar:
     
     st.divider()
     
+    # إحصائيات سريعة
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
+    total_boards_sidebar = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
+    total_clients = cursor.fetchone()[0]
+    cursor.close()
+    
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
+    with col_s2:
+        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
+    
+    st.divider()
+    
     if st.button("🚪 تسجيل الخروج", use_container_width=True):
         st.session_state.auth = False
         st.session_state.cart = {}
         st.rerun()
-
-# ============================================================
-# الاتصال بقاعدة البيانات
-# ============================================================
-
-conn = get_connection()
 
 # ============================================================
 # دوال استعلامات Supabase (بصيغة PostgreSQL)
@@ -353,7 +369,7 @@ def run_query(query, params=None, fetch=True):
     cursor = conn.cursor()
     try:
         cursor.execute(query, params or ())
-        if fetch:
+        if fetch and query.strip().upper().startswith('SELECT'):
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
             return pd.DataFrame(rows, columns=columns)
@@ -391,13 +407,8 @@ def get_fees(draw_df, size, print_type, is_foreign):
     
     return fee_print, fee_ads
 
-# ============================================================
-# عرض الصفحات
-# ============================================================
-
-if page == "🏢 لوحات الشركات":
-    st.title("🏢 لوحات الشركات المعلنة")
-    
+def get_company_bookings():
+    """استرجاع بيانات الشركات المحجوزة"""
     query = '''
         SELECT 
             "اسم الزبون" as company_name,
@@ -409,10 +420,117 @@ if page == "🏢 لوحات الشركات":
         GROUP BY "اسم الزبون"
         ORDER BY "اسم الزبون"
     '''
+    return run_query(query)
+
+def get_company_locations_with_map(company_name):
+    """استرجاع مواقع شركة معينة مع الإحداثيات"""
+    query = '''
+        SELECT DISTINCT 
+            b."رقم اللوحة",
+            b."اسم العمود",
+            b."المحافظة",
+            b."الشبكة",
+            b."الحجم",
+            b."العدد",
+            b."Latitude",
+            b."Longitude"
+        FROM "اعمدة انارة" b
+        INNER JOIN "حجوزات1" h ON b."رقم اللوحة" = h."رقم اللوحة"
+        WHERE h."اسم الزبون" = %s
+    '''
+    return run_query(query, (company_name,))
+
+def get_available_by_city():
+    """استرجاع الأعمدة المتاحة مجمعة حسب المحافظة"""
+    current_year = datetime.now().year
     
-    companies = run_query(query)
+    booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
+    booked_df = run_query(booked_query, (current_year,))
+    booked_boards = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
     
-    if companies.empty:
+    all_columns = run_query('SELECT * FROM "اعمدة انارة"')
+    
+    available = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
+    
+    def classify_size_for_card(size):
+        size_str = str(size).strip()
+        if size_str in ['2*1', '2x1', '2 × 1']:
+            return 'أعمدة إنارة (2×1)'
+        elif size_str in ['125*185', '125x185', '125 × 185']:
+            return 'منصفات (125×185)'
+        else:
+            return 'أحجام أخرى'
+    
+    available['size_group'] = available['الحجم'].apply(classify_size_for_card)
+    return available
+
+def manage_expired_offers():
+    """إدارة العروض المنتهية"""
+    st.subheader("⚠️ إدارة العروض التي تجاوزت 48 ساعة")
+    
+    query = '''
+        SELECT id, client_name, offer_date 
+        FROM "offers_history" 
+        WHERE status = 'Pending' AND offer_date < NOW() - INTERVAL '48 hours'
+    '''
+    expired_df = run_query(query)
+    
+    if expired_df is None or expired_df.empty:
+        st.success("✅ لا توجد عروض منتهية الصلاحية.")
+        return
+    
+    for _, row in expired_df.iterrows():
+        col1, col2, col3 = st.columns([3, 1, 1])
+        col1.write(f"👤 الزبون: **{row['client_name']}** - تاريخ العرض: {row['offer_date']}")
+        
+        if is_admin():
+            if col2.button("✅ تمديد 48 ساعة", key=f"ext_{row['id']}"):
+                cur = conn.cursor()
+                cur.execute('UPDATE "offers_history" SET offer_date = NOW() WHERE id = %s', (row['id'],))
+                conn.commit()
+                cur.close()
+                st.success("تم التمديد بنجاح")
+                st.rerun()
+            
+            if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}"):
+                cur = conn.cursor()
+                cur.execute('UPDATE "offers_history" SET status = %s WHERE id = %s', ('Cancelled', row['id']))
+                conn.commit()
+                cur.close()
+                st.success("تم إلغاء العرض")
+                st.rerun()
+        else:
+            col2.write("🔒")
+            col3.write("🔒")
+
+def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
+    """تصفية البيانات للحصول على الإحداثيات الصالحة فقط"""
+    if df.empty:
+        return df
+    
+    if lat_col not in df.columns or lon_col not in df.columns:
+        return pd.DataFrame()
+    
+    valid = df[
+        df[lat_col].notna() & 
+        df[lon_col].notna() &
+        (df[lat_col] != 0) &
+        (df[lon_col] != 0)
+    ].copy()
+    
+    return valid
+
+# ============================================================
+# عرض الصفحات
+# ============================================================
+
+if page == "🏢 لوحات الشركات":
+    st.title("🏢 لوحات الشركات المعلنة")
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    
+    companies = get_company_bookings()
+    
+    if companies is None or companies.empty:
         st.warning("⚠️ لا توجد شركات معلنة حالياً")
     else:
         for idx, company in companies.iterrows():
@@ -436,6 +554,127 @@ if page == "🏢 لوحات الشركات":
                         st.session_state['show_company_map'] = True
                 
                 st.markdown("<hr>", unsafe_allow_html=True)
+    
+    # عرض الخريطة للشركة المختارة
+    if st.session_state.get('show_company_map', False):
+        st.subheader(f"🗺️ مواقع شركة {st.session_state['selected_company']}")
+        
+        locations = get_company_locations_with_map(st.session_state['selected_company'])
+        
+        if locations is not None and not locations.empty:
+            locations['Latitude'] = pd.to_numeric(locations['Latitude'], errors='coerce')
+            locations['Longitude'] = pd.to_numeric(locations['Longitude'], errors='coerce')
+            
+            has_coords = locations[
+                (locations['Latitude'].notna()) & 
+                (locations['Latitude'] != 0) &
+                (locations['Longitude'].notna()) & 
+                (locations['Longitude'] != 0)
+            ].copy()
+            
+            if not has_coords.empty:
+                m = folium.Map(location=[34.8, 38.9], zoom_start=7)
+                
+                for _, row in has_coords.iterrows():
+                    folium.CircleMarker(
+                        location=[row['Latitude'], row['Longitude']],
+                        radius=8,
+                        popup=f"""
+                        <div dir="rtl" style="text-align:right; min-width:180px;">
+                            <b>{row['اسم العمود']}</b><br>
+                            📍 {row['المحافظة']}<br>
+                            📏 {row['الحجم']}
+                        </div>
+                        """,
+                        color='#22c55e',
+                        fill=True,
+                        fill_color='#22c55e',
+                        fill_opacity=0.7,
+                        weight=2
+                    ).add_to(m)
+                
+                st_folium(m, width="100%", height=500)
+            else:
+                st.info("📍 لا توجد إحداثيات لعرضها على الخريطة")
+        else:
+            st.warning("⚠️ لا توجد مواقع لهذه الشركة")
+        
+        if st.button("🔙 إغلاق الخريطة"):
+            st.session_state['show_company_map'] = False
+            st.rerun()
+
+elif page == "📍 الأعمدة المتاحة":
+    st.title("📍 الأعمدة المتاحة للإيجار")
+    st.info("📌 اختر محافظة لعرض الأعمدة المتاحة فيها مع خريطة تفاعلية")
+    
+    available_data = get_available_by_city()
+    
+    if available_data is None or available_data.empty:
+        st.warning("⚠️ لا توجد أعمدة متاحة حالياً")
+        st.stop()
+    
+    cities = available_data['المحافظة'].unique()
+    
+    cols_per_row = 3
+    for i in range(0, len(cities), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, col in enumerate(cols):
+            if i + j < len(cities):
+                city = cities[i + j]
+                city_data = available_data[available_data['المحافظة'] == city]
+                total_boards = city_data['العدد'].sum()
+                total_sites = len(city_data)
+                unique_sizes = city_data['الحجم'].nunique()
+                
+                with col:
+                    st.markdown(f"""
+                    <div class="neumorphic-card" style="text-align: center; cursor: pointer;">
+                        <div style="font-size: 48px;">🏙️</div>
+                        <h3>{city}</h3>
+                        <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
+                            {badge_animated(f"{int(total_boards)} عمود", "info")}
+                            {badge_animated(f"{total_sites} موقع", "success")}
+                            {badge_animated(f"{unique_sizes} حجم", "warning")}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
+                        st.session_state['selected_city'] = city
+                        st.session_state['show_city_details'] = True
+                        st.rerun()
+    
+    if st.session_state.get('show_city_details', False):
+        city = st.session_state['selected_city']
+        city_data = available_data[available_data['المحافظة'] == city]
+        
+        st.divider()
+        st.subheader(f"📍 محافظة {city}")
+        
+        for size_name in ['أعمدة إنارة (2×1)', 'منصفات (125×185)', 'أحجام أخرى']:
+            group_data = city_data[city_data['size_group'] == size_name]
+            if not group_data.empty:
+                total = group_data['العدد'].sum()
+                with st.expander(f"📏 {size_name} - {int(total)} عمود", expanded=True):
+                    valid_coords = filter_valid_coordinates(group_data)
+                    if not valid_coords.empty:
+                        m = folium.Map(location=[34.8, 38.9], zoom_start=8)
+                        for _, row in valid_coords.iterrows():
+                            folium.Marker(
+                                [row['Latitude'], row['Longitude']],
+                                popup=f"<b>{row['اسم العمود']}</b><br>{row['الشبكة']}<br>{row['الحجم']}",
+                                icon=folium.Icon(color='green', icon='info-sign')
+                            ).add_to(m)
+                        st_folium(m, width="100%", height=400)
+                    
+                    st.dataframe(group_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+            else:
+                with st.expander(f"📏 {size_name}"):
+                    st.info("لا توجد أعمدة في هذه الفئة")
+        
+        if st.button("🔙 العودة إلى قائمة المحافظات", key="back_to_cities"):
+            st.session_state['show_city_details'] = False
+            st.rerun()
 
 elif page == "📊 Dashboard":
     st.markdown("""
@@ -449,10 +688,10 @@ elif page == "📊 Dashboard":
     
     all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
     
-    booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}'
-    booked_df = run_query(booked_query)
+    booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
+    booked_df = run_query(booked_query, (current_year,))
     
-    booked_boards_list = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+    booked_boards_list = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
     
     all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_boards_list else 'متاح')
     
@@ -473,9 +712,24 @@ elif page == "📊 Dashboard":
         with cols[idx]:
             st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
     
+    st.markdown(f"""
+    <div style="margin: 20px 0;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>📊 نسبة الإشغال الحالية</span>
+            <span style="font-weight: bold;">{occupancy_rate:.1f}%</span>
+        </div>
+        <div style="height: 12px; background: rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden;">
+            <div style="width: {occupancy_rate}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.divider()
+    
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
+        st.subheader("🥧 نسبة الإشغال الكلية")
         fig_pie = go.Figure(data=[go.Pie(
             labels=['محجوز', 'متاح'],
             values=[booked_boards, available_boards],
@@ -487,6 +741,7 @@ elif page == "📊 Dashboard":
         st.plotly_chart(fig_pie, use_container_width=True)
     
     with col_chart2:
+        st.subheader("📊 إحصائيات حسب المحافظة")
         city_stats = []
         for city in all_columns['المحافظة'].unique():
             city_data = all_columns[all_columns['المحافظة'] == city]
@@ -531,52 +786,51 @@ elif page == "📊 Dashboard":
     
     st_folium(m, width="100%", height=500)
 
-elif page == "📍 الأعمدة المتاحة":
-    st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 اختر محافظة لعرض الأعمدة المتاحة فيها")
-    
-    current_year = datetime.now().year
-    
-    booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}'
-    booked_df = run_query(booked_query)
-    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
-    
-    all_columns = run_query('SELECT * FROM "اعمدة انارة"')
-    available = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
-    
-    if available.empty:
-        st.warning("⚠️ لا توجد أعمدة متاحة حالياً")
-    else:
-        cities = available['المحافظة'].unique()
-        
-        cols_per_row = 3
-        for i in range(0, len(cities), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j, col in enumerate(cols):
-                if i + j < len(cities):
-                    city = cities[i + j]
-                    city_data = available[available['المحافظة'] == city]
-                    total_boards = city_data['العدد'].sum()
-                    
-                    with col:
-                        st.markdown(f"""
-                        <div class="neumorphic-card" style="text-align: center;">
-                            <div style="font-size: 48px;">🏙️</div>
-                            <h3>{city}</h3>
-                            {badge_animated(f"{int(total_boards)} عمود", "info")}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
-                            st.dataframe(city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
-
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
     try:
+        with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
+            manage_expired_offers()
+        
+        st.subheader("📂 استرجاع عرض محفوظ")
+        saved_offers = run_query('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = %s ORDER BY id DESC', ('Pending',))
+        
+        if saved_offers is not None and not saved_offers.empty:
+            offer_options = {}
+            for _, row in saved_offers.iterrows():
+                date_str = row['offer_date'][:10] if row['offer_date'] else "بدون تاريخ"
+                offer_options[f"{row['client_name']} ({date_str})"] = row['id']
+            
+            selected_offer = st.selectbox("اختر عرضاً محفوظاً:", ["---"] + list(offer_options.keys()), key="load_offer_select")
+            
+            if selected_offer != "---" and st.button("🔄 تحميل للسلة", key="load_offer_button", use_container_width=True):
+                try:
+                    offer_id = offer_options[selected_offer]
+                    result = run_query('SELECT cart_json, client_name, start_p, end_p, year FROM "offers_history" WHERE id = %s', (offer_id,))
+                    
+                    if result is not None and not result.empty:
+                        row = result.iloc[0]
+                        data = json.loads(row['cart_json'])
+                        cart_raw = data.get("data", data)
+                        st.session_state.cart = {}
+                        for city, networks in cart_raw.items():
+                            st.session_state.cart[city] = {}
+                            for net, df_dict in networks.items():
+                                st.session_state.cart[city][net] = pd.DataFrame(df_dict)
+                        
+                        st.session_state.temp_cust = row['client_name']
+                        st.success("✅ تم تحميل العرض بنجاح")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"خطأ في تحميل العرض: {str(e)}")
+        
+        st.divider()
+        
         draw_df = run_query('SELECT * FROM "اسماء الرسم"')
         
-        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""))
+        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون")
         st.session_state.temp_cust = customer_name
         
         col1, col2, col3 = st.columns(3)
@@ -598,9 +852,9 @@ elif page == "📄 عرض سعر":
         
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            start_p = st.selectbox("📅 من فترة:", period_names)
+            start_p = st.selectbox("📅 من فترة:", period_names, key="start_period")
         with col_p2:
-            end_p = st.selectbox("📅 إلى فترة:", period_names, index=len(period_names)-1)
+            end_p = st.selectbox("📅 إلى فترة:", period_names, index=len(period_names)-1, key="end_period")
         
         start_idx = period_names.index(start_p)
         end_idx = period_names.index(end_p)
@@ -618,8 +872,9 @@ elif page == "📄 عرض سعر":
         
         st.success(f"""
         💰 **تفاصيل الأسعار:**
-        - أجر الطباعة: **{fee_print}$**
+        - أجر الطباعة الثابت: **{fee_print}$**
         - أجر العرض الشهري: **{fee_ads}$**
+        - المدة: **{months_count:.1f} شهر**
         - الإجمالي لكل عمود: **{per_column_total:.2f}$**
         """)
         
@@ -629,20 +884,20 @@ elif page == "📄 عرض سعر":
         cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"')['المحافظة'].tolist()
         selected_city = st.selectbox("اختر المحافظة:", cities)
         
-        available_columns = run_query(f'''
+        available_columns = run_query('''
             SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم" 
             FROM "اعمدة انارة" 
-            WHERE "المحافظة" = '{selected_city}' AND "الحجم" = '{selected_size}'
-        ''')
+            WHERE "المحافظة" = %s AND "الحجم" = %s
+        ''', (selected_city, selected_size))
         
-        period_placeholders = ', '.join([f"'{p}'" for p in selected_periods])
+        period_placeholders = ','.join([f"'{p}'" for p in selected_periods])
         booked_query = f'''
             SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-            WHERE "العام" = {year} 
+            WHERE "العام" = %s 
             AND "فترة الحجز" IN ({period_placeholders})
         '''
-        booked_df = run_query(booked_query)
-        booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+        booked_df = run_query(booked_query, (year,))
+        booked_boards = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
         
         available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]
         
@@ -656,7 +911,7 @@ elif page == "📄 عرض سعر":
                     net_data['fee_print'] = per_column_print
                     net_data['fee_display'] = per_column_display
                     st.session_state.cart[selected_city][net] = net_data
-                st.success(f"✅ تمت الإضافة")
+                st.success("✅ تمت الإضافة")
                 st.rerun()
         else:
             st.warning("⚠️ لا توجد مواقع متاحة")
@@ -675,8 +930,8 @@ elif page == "📄 عرض سعر":
                         st.session_state.cart[city][net] = edited_df
                         
                         qty = int(edited_df['العدد'].sum())
-                        fp = float(edited_df['fee_print'].iloc[0])
-                        fd = float(edited_df['fee_display'].iloc[0])
+                        fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else per_column_print
+                        fd = float(edited_df['fee_display'].iloc[0]) if 'fee_display' in edited_df.columns else per_column_display
                         
                         section_print = qty * fp
                         section_display = qty * fd
@@ -685,14 +940,49 @@ elif page == "📄 عرض سعر":
                         grand_total_display += section_display
                         
                         st.info(f"📊 العدد: {qty} | الطباعة: {section_print:.2f}$ | العرض: {section_display:.2f}$")
+                        
+                        if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
+                            del st.session_state.cart[city][net]
+                            st.rerun()
             
-            grand_total = grand_total_print + grand_total_display
+            st.divider()
+            
+            st.subheader("💰 خيارات الحسم")
+            
+            col_disc1, col_disc2 = st.columns([1, 2])
+            with col_disc1:
+                apply_discount = st.checkbox("🏷️ تطبيق حسم على أجور العرض فقط")
+            with col_disc2:
+                discount_percent = 0
+                if apply_discount:
+                    discount_percent = st.slider("نسبة الحسم (%)", min_value=1, max_value=99, value=10, step=1)
+            
+            if apply_discount and discount_percent > 0:
+                discount_amount = grand_total_display * (discount_percent / 100)
+                grand_total_display_after = grand_total_display - discount_amount
+                grand_total = grand_total_print + grand_total_display_after
+                
+                st.info(f"""
+                💰 **تفاصيل الفاتورة:**
+                - إجمالي أجور الطباعة: **{grand_total_print:,.2f} $**
+                - إجمالي أجور العرض (قبل الحسم): **{grand_total_display:,.2f} $**
+                - حسم **{discount_percent}%**: **- {discount_amount:,.2f} $**
+                - إجمالي أجور العرض (بعد الحسم): **{grand_total_display_after:,.2f} $**
+                """)
+            else:
+                grand_total = grand_total_print + grand_total_display
+                st.info(f"""
+                💰 **تفاصيل الفاتورة:**
+                - إجمالي أجور الطباعة: **{grand_total_print:,.2f} $**
+                - إجمالي أجور العرض: **{grand_total_display:,.2f} $**
+                """)
+            
             st.success(f"## 💰 الإجمالي النهائي: {grand_total:,.2f} $")
             
-            col_btn1, col_btn2 = st.columns(2)
+            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
             
             with col_btn1:
-                if st.button("💾 حفظ كمسودة", use_container_width=True):
+                if st.button("💾 حفظ كمسودة", use_container_width=True, key="save_draft"):
                     if not customer_name:
                         st.error("❌ الرجاء إدخال اسم الزبون")
                     else:
@@ -707,7 +997,159 @@ elif page == "📄 عرض سعر":
                         st.success("✅ تم الحفظ كمسودة")
             
             with col_btn2:
-                if st.button("🔴 تفريغ السلة", use_container_width=True):
+                if is_admin():
+                    if st.button("✅ تثبيت نهائي", use_container_width=True, key="confirm_booking"):
+                        if not customer_name:
+                            st.error("❌ الرجاء إدخال اسم الزبون")
+                        else:
+                            try:
+                                cur = conn.cursor()
+                                for city, networks in st.session_state.cart.items():
+                                    for net, df in networks.items():
+                                        for _, row in df.iterrows():
+                                            for period in selected_periods:
+                                                cur.execute('''
+                                                    INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                                    VALUES (%s, %s, %s, %s)
+                                                ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                
+                                conn.commit()
+                                st.session_state.cart = {}
+                                st.success("✅ تم تثبيت الحجز بنجاح")
+                                st.rerun()
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"❌ حدث خطأ: {str(e)}")
+                else:
+                    st.button("✅ تثبيت نهائي", use_container_width=True, disabled=True, key="confirm_booking_disabled")
+                    st.caption("🔒 غير مسموح - فقط للمديرين")
+            
+            with col_btn3:
+                if st.button("📝 تصدير Word", use_container_width=True, key="export_word"):
+                    discount = discount_percent if apply_discount else 0
+                    
+                    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+                    PURPLE_COLOR = "660099"
+                    
+                    discount_amount = grand_total_display * (discount / 100)
+                    grand_total_display_after = grand_total_display - discount_amount
+                    final_total = grand_total_print + grand_total_display_after
+                    
+                    doc.add_paragraph()
+                    today_date = datetime.now().strftime("%d / %m / %Y")
+                    p_date = doc.add_paragraph()
+                    p_date.add_run(f"التاريخ: {today_date}")
+                    _force_rtl_style(p_date)
+                    doc.add_paragraph()
+                    
+                    p_cust = doc.add_paragraph()
+                    p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
+                    _force_rtl_style(p_cust)
+                    
+                    p_stat = doc.add_paragraph()
+                    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
+                    _force_rtl_style(p_stat)
+                    
+                    for city, networks in st.session_state.cart.items():
+                        p_city = doc.add_paragraph()
+                        p_city.add_run(f"■ محافظة {city}").bold = True
+                        _force_rtl_style(p_city)
+                        
+                        for net, df in networks.items():
+                            if df.empty:
+                                continue
+                            for size_info, group_df in df.groupby(['الحجم']):
+                                p_size = doc.add_paragraph()
+                                p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
+                                _force_rtl_style(p_size)
+                                
+                                table = doc.add_table(rows=1, cols=2)
+                                table.style = 'Table Grid'
+                                set_table_rtl(table)
+                                
+                                hdr = table.rows[0].cells
+                                hdr[0].text = "اسم الموقع (العمود)"
+                                hdr[1].text = "العدد"
+                                for cell in hdr:
+                                    for p in cell.paragraphs:
+                                        _force_rtl_style(p)
+                                    tc_pr = cell._element.get_or_add_tcPr()
+                                    shd = OxmlElement('w:shd')
+                                    shd.set(qn('w:fill'), PURPLE_COLOR)
+                                    tc_pr.append(shd)
+                                    cell.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                                
+                                for _, row in group_df.iterrows():
+                                    row_cells = table.add_row().cells
+                                    row_cells[0].text = str(row['الموقع'])
+                                    row_cells[1].text = str(row['العدد'])
+                                    for cell in row_cells:
+                                        for p in cell.paragraphs:
+                                            _force_rtl_style(p)
+                                
+                                total_q = pd.to_numeric(group_df['العدد']).sum()
+                                fp = float(group_df['fee_print'].iloc[0])
+                                fd = float(group_df['fee_display'].iloc[0])
+                                sum_print = total_q * fp
+                                sum_display = total_q * fd
+                                
+                                p_fin = doc.add_paragraph()
+                                txt = (f"إجمالي العدد: {int(total_q)} | "
+                                       f"أجور الطباعة: {sum_print:,.0f}$ | "
+                                       f"أجور العرض: {sum_display:,.0f}$ | "
+                                       f"المجموع: {sum_print + sum_display:,.0f}$")
+                                p_fin.add_run(txt).bold = True
+                                _force_rtl_style(p_fin)
+                    
+                    doc.add_paragraph()
+                    
+                    if discount > 0:
+                        p_discount = doc.add_paragraph()
+                        p_discount.add_run(f"إجمالي أجور الطباعة: {grand_total_print:,.0f} $").bold = True
+                        _force_rtl_style(p_discount)
+                        
+                        p_discount = doc.add_paragraph()
+                        p_discount.add_run(f"إجمالي أجور العرض قبل الحسم: {grand_total_display:,.0f} $").bold = True
+                        _force_rtl_style(p_discount)
+                        
+                        p_discount = doc.add_paragraph()
+                        p_discount.add_run(f"حسم {discount}% على أجور العرض: - {discount_amount:,.0f} $").bold = True
+                        _force_rtl_style(p_discount)
+                        
+                        p_discount = doc.add_paragraph()
+                        p_discount.add_run(f"إجمالي أجور العرض بعد الحسم: {grand_total_display_after:,.0f} $").bold = True
+                        _force_rtl_style(p_discount)
+                    else:
+                        p_total_print = doc.add_paragraph()
+                        p_total_print.add_run(f"إجمالي أجور الطباعة: {grand_total_print:,.0f} $").bold = True
+                        _force_rtl_style(p_total_print)
+                        
+                        p_total_display = doc.add_paragraph()
+                        p_total_display.add_run(f"إجمالي أجور العرض: {grand_total_display:,.0f} $").bold = True
+                        _force_rtl_style(p_total_display)
+                    
+                    doc.add_paragraph()
+                    p_grand = doc.add_paragraph()
+                    run_g = p_grand.add_run(f"الإجمالي النهائي للعرض: {final_total:,.0f} $")
+                    run_g.bold = True
+                    run_g.font.size = Pt(14)
+                    run_g.font.color.rgb = RGBColor(102, 0, 153)
+                    _force_rtl_style(p_grand)
+                    
+                    doc.add_paragraph()
+                    p_note = doc.add_paragraph()
+                    run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.")
+                    run_note.bold = True
+                    _force_rtl_style(p_note)
+                    
+                    target = io.BytesIO()
+                    doc.save(target)
+                    target.seek(0)
+                    
+                    st.download_button("📥 تحميل العرض", target, f"Offer_{customer_name}.docx", key="download_word")
+            
+            with col_btn4:
+                if st.button("🔴 تفريغ السلة", use_container_width=True, key="clear_cart"):
                     st.session_state.cart = {}
                     st.rerun()
     
@@ -716,6 +1158,7 @@ elif page == "📄 عرض سعر":
 
 elif page == "📋 تقرير الجرد":
     st.title("📋 التقرير التجميعي - جرد اللوحات")
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
     try:
         periods_df = run_query('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"')
@@ -723,11 +1166,11 @@ elif page == "📋 تقرير الجرد":
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            from_period = st.selectbox("من فترة:", period_names)
+            from_period = st.selectbox("من فترة:", period_names, key="from_period")
         with col2:
-            to_period = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1)
+            to_period = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1, key="to_period")
         with col3:
-            report_year = st.number_input("العام:", value=datetime.now().year)
+            report_year = st.number_input("العام:", value=datetime.now().year, key="report_year")
         
         from_idx = int(periods_df[periods_df['namee'] == from_period]['no'].iloc[0])
         to_idx = int(periods_df[periods_df['namee'] == to_period]['no'].iloc[0])
@@ -735,24 +1178,29 @@ elif page == "📋 تقرير الجرد":
         
         all_boards = run_query('SELECT "رقم اللوحة", "المحافظة", "الحجم", "العدد" FROM "اعمدة انارة"')
         
-        period_placeholders = ', '.join([f"'{p}'" for p in target_periods])
+        period_placeholders = ','.join([f"'{p}'" for p in target_periods])
         booked_query = f'''
             SELECT DISTINCT "رقم اللوحة" 
             FROM "حجوزات1" 
-            WHERE "العام" = {report_year} 
+            WHERE "العام" = %s 
             AND "فترة الحجز" IN ({period_placeholders})
         '''
-        booked_in_period = run_query(booked_query)['رقم اللوحة'].tolist()
+        booked_in_period = run_query(booked_query, (report_year,))['رقم اللوحة'].tolist()
         
         all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_in_period else 'متاح')
         
         total_sites = len(all_boards)
         booked_sites = len(booked_in_period)
+        available_sites = total_sites - booked_sites
+        total_boards_count = all_boards['العدد'].sum()
+        booked_boards_count = all_boards[all_boards['الحالة'] == 'محجوز']['العدد'].sum()
+        available_boards_count = total_boards_count - booked_boards_count
         
-        cols = st.columns(3)
+        cols = st.columns(4)
         metrics_data = [
             ("🏢 إجمالي المواقع", total_sites, "🗺️", "primary"),
             ("🔴 المواقع المحجوزة", booked_sites, "📌", "danger"),
+            ("🟢 المواقع المتاحة", available_sites, "✅", "success"),
             ("📈 نسبة الإشغال", f"{(booked_sites/total_sites*100):.1f}%", "📊", "warning")
         ]
         
@@ -762,6 +1210,39 @@ elif page == "📋 تقرير الجرد":
         
         st.divider()
         
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=['محجوز', 'متاح'],
+                values=[booked_boards_count, available_boards_count],
+                hole=0.4,
+                marker_colors=['#dc2626', '#22c55e'],
+                textinfo='percent+label'
+            )])
+            fig_pie.update_layout(title="نسبة إشغال الأعمدة", height=400)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col_chart2:
+            city_data = []
+            for city in all_boards['المحافظة'].unique():
+                city_df = all_boards[all_boards['المحافظة'] == city]
+                city_total = city_df['العدد'].sum()
+                city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
+                city_data.append({
+                    'المحافظة': city,
+                    'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
+                })
+            
+            city_df = pd.DataFrame(city_data)
+            fig_bar = px.bar(city_df, x='المحافظة', y='نسبة الإشغال', 
+                           color='نسبة الإشغال', color_continuous_scale='RdYlGn')
+            fig_bar.update_layout(height=400)
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        st.divider()
+        
+        st.subheader("📋 تفصيل حسب المحافظة")
         city_details = []
         for city in all_boards['المحافظة'].unique():
             city_df = all_boards[all_boards['المحافظة'] == city]
@@ -772,10 +1253,12 @@ elif page == "📋 تقرير الجرد":
                 'الإجمالي': int(city_total),
                 'محجوز': int(city_booked),
                 'متاح': int(city_total - city_booked),
+                'نسبة الإشغال': f"{(city_booked/city_total*100):.1f}%" if city_total > 0 else "0%"
             })
         
         st.dataframe(pd.DataFrame(city_details), use_container_width=True)
         
+        st.divider()
         csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
         st.download_button("📊 تصدير إلى CSV", csv_data, f"Inventory_Report_{report_year}.csv", "text/csv", use_container_width=True)
         
@@ -784,21 +1267,41 @@ elif page == "📋 تقرير الجرد":
 
 elif page == "📅 تقرير التوفر الشهري":
     st.title("📋 تقرير الأعمدة المتاحة")
+    st.info("📌 يعرض هذا التقرير الأعمدة المتاحة حالياً أو التي ستصبح متاحة بعد تاريخ محدد")
     
     current_year = date.today().year
+    today = date.today()
+    
+    col_filter1, col_filter2 = st.columns(2)
+    with col_filter1:
+        show_all = st.checkbox("📅 عرض جميع الأعمدة المتاحة حالياً", value=True)
+    with col_filter2:
+        future_date = st.date_input("🗓️ عرض الأعمدة التي ستصبح متاحة بعد تاريخ", value=today + timedelta(days=7))
+    
+    notes = st.text_area("📝 ملاحظات (تظهر في نهاية التقرير)", placeholder="أضف ملاحظاتك هنا...", height=100)
     
     if st.button("🚀 تشغيل التقرير", use_container_width=True, type="primary"):
         with st.spinner("جاري إنشاء التقرير..."):
             all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
             
-            bookings_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}'
-            booked_df = run_query(bookings_query)
-            booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
+            if show_all:
+                bookings_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
+                booked_df = run_query(bookings_query, (current_year,))
+            else:
+                bookings_query = '''
+                    SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
+                    WHERE "العام" = %s
+                    AND ("تاريخ النهاية" >= %s OR "فترة الحجز" IS NOT NULL)
+                '''
+                booked_df = run_query(bookings_query, (current_year, future_date))
+            
+            booked_boards = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
             
             available_df = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
             total_available = len(available_df)
+            total_boards_count = available_df['العدد'].sum() if 'العدد' in available_df.columns else total_available
             
-            st.success(f"✅ {total_available} موقعاً متاحة")
+            st.success(f"✅ {total_available} موقعاً ({int(total_boards_count)} لوحة) متاحة")
             
             st.subheader("📊 ملخص حسب المحافظة")
             summary = available_df.groupby('المحافظة').agg({
@@ -808,22 +1311,23 @@ elif page == "📅 تقرير التوفر الشهري":
             st.dataframe(summary, use_container_width=True)
             
             st.subheader("📋 قائمة الأعمدة المتاحة")
-            st.dataframe(available_df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+            st.dataframe(available_df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True, height=400)
             
             csv_data = available_df.to_csv(index=False, encoding='utf-8-sig')
             st.download_button("📥 تحميل التقرير (CSV)", csv_data, f"available_columns_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 elif page == "🗺️ تقرير جميع المواقع":
     st.title("🗺️ تقرير جميع المواقع والأعمدة")
+    st.info("📌 يعرض هذا التقرير جميع المواقع والأعمدة الموجودة في النظام بشكل تفصيلي حسب المحافظات والشبكات")
     
     all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
     
-    if all_columns.empty:
+    if all_columns is None or all_columns.empty:
         st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
         st.stop()
     
     total_sites = len(all_columns)
-    total_boards = all_columns['العدد'].sum()
+    total_boards = all_columns['العدد'].sum() if 'العدد' in all_columns.columns else total_sites
     
     cols = st.columns(3)
     with cols[0]:
@@ -840,44 +1344,223 @@ elif page == "🗺️ تقرير جميع المواقع":
         'رقم اللوحة': 'count',
         'العدد': 'sum'
     }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+    summary['عدد الأعمدة'] = summary['عدد الأعمدة'].astype(int)
     st.dataframe(summary, use_container_width=True)
+    
+    st.divider()
+    
+    st.subheader("📋 تفصيل حسب المحافظة والشبكة")
+    
+    for city in sorted(all_columns['المحافظة'].unique()):
+        city_df = all_columns[all_columns['المحافظة'] == city]
+        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)", expanded=False):
+            network_summary = city_df.groupby('الشبكة').agg({
+                'رقم اللوحة': 'count',
+                'العدد': 'sum'
+            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+            st.write("**📡 توزع الشبكات في المحافظة:**")
+            st.dataframe(network_summary, use_container_width=True)
+            
+            networks_list = city_df['الشبكة'].dropna().astype(str).unique()
+            for network in sorted(networks_list):
+                net_df = city_df[city_df['الشبكة'] == network]
+                with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
+                    size_summary = net_df.groupby('الحجم').agg({
+                        'رقم اللوحة': 'count',
+                        'العدد': 'sum'
+                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                    st.write("**📏 تفصيل حسب الحجم:**")
+                    st.dataframe(size_summary, use_container_width=True)
+                    st.write("**📍 قائمة المواقع:**")
+                    st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
+    
+    st.divider()
     
     csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
     st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"full_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 elif page == "📐 تقرير تجميعي حسب الحجوم":
     st.title("📐 تقرير تجميعي حسب الحجوم")
+    st.info("📌 يعرض هذا التقرير توزع اللوحات حسب الحجوم المقسمة إلى ثلاث مجموعات")
     
-    all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
+    all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
+    
+    if all_columns is None or all_columns.empty:
+        st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
+        st.stop()
+    
+    group1_sizes = ['3*6', '3x6', '3 × 6']
+    group2_sizes = ['2*1', '2x1', '2 × 1', '125*185', '125x185', '125 × 185']
     
     def classify_size(size):
         size_str = str(size).strip()
-        if size_str in ['3*6', '3x6', '3 × 6']:
+        if size_str in group1_sizes or size_str.replace(' ', '') in ['3*6', '3x6']:
             return 'المجموعة الأولى: حجم 3×6'
-        elif size_str in ['2*1', '2x1', '2 × 1', '125*185', '125x185', '125 × 185']:
+        elif size_str in group2_sizes or size_str.replace(' ', '') in ['2*1', '2x1', '125*185', '125x185']:
             return 'المجموعة الثانية: حجمي 2×1 و 125×185'
         else:
             return 'المجموعة الثالثة: باقي الحجوم'
     
     all_columns['المجموعة'] = all_columns['الحجم'].apply(classify_size)
     
+    cols = st.columns(3)
+    with cols[0]:
+        st.markdown(create_metric_card_3d("إجمالي الأعمدة", int(all_columns['العدد'].sum()), "📌", "primary"), unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown(create_metric_card_3d("إجمالي المواقع", len(all_columns), "🗺️", "success"), unsafe_allow_html=True)
+    with cols[2]:
+        st.markdown(create_metric_card_3d("عدد الأحجام", all_columns['الحجم'].nunique(), "📏", "warning"), unsafe_allow_html=True)
+    
+    st.divider()
+    
     st.subheader("📊 ملخص المجموعات")
     group_summary = all_columns.groupby('المجموعة').agg({
         'رقم اللوحة': 'count',
         'العدد': 'sum'
     }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+    group_summary['عدد الأعمدة'] = group_summary['عدد الأعمدة'].astype(int)
     st.dataframe(group_summary, use_container_width=True)
     
+    st.divider()
+    
+    for group_name in ['المجموعة الأولى: حجم 3×6', 'المجموعة الثانية: حجمي 2×1 و 125×185', 'المجموعة الثالثة: باقي الحجوم']:
+        group_df = all_columns[all_columns['المجموعة'] == group_name]
+        if not group_df.empty:
+            with st.expander(f"📌 {group_name} - {len(group_df)} موقع - {int(group_df['العدد'].sum())} عمود", expanded=False):
+                st.subheader("📍 توزع حسب المحافظة")
+                city_summary = group_df.groupby('المحافظة').agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                st.dataframe(city_summary, use_container_width=True)
+                
+                st.subheader("📋 قائمة المواقع")
+                st.dataframe(group_df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+    
+    st.divider()
+    
     csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
-    st.download_button("📊 تصدير التقرير (CSV)", csv_data, f"sizes_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+    st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"grouped_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 elif page == "⚙️ الإعدادات":
     if not is_admin():
         st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
         st.stop()
     
-    st.title("⚙️ إعدادات النظام")
-    st.info("يمكن للمدير فقط تعديل البيانات هنا")
+    st.title("⚙️ إعدادات النظام - إدارة البيانات")
+    st.warning("⚠️ تحذير: تعديل هذه البيانات يؤثر مباشرة على النظام. يرجى الحذر.")
+    
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
+    boards_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM \"حجوزات1\"")
+    bookings_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM \"اسماء الرسم\"")
+    fees_count = cursor.fetchone()[0]
+    cursor.close()
+    
+    cols = st.columns(3)
+    with cols[0]:
+        st.markdown(create_metric_card_3d("أعمدة الإنارة", boards_count, "🗺️", "primary"), unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown(create_metric_card_3d("الحجوزات", bookings_count, "📅", "success"), unsafe_allow_html=True)
+    with cols[2]:
+        st.markdown(create_metric_card_3d("أجور الرسم", fees_count, "💰", "warning"), unsafe_allow_html=True)
+    
+    st.divider()
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["🗄️ أعمدة الإنارة", "📅 سجل الحجوزات", "💰 أجور الرسم", "👥 المستخدمين"])
+    
+    with tab1:
+        st.subheader("إدارة بيانات أعمدة الإنارة")
+        df_boards = run_query('SELECT * FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
+        edited_boards = st.data_editor(df_boards, num_rows="dynamic", key="edit_boards", use_container_width=True)
+        if st.button("💾 حفظ أعمدة الإنارة", key="save_boards", use_container_width=True):
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM \"اعمدة انارة\"")
+            for _, row in edited_boards.iterrows():
+                cursor.execute('''
+                    INSERT INTO "اعمدة انارة" ("رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد", "Latitude", "Longitude")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (row['رقم اللوحة'], row['اسم العمود'], row['المحافظة'], row['الشبكة'], row['الحجم'], row['العدد'], 
+                      row.get('Latitude'), row.get('Longitude')))
+            conn.commit()
+            cursor.close()
+            st.success("✅ تم تحديث أعمدة الإنارة")
+            st.rerun()
+    
+    with tab2:
+        st.subheader("إدارة سجل الحجوزات")
+        df_bookings = run_query('SELECT * FROM "حجوزات1"')
+        edited_bookings = st.data_editor(df_bookings, num_rows="dynamic", key="edit_bookings", use_container_width=True)
+        if st.button("💾 حفظ سجل الحجوزات", key="save_bookings", use_container_width=True):
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM \"حجوزات1\"")
+            for _, row in edited_bookings.iterrows():
+                cursor.execute('''
+                    INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية")
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (row['رقم اللوحة'], row['اسم الزبون'], row['العام'], row['فترة الحجز'], row.get('تاريخ النهاية')))
+            conn.commit()
+            cursor.close()
+            st.success("✅ تم تحديث سجل الحجوزات")
+            st.rerun()
+    
+    with tab3:
+        st.subheader("إدارة أجور الرسم")
+        st.info("💡 أضف 'اجور الطباعة عادي' و 'اجور الطباعة سكوتش' و 'اجور العرض شهري' و 'اجور العرض اجنبي شهري'")
+        df_fees = run_query('SELECT * FROM "اسماء الرسم"')
+        edited_fees = st.data_editor(df_fees, num_rows="dynamic", key="edit_fees", use_container_width=True)
+        if st.button("💾 حفظ أجور الرسم", key="save_fees", use_container_width=True):
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM \"اسماء الرسم\"")
+            for _, row in edited_fees.iterrows():
+                cursor.execute('''
+                    INSERT INTO "اسماء الرسم" ("اسم الرسم", "الحجم", "اجرة الرسم")
+                    VALUES (%s, %s, %s)
+                ''', (row['اسم الرسم'], row['الحجم'], row['اجرة الرسم']))
+            conn.commit()
+            cursor.close()
+            st.success("✅ تم تحديث أجور الرسم")
+            st.rerun()
+    
+    with tab4:
+        st.subheader("👥 إدارة المستخدمين")
+        df_users = run_query('SELECT id, username, role, full_name, created_at FROM users')
+        edited_users = st.data_editor(df_users, num_rows="dynamic", key="edit_users", use_container_width=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 حفظ المستخدمين", key="save_users", use_container_width=True):
+                cursor = conn.cursor()
+                for _, row in edited_users.iterrows():
+                    cursor.execute('''
+                        UPDATE users SET username=%s, role=%s, full_name=%s WHERE id=%s
+                    ''', (row['username'], row['role'], row['full_name'], row['id']))
+                conn.commit()
+                cursor.close()
+                st.success("✅ تم تحديث المستخدمين")
+                st.rerun()
+        
+        with col2:
+            with st.expander("➕ إضافة مستخدم جديد"):
+                new_username = st.text_input("اسم المستخدم")
+                new_password = st.text_input("كلمة المرور", type="password")
+                new_role = st.selectbox("الدور", ["admin", "employee"])
+                new_full_name = st.text_input("الاسم الكامل")
+                if st.button("إضافة مستخدم", use_container_width=True):
+                    cursor = conn.cursor()
+                    try:
+                        cursor.execute('''
+                            INSERT INTO users (username, password, role, full_name, created_at)
+                            VALUES (%s, %s, %s, %s, NOW())
+                        ''', (new_username, new_password, new_role, new_full_name))
+                        conn.commit()
+                        cursor.close()
+                        st.success("✅ تم إضافة المستخدم")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ: {e}")
 
 # ============================================================
 # إغلاق الاتصال
