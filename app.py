@@ -437,6 +437,9 @@ def run_query(query, params=None, fetch=True):
                     # معالجة الشبكة الفارغة
                     if col == 'الشبكة' and (val is None or val == ''):
                         val = '0'
+                    # معالجة رقم اللوحة الفارغ
+                    if col == 'رقم اللوحة' and (val is None or val == ''):
+                        val = 'UNKNOWN'
                     row_dict[col] = val
                 data.append(row_dict)
             return pd.DataFrame(data)
@@ -448,7 +451,6 @@ def run_query(query, params=None, fetch=True):
         raise e
     finally:
         cursor.close()
-
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
     
