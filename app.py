@@ -767,7 +767,7 @@ elif page == "📊 Dashboard":
     marker_cluster = MarkerCluster().add_to(m)
     
     for _, row in all_columns_map.iterrows():
-        if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')) and row.get('latitude') != 0:
+        if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
             popup_html = f"""
             <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;">
                 <b>🏢 {row['اسم العمود']}</b><br>
@@ -779,7 +779,7 @@ elif page == "📊 Dashboard":
             """
             
             folium.Marker(
-                [row['latitude'], row['longitude']],
+                [row['Latitude'], row['Longitude']],
                 popup=folium.Popup(popup_html, max_width=350),
                 icon=folium.Icon(color='green')
             ).add_to(marker_cluster)
