@@ -200,6 +200,32 @@ if 'current_offer_id' not in st.session_state:
 # ============================================================
 # دوال مساعدة
 # ============================================================
+def fix_loaded_cart_data(cart_data):
+    """تصحيح بنية البيانات المحفوظة لضمان وجود جميع الأعمدة المطلوبة"""
+    fixed_cart = {}
+    for city, networks in cart_data.items():
+        fixed_cart[city] = {}
+        for net, df_dict in networks.items():
+            df = pd.DataFrame(df_dict)
+            
+            # قائمة الأعمدة المطلوبة
+            required = ['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة', 'الحجم']
+            
+            for col in required:
+                if col not in df.columns:
+                    if col == 'رقم اللوحة':
+                        df['رقم اللوحة'] = df.index.astype(str)
+                    elif col == 'الموقع':
+                        df['الموقع'] = df.get('اسم العمود', df.get('رقم اللوحة', 'unknown'))
+                    elif col == 'العدد':
+                        df['العدد'] = 1
+                    elif col == 'الشبكة':
+                        df['الشبكة'] = net
+                    elif col == 'الحجم':
+                        df['الحجم'] = 'غير محدد'
+            
+            fixed_cart[city][net] = df
+    return fixed_cart
 def show_delete_warning(network_name, board_name):
     """عرض رسالة تحذير عند حذف موقع"""
     st.warning(f"⚠️ **تنبيه:** أنت أزلت العمود `{board_name}` من الشبكة `{network_name}` وسيصبح في الشبكة 0", icon="⚠️")
