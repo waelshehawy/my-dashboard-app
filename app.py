@@ -855,66 +855,62 @@ elif page == "📊 Dashboard":
 
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
+    
+    # ============================================================
+    # التنظيف الفوري للسلة - أول شيء في الصفحة
+    # ============================================================
+    def fix_df_immediately(df, net_name=""):
+        """إصلاح DataFrame فوراً"""
+        if df is None:
+            return pd.DataFrame()
+        
+        if isinstance(df, pd.DataFrame):
+            df_copy = df.copy()
+        else:
+            df_copy = pd.DataFrame(df)
+        
+        # إضافة عمود رقم اللوحة إذا لم يوجد
+        if 'رقم اللوحة' not in df_copy.columns:
+            # محاولة إيجاد أي عمود بديل
+            found = False
+            for col in df_copy.columns:
+                if 'board' in col.lower() or 'لوحة' in col or 'id' in col.lower():
+                    df_copy['رقم اللوحة'] = df_copy[col]
+                    found = True
+                    break
+            if not found:
+                df_copy['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_copy))]
+        
+        # إضافة الأعمدة المفقودة الأخرى
+        if 'العدد' not in df_copy.columns:
+            df_copy['العدد'] = 1
+        if 'fee_print' not in df_copy.columns:
+            df_copy['fee_print'] = 0
+        if 'fee_display' not in df_copy.columns:
+            df_copy['fee_display'] = 0
+        if 'الموقع' not in df_copy.columns and 'اسم العمود' in df_copy.columns:
+            df_copy['الموقع'] = df_copy['اسم العمود']
+        elif 'الموقع' not in df_copy.columns:
+            df_copy['الموقع'] = df_copy['رقم اللوحة']
+        
+        return df_copy
+    
+    # تطبيق التنظيف على السلة فوراً
+    if 'cart' in st.session_state and st.session_state.cart:
+        cleaned_cart = {}
+        for city, networks in st.session_state.cart.items():
+            cleaned_cart[city] = {}
+            for net, df in networks.items():
+                cleaned_cart[city][net] = fix_df_immediately(df, net)
+        st.session_state.cart = cleaned_cart
+    
+    # ثم باقي الكود
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
+
+    
     try:
-                # ============================================================
-        # دالة لتنظيف وإصلاح أي DataFrame في السلة
-        # ============================================================
-        def fix_dataframe(df, default_net=""):
-            """إصلاح DataFrame وإضافة جميع الأعمدة المطلوبة"""
-            if df is None:
-                return pd.DataFrame()
-            
-            # عمل نسخة
-            df_fixed = df.copy()
-            
-            # قائمة الأعمدة المطلوبة
-            required_columns = {
-                'رقم اللوحة': '',
-                'الموقع': '',
-                'العدد': 1,
-                'الشبكة': default_net,
-                'الحجم': 'غير محدد',
-                'fee_print': 0,
-                'fee_display': 0
-            }
-            
-            # إضافة الأعمدة المفقودة
-            for col, default_value in required_columns.items():
-                if col not in df_fixed.columns:
-                    if col == 'رقم اللوحة':
-                        # محاولة إيجاد عمود بديل
-                        if 'board_number' in df_fixed.columns:
-                            df_fixed['رقم اللوحة'] = df_fixed['board_number']
-                        elif 'id' in df_fixed.columns:
-                            df_fixed['رقم اللوحة'] = df_fixed['id']
-                        else:
-                            df_fixed['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_fixed))]
-                    elif col == 'الموقع':
-                        if 'اسم العمود' in df_fixed.columns:
-                            df_fixed['الموقع'] = df_fixed['اسم العمود']
-                        else:
-                            df_fixed['الموقع'] = df_fixed['رقم اللوحة']
-                    else:
-                        df_fixed[col] = default_value
-            
-            # تحويل الأعمدة الرقمية
-            for col in ['العدد', 'fee_print', 'fee_display']:
-                if col in df_fixed.columns:
-                    df_fixed[col] = pd.to_numeric(df_fixed[col], errors='coerce').fillna(required_columns[col])
-            
-            return df_fixed
-        
-        # تنظيف السلة بالكامل عند دخول الصفحة
-        if st.session_state.cart:
-            cleaned_cart = {}
-            for city, networks in st.session_state.cart.items():
-                cleaned_cart[city] = {}
-                for net, df in networks.items():
-                    cleaned_cart[city][net] = fix_dataframe(df, default_net=net)
-            st.session_state.cart = cleaned_cart
-            ############
+
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
         
