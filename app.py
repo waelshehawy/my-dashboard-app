@@ -855,43 +855,49 @@ elif page == "📊 Dashboard":
 #=======================
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
-#=======================    
-def prepare_dataframe(df, net_name=""):
-    """تجهيز DataFrame وإضافة جميع الأعمدة المطلوبة"""
-    if df is None:
-        return pd.DataFrame()
     
-    if isinstance(df, pd.DataFrame):
-        df_clean = df.copy()
-    else:
-        df_clean = pd.DataFrame(df)
-    
-    # إضافة عمود رقم اللوحة
-    if 'رقم اللوحة' not in df_clean.columns:
-        if 'board_number' in df_clean.columns:
-            df_clean['رقم اللوحة'] = df_clean['board_number']
-        elif 'id' in df_clean.columns:
-            df_clean['رقم اللوحة'] = df_clean['id']
+    # ============================================================
+    # تعريف الدالة (تنتهي هنا)
+    # ============================================================
+    def prepare_dataframe(df, net_name=""):
+        """تجهيز DataFrame وإضافة جميع الأعمدة المطلوبة"""
+        if df is None:
+            return pd.DataFrame()
+        
+        if isinstance(df, pd.DataFrame):
+            df_clean = df.copy()
         else:
-            df_clean['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_clean))]
+            df_clean = pd.DataFrame(df)
+        
+        # إضافة عمود رقم اللوحة
+        if 'رقم اللوحة' not in df_clean.columns:
+            if 'board_number' in df_clean.columns:
+                df_clean['رقم اللوحة'] = df_clean['board_number']
+            elif 'id' in df_clean.columns:
+                df_clean['رقم اللوحة'] = df_clean['id']
+            else:
+                df_clean['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_clean))]
+        
+        # إضافة باقي الأعمدة
+        if 'العدد' not in df_clean.columns:
+            df_clean['العدد'] = 1
+        if 'fee_print' not in df_clean.columns:
+            df_clean['fee_print'] = 0
+        if 'fee_display' not in df_clean.columns:
+            df_clean['fee_display'] = 0
+        if 'الشبكة' not in df_clean.columns:
+            df_clean['الشبكة'] = net_name
+        if 'الموقع' not in df_clean.columns:
+            if 'اسم العمود' in df_clean.columns:
+                df_clean['الموقع'] = df_clean['اسم العمود']
+            else:
+                df_clean['الموقع'] = df_clean['رقم اللوحة']
+        
+        return df_clean
     
-    # إضافة باقي الأعمدة
-    if 'العدد' not in df_clean.columns:
-        df_clean['العدد'] = 1
-    if 'fee_print' not in df_clean.columns:
-        df_clean['fee_print'] = 0
-    if 'fee_display' not in df_clean.columns:
-        df_clean['fee_display'] = 0
-    if 'الشبكة' not in df_clean.columns:
-        df_clean['الشبكة'] = net_name
-    if 'الموقع' not in df_clean.columns:
-        if 'اسم العمود' in df_clean.columns:
-            df_clean['الموقع'] = df_clean['اسم العمود']
-        else:
-            df_clean['الموقع'] = df_clean['رقم اللوحة']
-    
-    return df_clean
-    # تنظيف السلة
+    # ============================================================
+    # تنظيف السلة (هذا خارج الدالة)
+    # ============================================================
     if st.session_state.cart:
         new_cart = {}
         for city, networks in st.session_state.cart.items():
@@ -902,9 +908,8 @@ def prepare_dataframe(df, net_name=""):
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
-
-    
     try:
+        # باقي الكود هنا...
 
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
