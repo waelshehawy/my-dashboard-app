@@ -884,72 +884,22 @@ elif page == "📊 Dashboard":
 #=======================
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
-    
-    # ============================================================
-    # تعريف الدالة prepare_dataframe
-    # ============================================================
-    def prepare_dataframe(df, net_name=""):
-        if df is None:
-            return pd.DataFrame()
-        if isinstance(df, pd.DataFrame):
-            df_clean = df.copy()
-        else:
-            df_clean = pd.DataFrame(df)
-        if 'رقم اللوحة' not in df_clean.columns:
-            if 'board_number' in df_clean.columns:
-                df_clean['رقم اللوحة'] = df_clean['board_number']
-            elif 'id' in df_clean.columns:
-                df_clean['رقم اللوحة'] = df_clean['id']
-            else:
-                df_clean['رقم اللوحة'] = [f"BOARD_{i}" for i in range(len(df_clean))]
-        if 'العدد' not in df_clean.columns:
-            df_clean['العدد'] = 1
-        if 'fee_print' not in df_clean.columns:
-            df_clean['fee_print'] = 0
-        if 'fee_display' not in df_clean.columns:
-            df_clean['fee_display'] = 0
-        if 'الشبكة' not in df_clean.columns:
-            df_clean['الشبكة'] = net_name
-        if 'الموقع' not in df_clean.columns:
-            if 'اسم العمود' in df_clean.columns:
-                df_clean['الموقع'] = df_clean['اسم العمود']
-            else:
-                df_clean['الموقع'] = df_clean['رقم اللوحة']
-        if 'رقم اللوحة' in df_clean.columns:
-            df_clean = df_clean[df_clean['رقم اللوحة'].notna()]
-            df_clean = df_clean[df_clean['رقم اللوحة'] != '']
-            df_clean = df_clean[df_clean['رقم اللوحة'] != 0]
-        if 'الموقع' in df_clean.columns:
-            df_clean = df_clean[df_clean['الموقع'].notna()]
-            df_clean = df_clean[df_clean['الموقع'] != '']
-        df_clean = df_clean.reset_index(drop=True)
-        return df_clean
-    
-    # تنظيف السلة
-    if st.session_state.cart:
-        new_cart = {}
-        for city, networks in st.session_state.cart.items():
-            new_cart[city] = {}
-            for net, df in networks.items():
-                new_cart[city][net] = prepare_dataframe(df, net)
-        st.session_state.cart = new_cart
-    
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
     try:
-        # العروض المنتهية
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
         
-        # استرجاع عرض محفوظ
         st.subheader("📂 استرجاع عرض محفوظ")
         saved_offers = run_query('SELECT id, client_name, offer_date, start_p, end_p, year, status FROM "offers_history" WHERE status = %s ORDER BY id DESC', ('Pending',))
         
         if saved_offers is not None and not saved_offers.empty:
             offer_options = {}
             for _, row in saved_offers.iterrows():
+                # طريقة آمنة تماماً للحصول على التاريخ
                 offer_date = row['offer_date']
                 try:
+                    # محاولة التحويل إلى string
                     date_str = str(offer_date)[:10] if offer_date else "بدون تاريخ"
                 except:
                     date_str = "بدون تاريخ"
@@ -966,48 +916,35 @@ elif page == "📄 عرض سعر":
                         row = result.iloc[0]
                         data = json.loads(row['cart_json'])
                         cart_raw = data.get("data", data)
-                        
                         st.session_state.cart = {}
-                        
                         for city, networks in cart_raw.items():
                             st.session_state.cart[city] = {}
-                            for net, items in networks.items():
-                                df = convert_json_to_df(items)
-                                if 'رقم اللوحة' not in df.columns:
-                                    df['رقم اللوحة'] = df.index.astype(str)
-                                if 'العدد' not in df.columns:
-                                    df['العدد'] = 1
-                                if 'fee_print' not in df.columns:
-                                    df['fee_print'] = 0
-                                if 'fee_display' not in df.columns:
-                                    df['fee_display'] = 0
-                                st.session_state.cart[city][net] = df
+                            for net, df_dict in networks.items():
+                                st.session_state.cart[city][net] = pd.DataFrame(df_dict)
                         
                         st.session_state.temp_cust = row['client_name']
-                        st.success("✅ تم استرجاع العرض بنجاح")
+                        st.success("✅ تم تحميل العرض بنجاح")
                         st.rerun()
                 except Exception as e:
                     st.error(f"خطأ في تحميل العرض: {str(e)}")
         
         st.divider()
         
-        # اختيار القياس والطباعة
         draw_df = run_query('SELECT * FROM "اسماء الرسم"')
         
-        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون", key="customer_name_input")
+        customer_name = st.text_input("🏢 اسم الزبون", value=st.session_state.get('temp_cust', ""), placeholder="أدخل اسم الشركة أو الزبون")
         st.session_state.temp_cust = customer_name
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist(), key="size_select")
+            selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
         with col2:
-            print_type = st.radio("🖨️ نوع الطباعة:", ["عادي", "سكوتش"], horizontal=True, key="print_type_radio")
+            print_type = st.radio("🖨️ نوع الطباعة:", ["عادي", "سكوتش"], horizontal=True)
         with col3:
-            year = st.number_input("📅 العام:", min_value=2024, max_value=2030, value=2026, key="year_input")
+            year = st.number_input("📅 العام:", min_value=2024, max_value=2030, value=2026)
         
-        is_foreign = st.checkbox("🌍 منتج أجنبي", key="foreign_checkbox")
+        is_foreign = st.checkbox("🌍 منتج أجنبي")
         
-        # الفترات
         periods_df = run_query('SELECT namee, no FROM "الفترة" ORDER BY no')
         period_names = periods_df['namee'].tolist()
         
@@ -1029,7 +966,6 @@ elif page == "📄 عرض سعر":
         
         st.info(f"📅 عدد الفترات: {periods_count} | عدد الأشهر: {months_count:.1f}")
         
-        # الأسعار
         fee_print, fee_ads = get_fees(draw_df, selected_size, print_type, is_foreign)
         
         per_column_print = fee_print
@@ -1048,7 +984,7 @@ elif page == "📄 عرض سعر":
         st.subheader("📍 اختيار المواقع")
         
         cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"')['المحافظة'].tolist()
-        selected_city = st.selectbox("اختر المحافظة:", cities, key="city_select")
+        selected_city = st.selectbox("اختر المحافظة:", cities)
         
         available_columns = run_query('''
             SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم" 
@@ -1068,7 +1004,7 @@ elif page == "📄 عرض سعر":
         available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]
         
         if not available_columns.empty:
-            networks = st.multiselect("اختر الشبكات:", available_columns['الشبكة'].unique().tolist(), key="networks_select")
+            networks = st.multiselect("اختر الشبكات:", available_columns['الشبكة'].unique().tolist())
             if st.button("➕ إضافة إلى السلة", type="primary", use_container_width=True):
                 if selected_city not in st.session_state.cart:
                     st.session_state.cart[selected_city] = {}
@@ -1076,15 +1012,12 @@ elif page == "📄 عرض سعر":
                     net_data = available_columns[available_columns['الشبكة'] == net].copy()
                     net_data['fee_print'] = per_column_print
                     net_data['fee_display'] = per_column_display
-                    if 'رقم اللوحة' not in net_data.columns:
-                        net_data['رقم اللوحة'] = net_data.index.astype(str)
                     st.session_state.cart[selected_city][net] = net_data
                 st.success("✅ تمت الإضافة")
                 st.rerun()
         else:
             st.warning("⚠️ لا توجد مواقع متاحة")
         
-        # عرض السلة والحسابات
         if st.session_state.cart:
             st.divider()
             st.subheader("🛒 سلة العروض")
@@ -1095,18 +1028,12 @@ elif page == "📄 عرض سعر":
             for city, networks in list(st.session_state.cart.items()):
                 for net, df_cart in list(networks.items()):
                     with st.expander(f"📍 {city} - {net}", expanded=True):
-                        clean_df = prepare_dataframe(df_cart, net)
-                        
-                        if clean_df.empty:
-                            st.warning("لا توجد بيانات")
-                            continue
-                        
-                        edited_df = st.data_editor(clean_df, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
-                        st.session_state.cart[city][net] = prepare_dataframe(edited_df, net)
+                        edited_df = st.data_editor(df_cart, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
+                        st.session_state.cart[city][net] = edited_df
                         
                         qty = int(edited_df['العدد'].sum())
-                        fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else 0
-                        fd = float(edited_df['fee_display'].iloc[0]) if 'fee_display' in edited_df.columns else 0
+                        fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else per_column_print
+                        fd = float(edited_df['fee_display'].iloc[0]) if 'fee_display' in edited_df.columns else per_column_display
                         
                         section_print = qty * fp
                         section_display = qty * fd
@@ -1116,34 +1043,21 @@ elif page == "📄 عرض سعر":
                         
                         st.info(f"📊 العدد: {qty} | الطباعة: {section_print:.2f}$ | العرض: {section_display:.2f}$")
                         
-                        if st.button("🗑️ حذف الشبكة كاملة", key=f"delete_{city}_{net}"):
-                            deleted_count = len(edited_df)
-                            st.warning(f"⚠️ **تنبيه:** أنت تريد حذف الشبكة `{net}` بالكامل ({deleted_count} عمود)")
-                            st.info(f"📋 ملاحظة: هذه الأعمدة ستبقى في الشبكة `{net}` ولن تتغير")
-                            st.warning(f"🔵 بعد الحذف، لن يتم حجز هذه الأعمدة، ولكن شبكتها ستبقى {net}")
-                            
-                            col_confirm, col_cancel = st.columns(2)
-                            with col_confirm:
-                                if st.button("✅ نعم، حذف الشبكة", key=f"confirm_del_net_{city}_{net}"):
-                                    del st.session_state.cart[city][net]
-                                    st.success(f"✅ تم حذف الشبكة {net} من العرض")
-                                    st.rerun()
-                            with col_cancel:
-                                if st.button("❌ إلغاء", key=f"cancel_del_net_{city}_{net}"):
-                                    st.rerun()
+                        if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
+                            del st.session_state.cart[city][net]
+                            st.rerun()
             
             st.divider()
             
-            # خيارات الحسم
             st.subheader("💰 خيارات الحسم")
             
             col_disc1, col_disc2 = st.columns([1, 2])
             with col_disc1:
-                apply_discount = st.checkbox("🏷️ تطبيق حسم على أجور العرض فقط", key="discount_checkbox")
+                apply_discount = st.checkbox("🏷️ تطبيق حسم على أجور العرض فقط")
             with col_disc2:
                 discount_percent = 0
                 if apply_discount:
-                    discount_percent = st.slider("نسبة الحسم (%)", min_value=1, max_value=99, value=10, step=1, key="discount_slider")
+                    discount_percent = st.slider("نسبة الحسم (%)", min_value=1, max_value=99, value=10, step=1)
             
             if apply_discount and discount_percent > 0:
                 discount_amount = grand_total_display * (discount_percent / 100)
@@ -1194,13 +1108,13 @@ elif page == "📄 عرض سعر":
                                 cur = conn.cursor()
                                 for city, networks in st.session_state.cart.items():
                                     for net, df in networks.items():
-                                        for idx, row in df.iterrows():
+                                        for _, row in df.iterrows():
                                             for period in selected_periods:
-                                                board_number = str(row.get('رقم اللوحة', row.get('board_number', f"UNKNOWN_{idx}")))
                                                 cur.execute('''
                                                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
                                                     VALUES (%s, %s, %s, %s)
-                                                ''', (board_number, customer_name, year, period))
+                                                ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                
                                 conn.commit()
                                 st.session_state.cart = {}
                                 st.success("✅ تم تثبيت الحجز بنجاح")
@@ -1343,115 +1257,6 @@ elif page == "📄 عرض سعر":
     
     except Exception as e:
         st.error(f"❌ حدث خطأ: {str(e)}")
-
-elif page == "📋 تقرير الجرد":
-    st.title("📋 التقرير التجميعي - جرد اللوحات")
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    try:
-        periods_df = run_query('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"')
-        period_names = periods_df['namee'].tolist()
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            from_period = st.selectbox("من فترة:", period_names, key="from_period")
-        with col2:
-            to_period = st.selectbox("إلى فترة:", period_names, index=len(period_names)-1, key="to_period")
-        with col3:
-            report_year = st.number_input("العام:", value=datetime.now().year, key="report_year")
-        
-        from_idx = int(periods_df[periods_df['namee'] == from_period]['no'].iloc[0])
-        to_idx = int(periods_df[periods_df['namee'] == to_period]['no'].iloc[0])
-        target_periods = periods_df[(periods_df['no'] >= from_idx) & (periods_df['no'] <= to_idx)]['namee'].tolist()
-        
-        all_boards = run_query('SELECT "رقم اللوحة", "المحافظة", "الحجم", "العدد" FROM "اعمدة انارة"')
-        
-        period_placeholders = ','.join([f"'{p}'" for p in target_periods])
-        booked_query = f'''
-            SELECT DISTINCT "رقم اللوحة" 
-            FROM "حجوزات1" 
-            WHERE "العام" = %s 
-            AND "فترة الحجز" IN ({period_placeholders})
-        '''
-        booked_in_period = run_query(booked_query, (report_year,))['رقم اللوحة'].tolist()
-        
-        all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_in_period else 'متاح')
-        
-        total_sites = len(all_boards)
-        booked_sites = len(booked_in_period)
-        available_sites = total_sites - booked_sites
-        total_boards_count = all_boards['العدد'].sum()
-        booked_boards_count = all_boards[all_boards['الحالة'] == 'محجوز']['العدد'].sum()
-        available_boards_count = total_boards_count - booked_boards_count
-        
-        cols = st.columns(4)
-        metrics_data = [
-            ("🏢 إجمالي المواقع", total_sites, "🗺️", "primary"),
-            ("🔴 المواقع المحجوزة", booked_sites, "📌", "danger"),
-            ("🟢 المواقع المتاحة", available_sites, "✅", "success"),
-            ("📈 نسبة الإشغال", f"{(booked_sites/total_sites*100):.1f}%", "📊", "warning")
-        ]
-        
-        for idx, (title, value, icon, color) in enumerate(metrics_data):
-            with cols[idx]:
-                st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
-        
-        st.divider()
-        
-        col_chart1, col_chart2 = st.columns(2)
-        
-        with col_chart1:
-            fig_pie = go.Figure(data=[go.Pie(
-                labels=['محجوز', 'متاح'],
-                values=[booked_boards_count, available_boards_count],
-                hole=0.4,
-                marker_colors=['#dc2626', '#22c55e'],
-                textinfo='percent+label'
-            )])
-            fig_pie.update_layout(title="نسبة إشغال الأعمدة", height=400)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        
-        with col_chart2:
-            city_data = []
-            for city in all_boards['المحافظة'].unique():
-                city_df = all_boards[all_boards['المحافظة'] == city]
-                city_total = city_df['العدد'].sum()
-                city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
-                city_data.append({
-                    'المحافظة': city,
-                    'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
-                })
-            
-            city_df = pd.DataFrame(city_data)
-            fig_bar = px.bar(city_df, x='المحافظة', y='نسبة الإشغال', 
-                           color='نسبة الإشغال', color_continuous_scale='RdYlGn')
-            fig_bar.update_layout(height=400)
-            st.plotly_chart(fig_bar, use_container_width=True)
-        
-        st.divider()
-        
-        st.subheader("📋 تفصيل حسب المحافظة")
-        city_details = []
-        for city in all_boards['المحافظة'].unique():
-            city_df = all_boards[all_boards['المحافظة'] == city]
-            city_total = city_df['العدد'].sum()
-            city_booked = city_df[city_df['الحالة'] == 'محجوز']['العدد'].sum()
-            city_details.append({
-                'المحافظة': city,
-                'الإجمالي': int(city_total),
-                'محجوز': int(city_booked),
-                'متاح': int(city_total - city_booked),
-                'نسبة الإشغال': f"{(city_booked/city_total*100):.1f}%" if city_total > 0 else "0%"
-            })
-        
-        st.dataframe(pd.DataFrame(city_details), use_container_width=True)
-        
-        st.divider()
-        csv_data = all_boards.to_csv(index=False, encoding='utf-8-sig')
-        st.download_button("📊 تصدير إلى CSV", csv_data, f"Inventory_Report_{report_year}.csv", "text/csv", use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"حدث خطأ في التقرير: {str(e)}")
 
 elif page == "📅 تقرير التوفر الشهري":
     st.title("📋 تقرير الأعمدة المتاحة")
