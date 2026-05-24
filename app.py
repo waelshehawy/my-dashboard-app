@@ -890,9 +890,7 @@ def prepare_dataframe(df, net_name=""):
         else:
             df_clean['الموقع'] = df_clean['رقم اللوحة']
     
-    # ============================================================
     # إزالة الصفوف الفارغة
-    # ============================================================
     if 'رقم اللوحة' in df_clean.columns:
         df_clean = df_clean[df_clean['رقم اللوحة'].notna()]
         df_clean = df_clean[df_clean['رقم اللوحة'] != '']
