@@ -1187,12 +1187,24 @@ elif page == "📄 عرض سعر":
                                 cur = conn.cursor()
                                 for city, networks in st.session_state.cart.items():
                                     for net, df in networks.items():
-                                        for _, row in df.iterrows():
+                                        for idx, row in df.iterrows():
                                             for period in selected_periods:
+                                                # ============================================================
+                                                # الحصول على رقم اللوحة بطريقة آمنة
+                                                # ============================================================
+                                                if 'رقم اللوحة' in row and row['رقم اللوحة'] is not None:
+                                                    board_number = str(row['رقم اللوحة'])
+                                                elif 'board_number' in row and row['board_number'] is not None:
+                                                    board_number = str(row['board_number'])
+                                                elif 'id' in row and row['id'] is not None:
+                                                    board_number = str(row['id'])
+                                                else:
+                                                    board_number = f"UNKNOWN_{idx}"
+                                                
                                                 cur.execute('''
                                                     INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
                                                     VALUES (%s, %s, %s, %s)
-                                                ''', (str(row['رقم اللوحة']), customer_name, year, period))
+                                                ''', (board_number, customer_name, year, period))
                                 
                                 conn.commit()
                                 st.session_state.cart = {}
