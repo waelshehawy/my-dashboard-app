@@ -174,7 +174,10 @@ st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 # ============================================================
 # دوال مساعدة
 # ============================================================
-
+def show_delete_warning(network_name, board_name):
+    """عرض رسالة تحذير عند حذف موقع"""
+    st.warning(f"⚠️ **تنبيه:** أنت أزلت العمود `{board_name}` من الشبكة `{network_name}` وسيصبح في الشبكة 0", icon="⚠️")
+    st.info("💡 ملاحظة: الشبكة 0 تعني أن هذا العمود غير مرتبط بأي شبكة حالياً")
 def create_metric_card_3d(title, value, icon, color_gradient="primary"):
     gradients = {
         "primary": "linear-gradient(135deg, #667eea, #764ba2)",
@@ -962,8 +965,25 @@ elif page == "📄 عرض سعر":
                         st.info(f"📊 العدد: {qty} | الطباعة: {section_print:.2f}$ | العرض: {section_display:.2f}$")
                         
                         if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
-                            del st.session_state.cart[city][net]
-                            st.rerun()
+                            # حساب عدد المواقع التي سيتم حذفها
+                            deleted_count = len(df_cart)
+                            deleted_boards = df_cart['الموقع'].tolist() if 'الموقع' in df_cart.columns else df_cart['اسم العمود'].tolist()
+                            
+                            # عرض رسالة تحذير
+                            st.warning(f"⚠️ **تنبيه:** أنت تريد حذف {deleted_count} عمود من الشبكة `{net}`")
+                            st.info(f"📋 الأعمدة التي سيتم حذفها: {', '.join(deleted_boards[:5])}{'...' if len(deleted_boards) > 5 else ''}")
+                            st.warning(f"🔴 بعد الحذف، هذه الأعمدة ستصبح في الشبكة **0**")
+                            
+                            # تأكيد الحذف
+                            col_confirm, col_cancel = st.columns(2)
+                            with col_confirm:
+                                if st.button("✅ نعم، تأكيد الحذف", key=f"confirm_del_{city}_{net}"):
+                                    del st.session_state.cart[city][net]
+                                    st.success(f"✅ تم حذف {deleted_count} عمود من الشبكة {net}")
+                                    st.rerun()
+                            with col_cancel:
+                                if st.button("❌ إلغاء", key=f"cancel_del_{city}_{net}"):
+                                    st.rerun()
             
             st.divider()
             
