@@ -944,15 +944,74 @@ elif page == "📄 عرض سعر":
                         data = json.loads(row['cart_json'])
                         cart_raw = data.get("data", data)
                         
-                        # هنا يتم استدعاء الدالة المساعدة
-                        fixed_cart = fix_loaded_cart_data(cart_raw)
-                        st.session_state.cart = fixed_cart
+                        st.session_state.cart = {}
+                        
+                        for city, networks in cart_raw.items():
+                            st.session_state.cart[city] = {}
+                            for net, items in networks.items():
+                                # items هو قاموس بمفاتيح: 'رقم اللوحة', 'الموقع', 'العدد', ...
+                                # نحتاج إلى تحويله إلى DataFrame بشكل صحيح
+                                
+                                # الطريقة الصحيحة: إنشاء قائمة من الصفوف
+                                rows = []
+                                
+                                # الحصول على عدد الصفوف من طول أي من المفاتيح
+                                if 'رقم اللوحة' in items:
+                                    num_rows = len(items['رقم اللوحة'])
+                                elif 'الموقع' in items:
+                                    num_rows = len(items['الموقع'])
+                                else:
+                                    num_rows = 0
+                                
+                                for i in range(num_rows):
+                                    row_dict = {}
+                                    for key, values in items.items():
+                                        if i in values:
+                                            row_dict[key] = values[i]
+                                        elif str(i) in values:
+                                            row_dict[key] = values[str(i)]
+                                        else:
+                                            # محاولة الحصول على القيمة كمصفوفة
+                                            if isinstance(values, dict) and len(values) > i:
+                                                row_dict[key] = list(values.values())[i]
+                                            else:
+                                                row_dict[key] = None
+                                    rows.append(row_dict)
+                                
+                                df = pd.DataFrame(rows)
+                                
+                                # التأكد من وجود جميع الأعمدة المطلوبة
+                                required_cols = ['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة', 'الحجم', 'fee_print', 'fee_display']
+                                for col in required_cols:
+                                    if col not in df.columns:
+                                        if col == 'العدد' and 'fee_ads' in df.columns:
+                                            continue
+                                        elif col == 'fee_display':
+                                            df[col] = 0
+                                        elif col == 'fee_print':
+                                            df[col] = 0
+                                        else:
+                                            df[col] = None
+                                
+                                # تحويل الأعمدة الرقمية
+                                if 'رقم اللوحة' in df.columns:
+                                    df['رقم اللوحة'] = df['رقم اللوحة'].astype(str)
+                                if 'العدد' in df.columns:
+                                    df['العدد'] = pd.to_numeric(df['العدد'], errors='coerce').fillna(1).astype(int)
+                                if 'fee_print' in df.columns:
+                                    df['fee_print'] = pd.to_numeric(df['fee_print'], errors='coerce').fillna(0)
+                                if 'fee_display' in df.columns:
+                                    df['fee_display'] = pd.to_numeric(df['fee_display'], errors='coerce').fillna(0)
+                                
+                                st.session_state.cart[city][net] = df
                         
                         st.session_state.temp_cust = row['client_name']
                         st.success("✅ تم تحميل العرض بنجاح")
                         st.rerun()
                 except Exception as e:
-                    st.error(f"خطأ في تحميل العرض: {str(e)}")        
+                    st.error(f"خطأ في تحميل العرض: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())        
         st.divider()
         
         draw_df = run_query('SELECT * FROM "اسماء الرسم"')
