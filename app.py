@@ -200,86 +200,30 @@ if 'current_offer_id' not in st.session_state:
 # ============================================================
 # دوال مساعدة
 # ============================================================
-def fix_loaded_cart_data(cart_data):
-    """تصحيح بنية البيانات المحفوظة - نسخة متطورة"""
-    fixed_cart = {}
+def convert_json_to_df(items):
+    """تحويل JSON المخزن إلى DataFrame"""
+    # إذا كان items هو list من الصفوف
+    if isinstance(items, list):
+        return pd.DataFrame(items)
     
-    for city, networks in cart_data.items():
-        fixed_cart[city] = {}
-        
-        for net, df_dict in networks.items():
-            # تحويل إلى DataFrame
-            df = pd.DataFrame(df_dict)
-            
-            # طباعة debugging (يمكنك إزالتها لاحقاً)
-            st.write(f"debug - أعمدة DataFrame قبل التصحيح: {df.columns.tolist()}")
-            
-            # ===== معالجة عمود 'رقم اللوحة' =====
-            if 'رقم اللوحة' not in df.columns:
-                # محاولة إيجاد أي عمود يشبه رقم اللوحة
-                possible_columns = ['board_number', 'board_no', 'board_id', 'id', 'رقم اللوحة', 'لوحة', 'board']
-                found = False
-                for col in possible_columns:
-                    if col in df.columns:
-                        df['رقم اللوحة'] = df[col]
-                        found = True
-                        break
-                
-                # إذا لم نجد، ننشئ من الفهرس
-                if not found:
-                    df['رقم اللوحة'] = [f"BOARD_{i+1}" for i in range(len(df))]
-            
-            # ===== معالجة عمود 'الموقع' =====
-            if 'الموقع' not in df.columns:
-                if 'اسم العمود' in df.columns:
-                    df['الموقع'] = df['اسم العمود']
-                else:
-                    df['الموقع'] = df['رقم اللوحة']
-            
-            # ===== معالجة عمود 'العدد' =====
-            if 'العدد' not in df.columns:
-                if 'qty' in df.columns:
-                    df['العدد'] = df['qty']
-                elif 'quantity' in df.columns:
-                    df['العدد'] = df['quantity']
-                else:
-                    df['العدد'] = 1
-            
-            # ===== معالجة عمود 'الشبكة' =====
-            if 'الشبكة' not in df.columns:
-                if 'network' in df.columns:
-                    df['الشبكة'] = df['network']
-                else:
-                    df['الشبكة'] = net
-            
-            # ===== معالجة عمود 'الحجم' =====
-            if 'الحجم' not in df.columns:
-                if 'size' in df.columns:
-                    df['الحجم'] = df['size']
-                else:
-                    df['الحجم'] = 'غير محدد'
-            
-            # ===== معالجة أسعار الطباعة =====
-            if 'fee_print' not in df.columns:
-                if 'print_fee' in df.columns:
-                    df['fee_print'] = df['print_fee']
-                else:
-                    df['fee_print'] = 0
-            
-            if 'fee_display' not in df.columns:
-                if 'display_fee' in df.columns:
-                    df['fee_display'] = df['display_fee']
-                else:
-                    df['fee_display'] = 0
-            
-            # تحويل الأعمدة الرقمية إلى أرقام
-            for col in ['العدد', 'fee_print', 'fee_display']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            fixed_cart[city][net] = df
+    # إذا كان items هو dict بمفاتيح هي أسماء الأعمدة وقيمها dict من indexes
+    if isinstance(items, dict):
+        first_key = list(items.keys())[0] if items else None
+        if first_key and isinstance(items[first_key], dict):
+            # تنسيق: {'رقم اللوحة': {0: 1436, 1: 1437, ...}}
+            rows = []
+            num_rows = max([len(v) for v in items.values()]) if items else 0
+            for i in range(num_rows):
+                row = {}
+                for col, values in items.items():
+                    if i in values:
+                        row[col] = values[i]
+                    elif str(i) in values:
+                        row[col] = values[str(i)]
+                rows.append(row)
+            return pd.DataFrame(rows)
     
-    return fixed_cart
+    return pd.DataFrame()
 def show_delete_warning(network_name, board_name):
     """عرض رسالة تحذير عند حذف موقع"""
     st.warning(f"⚠️ **تنبيه:** أنت أزلت العمود `{board_name}` من الشبكة `{network_name}` وسيصبح في الشبكة 0", icon="⚠️")
