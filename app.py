@@ -800,7 +800,13 @@ elif page == "📄 عرض سعر":
         if saved_offers is not None and not saved_offers.empty:
             offer_options = {}
             for _, row in saved_offers.iterrows():
-                date_str = row['offer_date'][:10] if row['offer_date'] else "بدون تاريخ"
+                # طريقة آمنة تماماً للحصول على التاريخ
+                offer_date = row['offer_date']
+                try:
+                    # محاولة التحويل إلى string
+                    date_str = str(offer_date)[:10] if offer_date else "بدون تاريخ"
+                except:
+                    date_str = "بدون تاريخ"
                 offer_options[f"{row['client_name']} ({date_str})"] = row['id']
             
             selected_offer = st.selectbox("اختر عرضاً محفوظاً:", ["---"] + list(offer_options.keys()), key="load_offer_select")
