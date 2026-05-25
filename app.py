@@ -710,33 +710,18 @@ if page == "🏢 لوحات الشركات":
         st.warning("⚠️ لا توجد شركات معلنة حالياً")
     else:
         for idx, company in companies.iterrows():
-            st.markdown(f"""
-            <div class="company-card-enhanced">
-                <div class="card-header">
-                    <div class="company-icon">🏢</div>
-                    <div class="company-name">{company['company_name']}</div>
-                    <div class="company-status active">نشط</div>
-                </div>
-                <div class="card-stats">
-                    <div class="stat">
-                        <div class="stat-value">{company['total_boards']}</div>
-                        <div class="stat-label">لوحة</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">{company['total_periods']}</div>
-                        <div class="stat-label">فترة حجز</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">{company['last_year']}</div>
-                        <div class="stat-label">آخر عام</div>
+            with st.container():
+                st.markdown(f"""
+                <div class="neumorphic-card" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <div><h2 style="margin: 0 0 10px 0;">🏢 {company['company_name']}</h2></div>
+                        <div>
+                            {badge_animated(f"📊 {company['total_boards']} لوحة", "info")}
+                            {badge_animated(f"🗓️ {company['total_periods']} فترة", "success")}
+                        </div>
                     </div>
                 </div>
-                <div class="card-footer">
-                    <div class="footer-info">📅 {company['end_date']}</div>
-                    <div class="footer-button" onclick="alert('سيتم عرض الخريطة قريباً')">🗺️ عرض الخريطة</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             
             col1, col2 = st.columns([3, 1])
             with col2:
