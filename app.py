@@ -1326,66 +1326,56 @@ elif page == "📅 تقرير التوفر الشهري":
 
 elif page == "🗺️ تقرير جميع المواقع":
     st.title("🗺️ تقرير جميع المواقع والأعمدة")
-    st.info("📌 يعرض هذا التقرير جميع المواقع والأعمدة الموجودة في النظام بشكل تفصيلي حسب المحافظات والشبكات")
+    st.info("📌 يعرض هذا التقرير جميع المواقع والأعمدة في النظام")
     
     all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
     
     if all_columns is None or all_columns.empty:
-        st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
+        st.warning("⚠️ لا توجد بيانات")
         st.stop()
     
-    total_sites = len(all_columns)
-    total_boards = all_columns['العدد'].sum() if 'العدد' in all_columns.columns else total_sites
-    
-    cols = st.columns(3)
-    with cols[0]:
-        st.markdown(create_metric_card_3d("إجمالي المواقع", total_sites, "🗺️", "primary"), unsafe_allow_html=True)
-    with cols[1]:
-        st.markdown(create_metric_card_3d("إجمالي الأعمدة", int(total_boards), "📌", "success"), unsafe_allow_html=True)
-    with cols[2]:
-        st.markdown(create_metric_card_3d("عدد المحافظات", all_columns['المحافظة'].nunique(), "🏙️", "warning"), unsafe_allow_html=True)
+    # إحصائيات سريعة
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("إجمالي المواقع", len(all_columns))
+    with col2:
+        st.metric("إجمالي الأعمدة", int(all_columns['العدد'].sum()))
+    with col3:
+        st.metric("عدد المحافظات", all_columns['المحافظة'].nunique())
     
     st.divider()
     
-    st.subheader("📊 ملخص حسب المحافظة")
-    summary = all_columns.groupby('المحافظة').agg({
-        'رقم اللوحة': 'count',
-        'العدد': 'sum'
-    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-    summary['عدد الأعمدة'] = summary['عدد الأعمدة'].astype(int)
-    st.dataframe(summary, use_container_width=True)
-    
-    st.divider()
-    
-    st.subheader("📋 تفصيل حسب المحافظة والشبكة")
-    
+    # عرض البيانات بشكل منظم (بدون expander متداخل)
     for city in sorted(all_columns['المحافظة'].unique()):
         city_df = all_columns[all_columns['المحافظة'] == city]
-        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)", expanded=False):
-            network_summary = city_df.groupby('الشبكة').agg({
-                'رقم اللوحة': 'count',
-                'العدد': 'sum'
-            }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-            st.write("**📡 توزع الشبكات في المحافظة:**")
-            st.dataframe(network_summary, use_container_width=True)
+        
+        # expander واحد فقط للمحافظة
+        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)"):
             
-            networks_list = city_df['الشبكة'].dropna().astype(str).unique()
-            for network in sorted(networks_list):
+            # عرض الشبكات داخل المحافظة (بدون expander ثاني)
+            for network in sorted(city_df['الشبكة'].dropna().astype(str).unique()):
                 net_df = city_df[city_df['الشبكة'] == network]
-                with st.expander(f"📡 شبكة: {network} ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)"):
-                    size_summary = net_df.groupby('الحجم').agg({
-                        'رقم اللوحة': 'count',
-                        'العدد': 'sum'
-                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-                    st.write("**📏 تفصيل حسب الحجم:**")
-                    st.dataframe(size_summary, use_container_width=True)
-                    st.write("**📍 قائمة المواقع:**")
-                    st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
+                
+                # استخدام markdown بدلاً من expander للشبكة
+                st.markdown(f"**📡 شبكة: {network}** ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)")
+                
+                # عرض تفصيل حسب الحجم
+                size_summary = net_df.groupby('الحجم').agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                st.write("**📏 تفصيل حسب الحجم:**")
+                st.dataframe(size_summary, use_container_width=True)
+                
+                # عرض قائمة المواقع
+                st.write("**📍 قائمة المواقع:**")
+                st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
+                st.markdown("---")
     
+    # تصدير
     st.divider()
-    
     csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
-    st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"full_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+    st.download_button("📊 تصدير CSV", csv_data, f"full_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 elif page == "📐 تقرير تجميعي حسب الحجوم":
     st.title("📐 تقرير تجميعي حسب الحجوم")
