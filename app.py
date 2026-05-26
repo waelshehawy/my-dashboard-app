@@ -1328,10 +1328,16 @@ elif page == "🗺️ تقرير جميع المواقع":
     st.title("🗺️ تقرير جميع المواقع والأعمدة")
     st.info("📌 يعرض هذا التقرير جميع المواقع والأعمدة في النظام")
     
+    # جلب البيانات
     all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
     
+    # تشخيص سريع
+    st.write(f"**Debug:** عدد السجلات = {len(all_columns) if all_columns is not None else 0}")
+    if all_columns is not None and not all_columns.empty:
+        st.write(f"**Debug:** الأعمدة الموجودة: {all_columns.columns.tolist()}")
+    
     if all_columns is None or all_columns.empty:
-        st.warning("⚠️ لا توجد بيانات")
+        st.warning("⚠️ لا توجد بيانات في جدول أعمدة الإنارة")
         st.stop()
     
     # إحصائيات سريعة
@@ -1339,38 +1345,37 @@ elif page == "🗺️ تقرير جميع المواقع":
     with col1:
         st.metric("إجمالي المواقع", len(all_columns))
     with col2:
-        st.metric("إجمالي الأعمدة", int(all_columns['العدد'].sum()))
+        st.metric("إجمالي الأعمدة", int(all_columns['العدد'].sum()) if 'العدد' in all_columns.columns else len(all_columns))
     with col3:
-        st.metric("عدد المحافظات", all_columns['المحافظة'].nunique())
+        st.metric("عدد المحافظات", all_columns['المحافظة'].nunique() if 'المحافظة' in all_columns.columns else 0)
     
     st.divider()
     
-    # عرض البيانات بشكل منظم (بدون expander متداخل)
+    # عرض الجدول كاملاً أولاً (للتأكد من وجود بيانات)
+    st.subheader("📋 جميع البيانات (جدول كامل)")
+    st.dataframe(all_columns, use_container_width=True)
+    
+    st.divider()
+    
+    # عرض البيانات بشكل منظم حسب المحافظة
+    st.subheader("📋 تفصيل حسب المحافظة")
+    
     for city in sorted(all_columns['المحافظة'].unique()):
         city_df = all_columns[all_columns['المحافظة'] == city]
         
-        # expander واحد فقط للمحافظة
         with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)"):
             
-            # عرض الشبكات داخل المحافظة (بدون expander ثاني)
-            for network in sorted(city_df['الشبكة'].dropna().astype(str).unique()):
-                net_df = city_df[city_df['الشبكة'] == network]
-                
-                # استخدام markdown بدلاً من expander للشبكة
-                st.markdown(f"**📡 شبكة: {network}** ({len(net_df)} موقع - {net_df['العدد'].sum()} لوحة)")
-                
-                # عرض تفصيل حسب الحجم
-                size_summary = net_df.groupby('الحجم').agg({
+            # عرض جميع مواقع المحافظة
+            st.dataframe(city_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+            
+            # تفصيل حسب الشبكة
+            if 'الشبكة' in city_df.columns:
+                st.write("**📡 تفصيل حسب الشبكة:**")
+                network_summary = city_df.groupby('الشبكة').agg({
                     'رقم اللوحة': 'count',
                     'العدد': 'sum'
                 }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
-                st.write("**📏 تفصيل حسب الحجم:**")
-                st.dataframe(size_summary, use_container_width=True)
-                
-                # عرض قائمة المواقع
-                st.write("**📍 قائمة المواقع:**")
-                st.dataframe(net_df[['رقم اللوحة', 'اسم العمود', 'الحجم', 'العدد']], use_container_width=True)
-                st.markdown("---")
+                st.dataframe(network_summary, use_container_width=True)
     
     # تصدير
     st.divider()
