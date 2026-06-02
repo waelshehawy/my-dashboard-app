@@ -607,76 +607,147 @@ if page == "🏢 لوحات الشركات":
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 اختر محافظة لعرض الأعمدة المتاحة فيها مع خريطة تفاعلية")
+    st.info("📌 عرض جميع الأعمدة المتاحة في كل المحافظات مع خيار التصفية")
     
+    # جلب جميع الأعمدة المتاحة
     available_data = get_available_by_city()
     
     if available_data is None or available_data.empty:
         st.warning("⚠️ لا توجد أعمدة متاحة حالياً")
         st.stop()
     
-    cities = available_data['المحافظة'].unique()
+    # ============================================================
+    # خيارات التصفية
+    # ============================================================
+    col_filter1, col_filter2, col_filter3 = st.columns(3)
     
-    cols_per_row = 3
-    for i in range(0, len(cities), cols_per_row):
-        cols = st.columns(cols_per_row)
-        for j, col in enumerate(cols):
-            if i + j < len(cities):
-                city = cities[i + j]
-                city_data = available_data[available_data['المحافظة'] == city]
-                total_boards = city_data['العدد'].sum()
-                total_sites = len(city_data)
-                unique_sizes = city_data['الحجم'].nunique()
-                
-                with col:
-                    st.markdown(f"""
-                    <div class="neumorphic-card" style="text-align: center; cursor: pointer;">
-                        <div style="font-size: 48px;">🏙️</div>
-                        <h3>{city}</h3>
-                        <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
-                            {badge_animated(f"{int(total_boards)} عمود", "info")}
-                            {badge_animated(f"{total_sites} موقع", "success")}
-                            {badge_animated(f"{unique_sizes} حجم", "warning")}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
-                        st.session_state['selected_city'] = city
-                        st.session_state['show_city_details'] = True
-                        st.rerun()
+    with col_filter1:
+        # خيار عرض الكل أو محافظة محددة
+        cities_list = ["🌍 جميع المحافظات"] + sorted(available_data['المحافظة'].unique().tolist())
+        selected_filter = st.selectbox("🔍 تصفية حسب المحافظة:", cities_list)
     
-    if st.session_state.get('show_city_details', False):
-        city = st.session_state['selected_city']
-        city_data = available_data[available_data['المحافظة'] == city]
+    with col_filter2:
+        # تصفية حسب نوع الحجم
+        size_types = ["📏 جميع الأحجام", "📏 أعمدة إنارة (2×1)", "📏 منصفات (125×185)", "📏 أحجام أخرى"]
+        selected_size_filter = st.selectbox("🔍 تصفية حسب الحجم:", size_types)
+    
+    with col_filter3:
+        # عرض إحصائيات سريعة
+        total_available = len(available_data)
+        total_boards = available_data['العدد'].sum()
+        st.metric("📊 إجمالي الأعمدة المتاحة", f"{total_available:,} موقع")
+        st.caption(f"🔢 إجمالي عدد اللوحات: {int(total_boards):,}")
+    
+    st.divider()
+    
+    # ============================================================
+    # تطبيق التصفية
+    # ============================================================
+    filtered_data = available_data.copy()
+    
+    # تصفية حسب المحافظة
+    if selected_filter != "🌍 جميع المحافظات":
+        filtered_data = filtered_data[filtered_data['المحافظة'] == selected_filter]
+    
+    # تصفية حسب الحجم
+    if selected_size_filter == "📏 أعمدة إنارة (2×1)":
+        filtered_data = filtered_data[filtered_data['size_group'] == 'أعمدة إنارة (2×1)']
+    elif selected_size_filter == "📏 منصفات (125×185)":
+        filtered_data = filtered_data[filtered_data['size_group'] == 'منصفات (125×185)']
+    elif selected_size_filter == "📏 أحجام أخرى":
+        filtered_data = filtered_data[filtered_data['size_group'] == 'أحجام أخرى']
+    
+    # ============================================================
+    # عرض النتائج
+    # ============================================================
+    if filtered_data.empty:
+        st.warning("⚠️ لا توجد نتائج تطابق معايير التصفية")
+    else:
+        # إحصائيات النتائج
+        st.subheader(f"📊 النتائج ({len(filtered_data)} موقع - {filtered_data['العدد'].sum()} لوحة)")
+        
+        # عرض الجدول الكامل للنتائج
+        st.dataframe(
+            filtered_data[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
+            use_container_width=True,
+            height=400
+        )
         
         st.divider()
-        st.subheader(f"📍 محافظة {city}")
         
-        for size_name in ['أعمدة إنارة (2×1)', 'منصفات (125×185)', 'أحجام أخرى']:
-            group_data = city_data[city_data['size_group'] == size_name]
-            if not group_data.empty:
-                total = group_data['العدد'].sum()
-                with st.expander(f"📏 {size_name} - {int(total)} عمود", expanded=True):
-                    valid_coords = filter_valid_coordinates(group_data)
-                    if not valid_coords.empty:
-                        m = folium.Map(location=[34.8, 38.9], zoom_start=8)
-                        for _, row in valid_coords.iterrows():
-                            folium.Marker(
-                                [row['Latitude'], row['Longitude']],
-                                popup=f"<b>{row['اسم العمود']}</b><br>{row['الشبكة']}<br>{row['الحجم']}",
-                                icon=folium.Icon(color='green', icon='info-sign')
-                            ).add_to(m)
-                        st_folium(m, width="100%", height=400)
-                    
-                    st.dataframe(group_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+        # ============================================================
+        # عرض ملخص حسب المحافظة (للنتائج)
+        # ============================================================
+        st.subheader("📋 ملخص حسب المحافظة")
+        summary = filtered_data.groupby('المحافظة').agg({
+            'رقم اللوحة': 'count',
+            'العدد': 'sum'
+        }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
+        st.dataframe(summary, use_container_width=True)
+        
+        st.divider()
+        
+        # ============================================================
+        # عرض ملخص حسب نوع الحجم (للنتائج)
+        # ============================================================
+        st.subheader("📋 ملخص حسب نوع الحجم")
+        size_summary = filtered_data.groupby('size_group').agg({
+            'رقم اللوحة': 'count',
+            'العدد': 'sum'
+        }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
+        st.dataframe(size_summary, use_container_width=True)
+        
+        # ============================================================
+        # خريطة تفاعلية (عند اختيار محافظة محددة)
+        # ============================================================
+        if selected_filter != "🌍 جميع المحافظات":
+            st.divider()
+            st.subheader(f"🗺️ خريطة الأعمدة المتاحة في {selected_filter}")
+            
+            # تصفية الإحداثيات الصالحة
+            valid_coords = filtered_data[
+                filtered_data['Latitude'].notna() & 
+                (filtered_data['Latitude'] != 0) &
+                filtered_data['Longitude'].notna() & 
+                (filtered_data['Longitude'] != 0)
+            ].copy()
+            
+            if not valid_coords.empty:
+                import folium
+                from streamlit_folium import st_folium
+                
+                # تحديد مركز الخريطة حسب المحافظة المختارة
+                city_coords = SYRIA_COORDS.get(selected_filter, SYRIA_COORDS["سوريا"])
+                m = folium.Map(location=city_coords, zoom_start=10)
+                
+                for _, row in valid_coords.iterrows():
+                    folium.Marker(
+                        [row['Latitude'], row['Longitude']],
+                        popup=f"""
+                        <b>{row['اسم العمود']}</b><br>
+                        📍 {row['المحافظة']}<br>
+                        📡 {row['الشبكة']}<br>
+                        📏 {row['الحجم']}
+                        """,
+                        icon=folium.Icon(color='green', icon='info-sign')
+                    ).add_to(m)
+                
+                st_folium(m, width="100%", height=500)
             else:
-                with st.expander(f"📏 {size_name}"):
-                    st.info("لا توجد أعمدة في هذه الفئة")
+                st.info("📍 لا توجد إحداثيات لعرضها على الخريطة للمحافظة المختارة")
         
-        if st.button("🔙 العودة إلى قائمة المحافظات", key="back_to_cities"):
-            st.session_state['show_city_details'] = False
-            st.rerun()
+        # ============================================================
+        # تصدير التقرير
+        # ============================================================
+        st.divider()
+        csv_data = filtered_data.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            "📥 تحميل التقرير (CSV)", 
+            csv_data, 
+            f"available_columns_{selected_filter.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.csv", 
+            "text/csv", 
+            use_container_width=True
+        )
 
 elif page == "📊 Dashboard":
     st.markdown("""
