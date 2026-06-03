@@ -517,22 +517,30 @@ if 'ai_sql' in st.session_state and st.session_state['ai_sql']:
 # ============================================================
 
 def run_query(query, params=None, fetch=True):
-    """تنفيذ استعلام على Supabase"""
-    cursor = conn.cursor()
+    """تنفيذ استعلام آمن ومستقل على Supabase مع إغلاق الاتصال تلقائياً"""
+    # 🟢 فتح اتصال محلي وخاص بهذا الاستعلام فقط لضمان الاستقرار
+    local_conn = get_connection()
+    cursor = local_conn.cursor()
     try:
         cursor.execute(query, params or ())
         if fetch and query.strip().upper().startswith('SELECT'):
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
+            # إغلاق الموارد قبل إرجاع النتيجة
+            cursor.close()
+            local_conn.close()
             return pd.DataFrame(rows, columns=columns)
         else:
-            conn.commit()
-            return cursor.rowcount
+            local_conn.commit()
+            row_count = cursor.rowcount
+            cursor.close()
+            local_conn.close()
+            return row_count
     except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
+        local_conn.rollback()  # تراجع آمن في حال حدوث خطأ في البيانات
         cursor.close()
+        local_conn.close()
+        raise e
 
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
