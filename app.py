@@ -326,15 +326,7 @@ if 'spoken_response' not in st.session_state:
 if 'username' not in st.session_state:
     st.session_state['username'] = ''
 
-# دوال مساعدة افتراضية (تأكد من وجود تعريفها الحقيقي في كودك)
-def get_connection():
-    return psycopg2.connect(st.secrets["postgres_connection_string"])
-
-def is_admin():
-    return st.session_state.get('role') == 'admin'
-
-def create_metric_card_3d(title, value, icon, theme):
-    return f"<div style='padding:10px; background:rgba(255,255,255,0.05); border-radius:10px;'>{icon} <b>{title}</b>: {value}</div>"
+</div>"
 
 # ============================================================
 # 🔒 صفحة تسجيل الدخول الحديثة عبر بوابة Google HTML
