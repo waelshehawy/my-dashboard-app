@@ -391,7 +391,7 @@ if user_query:
                 GEMINI_API_KEY = RAW_KEY.strip()
                 
                 # 2. تمرير المفتاح في الرابط (وهي الطريقة الرسمية المضمونة لـ API Key)
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key= AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
                 
                 # 3. الـ Headers النظيفة تماماً بدون سطر Bearer المسبب للـ 401
                 headers = {
