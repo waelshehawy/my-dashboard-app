@@ -1459,15 +1459,15 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 # 🎙️ صفحة المساعد الذكي المطور (صفحة مستقلة بالكامل)
 # ============================================================
+# اذهب إلى هذا السطر في كودك الرئيسي:
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    # --- 🎙️ الجيل الجديد: تفعيل المايك البرمجي عبر المتصفح ---
+    # --- 🌟 هنا نقطة اللصق الدقيقة للمتغير المطور لمنع إغلاق المايك 🌟 ---
     import streamlit.components.v1 as components
     
-    # كود جافاسكريبت مخفي ومستقر لفتح مايك المتصفح وتحويل الصوت إلى نص بدقة عالية
     st.markdown("### 🗣️ الإدخال الصوتي الفوري:")
     st.caption("اضغط على زر (ابدأ التحدث) وتكلم بالعامية، وسيتم كتابة أمرك بالأسفل تلقائياً.")
     
@@ -1482,62 +1482,83 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     <script>
         const micBtn = document.getElementById('mic-btn');
         const micStatus = document.getElementById('mic-status');
+        let finalTranscript = ''; 
         
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             const recognition = new SpeechRecognition();
             
-            recognition.lang = 'ar-SY'; // تعيين اللهجة العربية الشامية/المحيطة لتفهم العامية بدقة
-            recognition.interimResults = false;
+            recognition.lang = 'ar-SY'; 
+            recognition.continuous = true;     
+            recognition.interimResults = true;  
             recognition.maxAlternatives = 1;
 
+            let isListening = false;
+
             micBtn.onclick = function() {
-                recognition.start();
+                if (!isListening) {
+                    finalTranscript = ''; 
+                    recognition.start();
+                } else {
+                    recognition.stop();
+                }
+            };
+
+            recognition.onstart = function() {
+                isListening = true;
                 micBtn.style.backgroundColor = '#e53e3e';
-                micBtn.innerText = '🛑 جاري الاستماع صوتياً... تحدث الآن';
-                micStatus.innerText = 'الميكروفون نشط ويستمع...';
+                micBtn.innerText = '🛑 اضغط هنا لإنهاء الحديث وإرسال الطلب';
+                micStatus.innerText = 'الميكروفون مستمر بالاستماع... تكلم براحتك وعند الانتهاء اضغط الزر الأحمر.';
             };
 
             recognition.onresult = function(event) {
-                const speechToText = event.results[0][0].confidence > 0.4 ? event.results[0][0].transcript : '';
-                micBtn.style.backgroundColor = '#667eea';
-                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
-                micStatus.innerText = 'تم تحويل الصوت بنجاح!';
+                let interimTranscript = '';
                 
-                // تمرير النص المولد من الصوت إلى صندوق بايثون في Streamlit
-                if (speechToText) {
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i].transcript + ' ';
+                    } else {
+                        interimTranscript += event.results[i].transcript;
+                    }
+                }
+                
+                const currentText = finalTranscript + interimTranscript;
+                
+                if (currentText.trim()) {
                     window.parent.postMessage({
                         type: 'streamlit:setComponentValue',
-                        value: speechToText
+                        value: currentText.trim()
                     }, '*');
                 }
             };
 
             recognition.onerror = function(event) {
-                micBtn.style.backgroundColor = '#667eea';
-                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
                 micStatus.innerText = 'حدث خطأ في التقاط الصوت: ' + event.error;
             };
             
             recognition.onend = function() {
+                isListening = false;
                 micBtn.style.backgroundColor = '#667eea';
                 micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+                micStatus.innerText = 'تم حفظ وإرسال الأمر الصوتي إلى صندوق الإدخال بنجاح!';
             };
         } else {
-            micStatus.innerText = 'عذراً، متصفحك الحالي لا يدعم ميزة التعرف على الصوت.';
+            micStatus.innerText = 'عذراً، متصفحك الحالي لا يدعم ميزة التعرف المطور على الصوت.';
         }
     </script>
     """
     
-    # عرض مكون التقاط الصوت الفوري وتخزين النص الناتج منه
+    # يليه مباشرة كود عرض الـ HTML وصندوق النص (موجودين مسبقاً في كودك):
     audio_text_output = components.html(st_speech_html, height=80)
     
-    # 2. صندوق إدخال الأمر للمدير (يستقبل تلقائياً مخرجات المايك أو الكتابة اليدوية)
     user_query = st.text_input(
         label="أمر الإدارة الحالي:",
-        placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
+        placeholder="مثال: شف لي اللوحات الفاضية بدمشق والي حجمها 2*1...",
         key="page_ai_query"
     )
+    
+    # ... [باقي الكود المستقر دون أي تغيير] ...
+
 
     # زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
     if st.button("🧠 تحليل الطلب ومفاضلة العروض", type="primary", use_container_width=True):
