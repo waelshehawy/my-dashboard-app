@@ -389,7 +389,7 @@ with st.sidebar:
                 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
                 
                 # استخدام الرابط الرسمي لنموذج v1beta المستقر والمباشر
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key= AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q  "
                 
                 system_prompt = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 جداولك الحقيقية هي:
