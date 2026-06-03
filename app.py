@@ -1610,23 +1610,32 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     # 3. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
     if st.session_state.get('page_ai_sql'):
         st.divider()
-        spoken_text = st.session_state.get('page_ai_spoken', 'تم الفهم بنجاح.')
+        # عرض الرد المكتوب المعتمد في كودك
+        spoken_text = parsed_data.get('spoken_response', 'تم معالجة الطلب.')
         st.success(spoken_text)
         
-        # --- 🔊 حقن كود النطق الصوتي عبر المتصفح (للرد فقط وليس للجدول) ---
-        if st.session_state.get('should_speak', False):
-            # كود جافاسكريبت خفيف لنطق الرد العامي بلهجة عربية واضحة للمدير فوراً
+        # 🌟 حقن كود جافاسكريبت المطور لإجبار المتصفح على النطق بالعربية حصراً 🌟
+        if st.session_state.get('should_speak', True):
+            import streamlit.components.v1 as components
             tts_html = f"""
             <script>
                 if ('speechSynthesis' in window) {{
-                    window.speechSynthesis.cancel(); // إلغاء أي نطق سابق معلق
+                    // إلغاء أي عمليات نطق سابقة معلقة في ذاكرة المتصفح
+                    window.speechSynthesis.cancel(); 
+                    
                     const utterance = new SpeechSynthesisUtterance("{spoken_text}");
-                    utterance.lang = "ar-SA"; // قراءة النص باللغة العربية
-                    utterance.pitch = 1.0;
-                    utterance.rate = 1.0; // السرعة الطبيعية
+                    utterance.lang = "ar-SA"; // ضبط اللغة على العربية حصراً لمنع القراءة اللاتينية/الإنجليزية
+                    utterance.pitch = 1.0;     // طبقة الصوت الطبيعية
+                    utterance.rate = 1.0;      // سرعة القراءة الطبيعية
+                    
                     window.speechSynthesis.speak(utterance);
                 }}
             </script>
+            """
+            # تشغيل المكون المخفي في الصفحة لتفعيل الصوت فوراً
+            components.html(tts_html, height=0, width=0)
+            st.session_state['should_speak'] = False
+
             """
             components.html(tts_html, height=0, width=0)
             # إغلاق ميزة النطق لكي لا ينطق مجدداً عند نقر أزرار التصدير
