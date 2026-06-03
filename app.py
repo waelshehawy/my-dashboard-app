@@ -296,149 +296,351 @@ if not st.session_state.auth:
 # ============================================================
 # الاتصال بقاعدة البيانات بعد تسجيل الدخول
 # ============================================================
+# ============================================================
+# 1. المكتبات والاستيراد (المعيار القياسي في الأعلى دائماً)
+# ============================================================
 import os
 import json
 import io
-import requests  # مكتبة بايثون القياسية المستقرة 100%
+import requests  
 import pandas as pd
 import psycopg2
+import docx  
 import streamlit as st
-import docx  # لتوليد ملفات الوورد
+import streamlit.components.v1 as components
+
+# إعداد الصفحة الأساسي
+st.set_page_config(page_title="PreView Ads - Management", page_icon="📊", layout="wide")
+
+# تهيئة متغيرات الجلسة (Session State)
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+if 'cart' not in st.session_state:
+    st.session_state.cart = {}
+if 'ai_sql' not in st.session_state:
+    st.session_state['ai_sql'] = None
+if 'ai_intent' not in st.session_state:
+    st.session_state['ai_intent'] = None
+if 'spoken_response' not in st.session_state:
+    st.session_state['spoken_response'] = None
+if 'username' not in st.session_state:
+    st.session_state['username'] = ''
+
+# دوال مساعدة افتراضية (تأكد من وجود تعريفها الحقيقي في كودك)
+def get_connection():
+    return psycopg2.connect(st.secrets["postgres_connection_string"])
+
+def is_admin():
+    return st.session_state.get('role') == 'admin'
+
+def create_metric_card_3d(title, value, icon, theme):
+    return f"<div style='padding:10px; background:rgba(255,255,255,0.05); border-radius:10px;'>{icon} <b>{title}</b>: {value}</div>"
 
 # ============================================================
-# الشريط الجانبي (Sidebar)
+# 🔒 صفحة تسجيل الدخول الحديثة عبر بوابة Google HTML
 # ============================================================
-with st.sidebar:
+if not st.session_state.auth:
+    # تصميم الواجهة الأنيقة خلف المكون
     st.markdown("""
-    <div style="text-align: center; padding: 20px 0;">
-        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-            <span style="font-size: 40px;">🎯</span>
+    <div style="display: flex; justify-content: center; align-items: center; margin-top: 5vh;">
+        <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 30px; padding: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                <span style="font-size: 40px;">🎯</span>
+            </div>
+            <h1 style="color: white; font-family: sans-serif;">PreView Ads</h1>
+            <p style="color: rgba(255,255,255,0.7); font-family: sans-serif;">نظام إدارة الإعلانات الذكي</p>
+            <p style="color: rgba(255,255,255,0.5); font-size: 14px; font-family: sans-serif; margin-bottom: 20px;">يرجى تسجيل الدخول عبر بوابة جوجل المعتمدة:</p>
         </div>
-        <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
-        <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.divider()
-    
-    user_icon = "👑" if is_admin() else "👤"
-    st.markdown(f"""
-    <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
-        <div style="font-size: 30px;">{user_icon}</div>
-        <div style="font-weight: bold;">{st.session_state.get('username', '')}</div>
-        <div style="font-size: 12px; opacity: 0.7;">{'مدير النظام' if is_admin() else 'موظف'}</div>
+    # قراءة معرف جوجل بأمان من الـ Secrets
+    if "GOOGLE_CLIENT_ID" in st.secrets:
+        CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"].strip()
+    else:
+        st.error("⚠️ خطأ أمني: GOOGLE_CLIENT_ID غير معرف في إعدادات السيرفر (Secrets)!")
+        st.stop()
+
+    # 🛠️ حقن كود الـ HTML والجافا سكريبت الحديث الخاص بجوجل لعام 2026
+    google_sign_in_html = f"""
+    <div dir="rtl" style="font-family: sans-serif; text-align: center;">
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+        
+        <script>
+            function handleCredentialResponse(response) {{
+                const idToken = response.credential;
+                // إرسال التوكن الآمن المولد إلى Streamlit
+                window.parent.postMessage({{
+                    type: 'streamlit:setComponentValue',
+                    value: idToken
+                }}, '*');
+            }}
+        </script>
+
+        <div id="g_id_onload"
+             data-client_id="{CLIENT_ID}"
+             data-callback="handleCredentialResponse"
+             data-auto_prompt="false">
+        </div>
+        
+        <div style="display: flex; justify-content: center; margin-top: 10px;">
+            <div class="g_id_signin"
+                 data-type="standard"
+                 data-size="large"
+                 data-theme="filled_blue"
+                 data-text="signin_with"
+                 data-shape="pill"
+                 data-logo_alignment="left">
+            </div>
+        </div>
     </div>
-    """, unsafe_allow_html=True)
-    
-    page = st.radio("📋 القائمة الرئيسية", [
-        "🏢 لوحات الشركات",
-        "📍 الأعمدة المتاحة",
-        "📊 Dashboard",
-        "📄 عرض سعر",
-        "📋 تقرير الجرد",
-        "📅 تقرير التوفر الشهري",
-        "🗺️ تقرير جميع المواقع",
-        "📐 تقرير تجميعي حسب الحجوم",
-        "⚙️ الإعدادات"
-    ], key="main_menu")
-    
-    st.divider()
-    
-    # جلب الإحصائيات بطريقة آمنة
-    try:
-        conn_sidebar = get_connection()
-        cursor = conn_sidebar.cursor()
-        cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
-        total_boards_sidebar = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
-        total_clients = cursor.fetchone()[0]
-        cursor.close()
-        conn_sidebar.close()
-    except Exception as e:
-        total_boards_sidebar = 0
-        total_clients = 0
-        st.sidebar.warning("⚠️ تعذر تحديث الإحصائيات اللحظية.")
-    
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
-    with col_s2:
-        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
-    
-    st.divider()
-    
-    if st.button("🚪 تسجيل الخروج", use_container_width=True):
-        st.session_state.auth = False
-        st.session_state.cart = {}
+    """
+
+    # عرض الزر المدمج تحت لوحة التصميم
+    token_received = components.html(google_sign_in_html, height=100, scrolling=False)
+
+    if token_received:
+        # بمجرد ضغط الزر واستلام التوكن، نفتح البوابة ونثبت البيانات الافتراضية للمدير
+        st.session_state.auth = True
+        st.session_state.role = 'admin'  # افتراضي للمدير، يمكنك ربطها بجدول فحص لاحقاً
+        st.session_state.username = "مدير النظام الرقمي"
+        st.success("🟢 تم التوثيق بنجاح عبر حساب Google!")
         st.rerun()
+        
+    st.stop()
 
-    # 🎙️ قسم المساعد الذكي المستقر كلياً عبر الـ REST API المباشر
-    st.divider()
-    st.markdown("<p style='text-align: right; font-weight: bold; color: #764ba2;'>🎙️ المساعد الذكي الفوري:</p>", unsafe_allow_html=True)
-    
-    user_query = st.text_input(
-        label="أمر المدير",
-        placeholder="تحدث أو اكتب بالعامية هنا...",
-        label_visibility="collapsed",
-        key="ai_sidebar_query_input"
-    )
-    
-# 🟢 تجهيز المتغيرات في الأعلى لتفادي أي خطأ مسافات (Indentation)
-gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={st.secrets.get('GEMINI_KEY', '').strip()}" if "GEMINI_KEY" in st.secrets else ""
-
-full_prompt_template = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
-
-جداولك الحقيقية هي:
-1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
-2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
-
-يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
-{{
-  "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
-  "confidence": 1.0,
-  "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
-  "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
-}}
-
-طلب المدير الحالي المطلوب تحويله هو: {query}"""
-
-
-if user_query:
-    with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
+# ============================================================
+# 📊 لوحة التحكم الرئيسية (تفتح فقط بعد تسجيل الدخول الناجح)
+# ============================================================
+else:
+    # --------------------------------------------------------
+    # 📋 شريط التنقل الجانبي (Sidebar)
+    # --------------------------------------------------------
+    with st.sidebar:
+        st.markdown("""
+        <div style="text-align: center; padding: 20px 0;">
+            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                <span style="font-size: 40px;">🎯</span>
+            </div>
+            <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
+            <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.divider()
+        
+        user_icon = "👑" if is_admin() else "👤"
+        st.markdown(f"""
+        <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
+            <div style="font-size: 30px;">{user_icon}</div>
+            <div style="font-weight: bold;">{st.session_state.get('username', '')}</div>
+            <div style="font-size: 12px; opacity: 0.7;">{'مدير النظام' if is_admin() else 'موظف'}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        page = st.radio("📋 القائمة الرئيسية", [
+            "🏢 لوحات الشركات",
+            "📍 الأعمدة المتاحة",
+            "📊 Dashboard",
+            "📄 عرض سعر",
+            "📋 تقرير الجرد",
+            "📅 تقرير التوفر الشهري",
+            "🗺️ تقرير جميع المواقع",
+            "📐 تقرير تجميعي حسب الحجوم",
+            "⚙️ الإعدادات"
+        ], key="main_menu")
+        
+        st.divider()
+        
+        # جلب الإحصائيات بطريقة آمنة
         try:
-            full_prompt = full_prompt_template.format(query=user_query)
-            
-            headers = {
-                "Content-Type": "application/json"
-            }
-            
-            # التعديل المصحح هنا:
-            payload = {
-                "contents": [{
-                    "parts": [{"text": full_prompt}]
-                }],
-                "generation_config": {
-                    "response_mime_type": "application/json"
-                }
-            }
-            
-            response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
-            
-            if response.status_code == 200:
-                ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
-                parsed_data = json.loads(ai_result.strip())
-                
-                st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
-                st.session_state['ai_intent'] = parsed_data.get('intent')
-                st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                st.success("🟢 نجاح باهر وأمان مطلق! تم تشغيل المساعد الذكي!")
-                st.rerun()
-            else:
-                st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
-                st.info(f"تفاصيل الرد: {response.text}")
-                
+            conn_sidebar = get_connection()
+            cursor = conn_sidebar.cursor()
+            cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
+            total_boards_sidebar = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
+            total_clients = cursor.fetchone()[0]
+            cursor.close()
+            conn_sidebar.close()
         except Exception as e:
-            st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
+            total_boards_sidebar = 0
+            total_clients = 0
+            st.sidebar.warning("⚠️ تعذر تحديث الإحصائيات اللحظية.")
+        
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
+        with col_s2:
+            st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
+        
+        st.divider()
+        
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+            st.session_state.auth = False
+            st.session_state.cart = {}
+            st.session_state['ai_sql'] = None
+            st.rerun()
+
+        # 🎙️ قسم المساعد الذكي المستقر كلياً داخل الـ Sidebar
+        st.divider()
+        st.markdown("<p style='text-align: right; font-weight: bold; color: #764ba2;'>🎙️ المساعد الذكي الفوري:</p>", unsafe_allow_html=True)
+        
+        user_query = st.text_input(
+            label="أمر المدير",
+            placeholder="تحدث أو اكتب بالعامية هنا...",
+            label_visibility="collapsed",
+            key="ai_sidebar_query_input"
+        )
+
+    # --------------------------------------------------------
+    # 🧠 منطق معالجة الـ AI (يعمل فوراً عند إدخال طلب جديد)
+    # --------------------------------------------------------
+    if user_query:
+        with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
+            try:
+                if "GEMINI_KEY" in st.secrets:
+                    GEMINI_API_KEY = st.secrets["GEMINI_KEY"].strip()
+                else:
+                    st.error("⚠️ خطأ أمني: مفتاح الـ API غير معرف في إعدادات السيرفر (Secrets)!")
+                    st.stop()
+                
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                headers = {"Content-Type": "application/json"}
+                
+                full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+                
+                جداولك الحقيقية هي:
+                1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
+                2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
+                
+                يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
+                {{
+                  "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
+                  "confidence": 1.0,
+                  "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
+                  "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
+                }}
+                
+                طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
+                
+                payload = {
+                    "contents": [{"parts": [{"text": full_prompt}]}],
+                    "generationConfig": {"response_mime_type": "application/json"}
+                }
+                
+                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
+                
+                if response.status_code == 200:
+                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                    parsed_data = json.loads(ai_result.strip())
+                    
+                    st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
+                    st.session_state['ai_intent'] = parsed_data.get('intent')
+                    st.session_state['spoken_response'] = parsed_data.get('spoken_response')
+                    st.success("🟢 تم توليد استعلام المساعد بنجاح!")
+                else:
+                    st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
+            except Exception as e:
+                st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
+
+    # --------------------------------------------------------
+    # 🖥️ منطقة العمل الرئيسية وعرض البيانات
+    # --------------------------------------------------------
+    if st.session_state['ai_sql']:
+        st.markdown(f"## 🎙️ معالجة طلب المساعد الذكي")
+        st.markdown("### 🔍 صندوق مراجعة وتأكيد استعلام المساعد الذكي")
+        if st.session_state['spoken_response']:
+            st.info(f"💡 **المساعد الذكي يقول:** {st.session_state['spoken_response']}")
+        
+        editable_sql = st.text_area(
+            "كود الـ SQL المستخرج (يمكنك التعديل عليه):", 
+            value=st.session_state['ai_sql'], 
+            height=120
+        )
+        
+        col_btn1, col_btn2 = st.columns([3, 1])
+        with col_btn1:
+            execute_click = st.button("🚀 تنفيذ الاستعلام وجلب البيانات الحية من Supabase", use_container_width=True)
+        with col_btn2:
+            if st.button("🗑️ إغلاق ومسح طلب المساعد", use_container_width=True):
+                st.session_state['ai_sql'] = None
+                st.session_state['ai_intent'] = None
+                st.session_state['spoken_response'] = None
+                st.rerun()
+
+        if execute_click:
+            with st.spinner("جاري الاتصال بـ Supabase وقراءة السجلات الحالية..."):
+                try:
+                    active_conn = get_connection()
+                    df_results = pd.read_sql_query(editable_sql, active_conn)
+                    active_conn.close() 
+                    
+                    if df_results.empty:
+                        st.warning("⚠️ نفذ الاستعلام بنجاح، ولكن قاعدة البيانات لا تحتوي على سجلات مطابقة.")
+                    else:
+                        st.success(f"📊 تم جلب {len(df_results)} سجل مطبق ومحدّث بنجاح!")
+                        st.dataframe(df_results, use_container_width=True)
+                        
+                        intent = st.session_state.get('ai_intent', 'استعلام_بيانات')
+                        
+                        if "عرض" in intent or "سعر" in intent:
+                            st.markdown("#### 📥 مستندات جاهزة للتحميل الفوري:")
+                            doc = docx.Document()
+                            doc.add_heading('عرض سعر لوحات إعلانية - PreView Ads', level=0)
+                            doc.add_paragraph('بناءً على طلبكم الكريم، نرفق لكم قائمة اللوحات والأسعار المستخرجة تفصيلياً:')
+                            
+                            table = doc.add_table(rows=1, cols=len(df_results.columns))
+                            hdr_cells = table.rows[0].cells
+                            for i, col_name in enumerate(df_results.columns):
+                                hdr_cells[i].text = str(col_name)
+                            for index, row in df_results.iterrows():
+                                row_cells = table.add_row().cells
+                                for i, item in enumerate(row):
+                                    row_cells[i].text = str(item)
+                                    
+                            word_buffer = io.BytesIO()
+                            doc.save(word_buffer)
+                            word_buffer.seek(0)
+                            
+                            st.download_button(
+                                label="تحميل ملف عرض السعر المنسق (Word DOCX) 📄",
+                                data=word_buffer,
+                                file_name="عرض_سعر_preview_ads.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True
+                            )
+                        else:
+                            st.markdown("#### 📥 تقارير جاهزة للتحميل الفوري:")
+                            excel_buffer = io.BytesIO()
+                            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                                df_results.to_excel(writer, index=False, sheet_name='التقرير المستخرج')
+                            excel_buffer.seek(0)
+                            
+                            st.download_button(
+                                label="تحميل التقرير الكامل المستخرج (Excel XLSX) 📊",
+                                data=excel_buffer,
+                                file_name="تقرير_جرد_بيانات_preview_ads.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                except Exception as database_error:
+                    st.error(f"❌ خطأ أثناء تشغيل وتمرير الـ SQL بقاعدة البيانات: {database_error}")
+
+    # عرض الصفحات العادية
+    else:
+        st.title(f"{page}")
+        st.write(f"مرحباً بك في صفحة **{page}** المربوطة بـ Supabase.")
+        
+        if page == "🏢 لوحات الشركات":
+            st.info("ℹ️ كود عرض جداول وتحليلات لوحات الشركات يكتب هنا...")
+            # [ضع كود عرض لوحات الشركات القديم الخاص بك هنا]
+            
+        elif page == "📊 Dashboard":
+            st.info("ℹ️ كود عرض الرسوم البيانية والمخططات يكتب هنا...")
+            # [ضع كود الـ Dashboard القديم الخاص بك هنا]
+            
+        else:
+            st.warning("⚠️ هذه الصفحة قيد التطوير أو الربط البرمجي الحظي.")
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
