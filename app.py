@@ -328,55 +328,71 @@ with st.sidebar:
     st.divider()
 
     # 🎙️ إضافة المساعد الصوتي في مكان استراتيجي ثابت
-    st.markdown("<p style='text-align: center; font-weight: bold; color: #667eea;'>🎙️ المساعد الصوتي الذكي</p>", unsafe_allow_html=True)
-    
-    # مكون الميكروفون المجاني
-    audio = mic_recorder(
-        start_prompt="تحدث الآن 🎤",
-        stop_prompt="إيقاف ومعالجة ⏹️",
-        key='sidebar_recorder'
-    )
+# 🎙️ المساعد الصوتي الذكي في الشريط الجانبي
+st.markdown("<p style='text-align: center; font-weight: bold; color: #667eea;'>🎙️ المساعد الصوتي الذكي</p>", unsafe_allow_html=True)
 
-    if audio:
-        audio_file = io.BytesIO(audio['bytes'])
-        r = sr.Recognizer()
+# عرض زر المايك
+audio = mic_recorder(
+    start_prompt="إصدار أمر صوتي 🎤",
+    stop_prompt="إيقاف ومعالجة ⏹️",
+    key='sidebar_recorder'
+)
+
+# هنا نضمن الرد في كل الأحوال
+if audio:
+    audio_file = io.BytesIO(audio['bytes'])
+    r = sr.Recognizer()
+    
+    # رسالة فورية للمستخدم تشير إلى أن النظام استلم الملف ويقوم بمعالجته الآن
+    with st.status("⏳ جاري تحويل صوتك إلى نص...", expanded=True) as status:
         with sr.AudioFile(audio_file) as source:
+            # تقليل الضوضاء لرفع دقة العامية
+            r.adjust_for_ambient_noise(source, duration=0.5)
             audio_data = r.record(source)
+            
             try:
-                # تحويل الصوت لنص عربي
+                # محاولة تحويل الصوت
                 user_text = r.recognize_google(audio_data, language='ar-SA')
-                st.info(f"🗣️ سمعت: {user_text}")
+                status.update(label=f"🟢 تم التقاط النص بنجاح!", state="complete", expanded=False)
                 
-                # إرسال النص لـ Gemini API عبر مشروعك في Google AI Studio
-                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_هنا"
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                # طباعة الكلام المفهوم فوراً ليرى المدير أن كلامه وُجد
+                st.chat_message("user").write(user_text)
                 
-                payload = {
-                    "contents": [{"parts": [{"text": user_text}]}]
-                }
-                
-                with st.spinner("جاري التحليل والمفاضلة..."):
-                    response = requests.post(gemini_url, json=payload)
+                # --- إرسال النص إلى Gemini API ---
+                with st.spinner("🧠 جاري تفكيك النية وتوليد الـ SQL..."):
+                    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_هنا"
+                    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    
+                    payload = {"contents": [{"parts": [{"text": user_text}]}]}
+                    response = requests.post(gemini_url, json=payload, timeout=10)
+                    
                     if response.status_code == 200:
                         ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
-                        
-                        # تنظيف وتحميل مخرجات الـ JSON القادمة من الـ AI
-                        # أحياناً يضيف الذكاء الاصطناعي علامات ```json نقوم بتنظيفها
                         clean_json = ai_result.replace("```json", "").replace("```", "").strip()
                         parsed_data = json.loads(clean_json)
                         
-                        # حفظ النتائج في الـ session_state لتمريرها لباقي الصفحات أو لتنفيذ الـ SQL
+                        # تخزين البيانات في الـ session
                         st.session_state['ai_intent'] = parsed_data.get('intent')
                         st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                         st.session_state['ai_package_details'] = parsed_data.get('package_details')
                         
-                        # إظهار رد النظام للمدير
-                        st.success(parsed_data.get('spoken_response', 'تمت المعالجة'))
+                        # رد الذكاء الاصطناعي التفاعلي المكتوب
+                        st.chat_message("assistant").write(parsed_data.get('spoken_response', 'تمت العملية بنجاح.'))
+                    else:
+                        st.error("❌ استجاب سيرفر الذكاء الاصطناعي بخطأ، يرجى التحقق من المفتاح.")
                         
             except sr.UnknownValueError:
-                st.error("لم أفهم الصوت بوضوح.")
+                # الرد الإجباري في حال عدم فهم الصوت
+                status.update(label="❌ لم أستطع سماع أي كلام!", state="error", expanded=True)
+                st.warning("⚠️ يبدو أن الصوت لم يكن واضحاً أو المايك بعيد. يرجى الضغط مجدداً والتحدث عن قرب.")
+                
+            except sr.RequestError:
+                status.update(label="❌ خطأ في الاتصال بالشبكة!", state="error", expanded=True)
+                st.error("🌐 تعذر الوصول إلى محرك تحويل الصوت. تحقق من اتصال الإنترنت الخاص بك.")
+                
             except Exception as e:
-                st.error(f"خطأ في المعالجة: {e}")
+                status.update(label="❌ حدث خطأ غير متوقع!", state="error", expanded=True)
+                st.error(f"تفاصيل الخطأ: {e}")
 
     st.divider()
     
