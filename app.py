@@ -360,351 +360,27 @@ with st.sidebar:
         st.session_state.cart = {}
         st.rerun()
 
-
-# ============================================================
-# 📊 لوحة التحكم الرئيسية (تفتح فقط بعد تسجيل الدخول الناجح)
-# ============================================================
-else:
-    # --------------------------------------------------------
-    # 📋 شريط التنقل الجانبي (Sidebar)
-    # --------------------------------------------------------
-    with st.sidebar:
-        st.markdown("""
-        <div style="text-align: center; padding: 20px 0;">
-            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-                <span style="font-size: 40px;">🎯</span>
-            </div>
-            <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
-            <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.divider()
-        
-        user_icon = "👑" if is_admin() else "👤"
-        st.markdown(f"""
-        <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
-            <div style="font-size: 30px;">{user_icon}</div>
-            <div style="font-weight: bold;">{st.session_state.get('username', '')}</div>
-            <div style="font-size: 12px; opacity: 0.7;">{'مدير النظام' if is_admin() else 'موظف'}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        page = st.radio("📋 القائمة الرئيسية", [
-            "🏢 لوحات الشركات",
-            "📍 الأعمدة المتاحة",
-            "📊 Dashboard",
-            "📄 عرض سعر",
-            "📋 تقرير الجرد",
-            "📅 تقرير التوفر الشهري",
-            "🗺️ تقرير جميع المواقع",
-            "📐 تقرير تجميعي حسب الحجوم",
-            "⚙️ الإعدادات"
-        ], key="main_menu")
-        
-        st.divider()
-        
-        # جلب الإحصائيات بطريقة آمنة
-        try:
-            conn_sidebar = get_connection()
-            cursor = conn_sidebar.cursor()
-            cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
-            total_boards_sidebar = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
-            total_clients = cursor.fetchone()[0]
-            cursor.close()
-            conn_sidebar.close()
-        except Exception as e:
-            total_boards_sidebar = 0
-            total_clients = 0
-            st.sidebar.warning("⚠️ تعذر تحديث الإحصائيات اللحظية.")
-        
-        col_s1, col_s2 = st.columns(2)
-        with col_s1:
-            st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
-        with col_s2:
-            st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
-        
-        st.divider()
-        
-        if st.button("🚪 تسجيل الخروج", use_container_width=True):
-            st.session_state.auth = False
-            st.session_state.cart = {}
-            st.session_state['ai_sql'] = None
-            st.rerun()
-
-        # 🎙️ قسم المساعد الذكي المستقر كلياً داخل الـ Sidebar
-        st.divider()
-        st.markdown("<p style='text-align: right; font-weight: bold; color: #764ba2;'>🎙️ المساعد الذكي الفوري:</p>", unsafe_allow_html=True)
-        
-        user_query = st.text_input(
-            label="أمر المدير",
-            placeholder="تحدث أو اكتب بالعامية هنا...",
-            label_visibility="collapsed",
-            key="ai_sidebar_query_input"
-        )
-
-    # --------------------------------------------------------
-    # 🧠 منطق معالجة الـ AI (يعمل فوراً عند إدخال طلب جديد)
-    # --------------------------------------------------------
-    if user_query:
-        with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
-            try:
-                if "GEMINI_KEY" in st.secrets:
-                    GEMINI_API_KEY = st.secrets["GEMINI_KEY"].strip()
-                else:
-                    st.error("⚠️ خطأ أمني: مفتاح الـ API غير معرف في إعدادات السيرفر (Secrets)!")
-                    st.stop()
-                
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-                headers = {"Content-Type": "application/json"}
-                
-                full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
-                
-                جداولك الحقيقية هي:
-                1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
-                2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
-                
-                يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
-                {{
-                  "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
-                  "confidence": 1.0,
-                  "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
-                  "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
-                }}
-                
-                طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
-                
-                payload = {
-                    "contents": [{"parts": [{"text": full_prompt}]}],
-                    "generationConfig": {"response_mime_type": "application/json"}
-                }
-                
-                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
-                
-                if response.status_code == 200:
-                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
-                    parsed_data = json.loads(ai_result.strip())
-                    
-                    st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
-                    st.session_state['ai_intent'] = parsed_data.get('intent')
-                    st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم توليد استعلام المساعد بنجاح!")
-                else:
-                    st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
-            except Exception as e:
-                st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
-
-    # --------------------------------------------------------
-    # 🖥️ منطقة العمل الرئيسية وعرض البيانات
-    # --------------------------------------------------------
-    if st.session_state['ai_sql']:
-        st.markdown(f"## 🎙️ معالجة طلب المساعد الذكي")
-        st.markdown("### 🔍 صندوق مراجعة وتأكيد استعلام المساعد الذكي")
-        if st.session_state['spoken_response']:
-            st.info(f"💡 **المساعد الذكي يقول:** {st.session_state['spoken_response']}")
-        
-        editable_sql = st.text_area(
-            "كود الـ SQL المستخرج (يمكنك التعديل عليه):", 
-            value=st.session_state['ai_sql'], 
-            height=120
-        )
-        
-        col_btn1, col_btn2 = st.columns([3, 1])
-        with col_btn1:
-            execute_click = st.button("🚀 تنفيذ الاستعلام وجلب البيانات الحية من Supabase", use_container_width=True)
-        with col_btn2:
-            if st.button("🗑️ إغلاق ومسح طلب المساعد", use_container_width=True):
-                st.session_state['ai_sql'] = None
-                st.session_state['ai_intent'] = None
-                st.session_state['spoken_response'] = None
-                st.rerun()
-
-        if execute_click:
-            with st.spinner("جاري الاتصال بـ Supabase وقراءة السجلات الحالية..."):
-                try:
-                    active_conn = get_connection()
-                    df_results = pd.read_sql_query(editable_sql, active_conn)
-                    active_conn.close() 
-                    
-                    if df_results.empty:
-                        st.warning("⚠️ نفذ الاستعلام بنجاح، ولكن قاعدة البيانات لا تحتوي على سجلات مطابقة.")
-                    else:
-                        st.success(f"📊 تم جلب {len(df_results)} سجل مطبق ومحدّث بنجاح!")
-                        st.dataframe(df_results, use_container_width=True)
-                        
-                        intent = st.session_state.get('ai_intent', 'استعلام_بيانات')
-                        
-                        if "عرض" in intent or "سعر" in intent:
-                            st.markdown("#### 📥 مستندات جاهزة للتحميل الفوري:")
-                            doc = docx.Document()
-                            doc.add_heading('عرض سعر لوحات إعلانية - PreView Ads', level=0)
-                            doc.add_paragraph('بناءً على طلبكم الكريم، نرفق لكم قائمة اللوحات والأسعار المستخرجة تفصيلياً:')
-                            
-                            table = doc.add_table(rows=1, cols=len(df_results.columns))
-                            hdr_cells = table.rows[0].cells
-                            for i, col_name in enumerate(df_results.columns):
-                                hdr_cells[i].text = str(col_name)
-                            for index, row in df_results.iterrows():
-                                row_cells = table.add_row().cells
-                                for i, item in enumerate(row):
-                                    row_cells[i].text = str(item)
-                                    
-                            word_buffer = io.BytesIO()
-                            doc.save(word_buffer)
-                            word_buffer.seek(0)
-                            
-                            st.download_button(
-                                label="تحميل ملف عرض السعر المنسق (Word DOCX) 📄",
-                                data=word_buffer,
-                                file_name="عرض_سعر_preview_ads.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True
-                            )
-                        else:
-                            st.markdown("#### 📥 تقارير جاهزة للتحميل الفوري:")
-                            excel_buffer = io.BytesIO()
-                            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                                df_results.to_excel(writer, index=False, sheet_name='التقرير المستخرج')
-                            excel_buffer.seek(0)
-                            
-                            st.download_button(
-                                label="تحميل التقرير الكامل المستخرج (Excel XLSX) 📊",
-                                data=excel_buffer,
-                                file_name="تقرير_جرد_بيانات_preview_ads.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                except Exception as database_error:
-                    st.error(f"❌ خطأ أثناء تشغيل وتمرير الـ SQL بقاعدة البيانات: {database_error}")
-
-    # عرض الصفحات العادية
-    else:
-        st.title(f"{page}")
-        st.write(f"مرحباً بك في صفحة **{page}** المربوطة بـ Supabase.")
-        
-        if page == "🏢 لوحات الشركات":
-            st.info("ℹ️ كود عرض جداول وتحليلات لوحات الشركات يكتب هنا...")
-            # [ضع كود عرض لوحات الشركات القديم الخاص بك هنا]
-            
-        elif page == "📊 Dashboard":
-            st.info("ℹ️ كود عرض الرسوم البيانية والمخططات يكتب هنا...")
-            # [ضع كود الـ Dashboard القديم الخاص بك هنا]
-            
-        else:
-            st.warning("⚠️ هذه الصفحة قيد التطوير أو الربط البرمجي الحظي.")
-# ============================================================
-# منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
-# ============================================================
-if 'ai_sql' in st.session_state and st.session_state['ai_sql']:
-    st.markdown("### 🔍 صندوق مراجعة وتأكيد استعلام المساعد الذكي")
-    if 'spoken_response' in st.session_state:
-        st.info(f"💡 **المساعد الذكي يقول:** {st.session_state['spoken_response']}")
-    
-    editable_sql = st.text_area(
-        "كود الـ SQL المستخرج (يمكنك التعديل عليه):", 
-        value=st.session_state['ai_sql'], 
-        height=120
-    )
-    
-    col_btn1, col_btn2 = st.columns([3, 1])
-    with col_btn1:
-        execute_click = st.button("🚀 تنفيذ الاستعلام وجلب البيانات الحية من Supabase", use_container_width=True)
-    with col_btn2:
-        if st.button("🗑️ مسح الطلب", use_container_width=True):
-            st.session_state['ai_sql'] = None
-            st.session_state['ai_intent'] = None
-            st.session_state['spoken_response'] = None
-            st.rerun()
-
-    if execute_click:
-        with st.spinner("جاري الاتصال بـ Supabase وقراءة السجلات الحالية..."):
-            try:
-                active_conn = get_connection()
-                df_results = pd.read_sql_query(editable_sql, active_conn)
-                active_conn.close() 
-                
-                if df_results.empty:
-                    st.warning("⚠️ نفذ الاستعلام بنجاح، ولكن قاعدة البيانات لا تحتوي على سجلات مطابقة.")
-                else:
-                    st.success(f"📊 تم جلب {len(df_results)} سجل مطبق ومحدّث بنجاح!")
-                    st.dataframe(df_results, use_container_width=True)
-                    
-                    intent = st.session_state.get('ai_intent', 'استعلام_بيانات')
-                    
-                    if "عرض" in intent or "سعر" in intent:
-                        st.markdown("#### 📥 مستندات جاهزة للتحميل الفوري:")
-                        doc = docx.Document()
-                        doc.add_heading('عرض سعر لوحات إعلانية - PreView Ads', level=0)
-                        doc.add_paragraph('بناءً على طلبكم الكريم، نرفق لكم قائمة اللوحات والأسعار المستخرجة تفصيلياً:')
-                        
-                        table = doc.add_table(rows=1, cols=len(df_results.columns))
-                        hdr_cells = table.rows[0].cells
-                        for i, col_name in enumerate(df_results.columns):
-                            hdr_cells[i].text = str(col_name)
-                        for index, row in df_results.iterrows():
-                            row_cells = table.add_row().cells
-                            for i, item in enumerate(row):
-                                row_cells[i].text = str(item)
-                                
-                        word_buffer = io.BytesIO()
-                        doc.save(word_buffer)
-                        word_buffer.seek(0)
-                        
-                        st.download_button(
-                            label="تحميل ملف عرض السعر المنسق (Word DOCX) 📄",
-                            data=word_buffer,
-                            file_name="عرض_سعر_preview_ads.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True
-                        )
-                    else:
-                        st.markdown("#### 📥 تقارير جاهزة للتحميل الفوري:")
-                        excel_buffer = io.BytesIO()
-                        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                            df_results.to_excel(writer, index=False, sheet_name='التقرير المستخرج')
-                        excel_buffer.seek(0)
-                        
-                        st.download_button(
-                            label="تحميل التقرير الكامل المستخرج (Excel XLSX) 📊",
-                            data=excel_buffer,
-                            file_name="تقرير_جرد_بيانات_preview_ads.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-            except Exception as database_error:
-                st.error(f"❌ خطأ أثناء تشغيل وتمرير الـ SQL بقاعدة البيانات: {database_error}")
-
-
 # ============================================================
 # دوال استعلامات Supabase (بصيغة PostgreSQL)
 # ============================================================
 
 def run_query(query, params=None, fetch=True):
-    """تنفيذ استعلام آمن ومستقل على Supabase مع إغلاق الاتصال تلقائياً"""
-    # 🟢 فتح اتصال محلي وخاص بهذا الاستعلام فقط لضمان الاستقرار
-    local_conn = get_connection()
-    cursor = local_conn.cursor()
+    """تنفيذ استعلام على Supabase"""
+    cursor = conn.cursor()
     try:
         cursor.execute(query, params or ())
         if fetch and query.strip().upper().startswith('SELECT'):
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
-            # إغلاق الموارد قبل إرجاع النتيجة
-            cursor.close()
-            local_conn.close()
             return pd.DataFrame(rows, columns=columns)
         else:
-            local_conn.commit()
-            row_count = cursor.rowcount
-            cursor.close()
-            local_conn.close()
-            return row_count
+            conn.commit()
+            return cursor.rowcount
     except Exception as e:
-        local_conn.rollback()  # تراجع آمن في حال حدوث خطأ في البيانات
-        cursor.close()
-        local_conn.close()
+        conn.rollback()
         raise e
+    finally:
+        cursor.close()
 
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
@@ -931,147 +607,76 @@ if page == "🏢 لوحات الشركات":
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض جميع الأعمدة المتاحة في كل المحافظات مع خيار التصفية")
+    st.info("📌 اختر محافظة لعرض الأعمدة المتاحة فيها مع خريطة تفاعلية")
     
-    # جلب جميع الأعمدة المتاحة
     available_data = get_available_by_city()
     
     if available_data is None or available_data.empty:
         st.warning("⚠️ لا توجد أعمدة متاحة حالياً")
         st.stop()
     
-    # ============================================================
-    # خيارات التصفية
-    # ============================================================
-    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    cities = available_data['المحافظة'].unique()
     
-    with col_filter1:
-        # خيار عرض الكل أو محافظة محددة
-        cities_list = ["🌍 جميع المحافظات"] + sorted(available_data['المحافظة'].unique().tolist())
-        selected_filter = st.selectbox("🔍 تصفية حسب المحافظة:", cities_list)
+    cols_per_row = 3
+    for i in range(0, len(cities), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, col in enumerate(cols):
+            if i + j < len(cities):
+                city = cities[i + j]
+                city_data = available_data[available_data['المحافظة'] == city]
+                total_boards = city_data['العدد'].sum()
+                total_sites = len(city_data)
+                unique_sizes = city_data['الحجم'].nunique()
+                
+                with col:
+                    st.markdown(f"""
+                    <div class="neumorphic-card" style="text-align: center; cursor: pointer;">
+                        <div style="font-size: 48px;">🏙️</div>
+                        <h3>{city}</h3>
+                        <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
+                            {badge_animated(f"{int(total_boards)} عمود", "info")}
+                            {badge_animated(f"{total_sites} موقع", "success")}
+                            {badge_animated(f"{unique_sizes} حجم", "warning")}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
+                        st.session_state['selected_city'] = city
+                        st.session_state['show_city_details'] = True
+                        st.rerun()
     
-    with col_filter2:
-        # تصفية حسب نوع الحجم
-        size_types = ["📏 جميع الأحجام", "📏 أعمدة إنارة (2×1)", "📏 منصفات (125×185)", "📏 أحجام أخرى"]
-        selected_size_filter = st.selectbox("🔍 تصفية حسب الحجم:", size_types)
-    
-    with col_filter3:
-        # عرض إحصائيات سريعة
-        total_available = len(available_data)
-        total_boards = available_data['العدد'].sum()
-        st.metric("📊 إجمالي الأعمدة المتاحة", f"{total_available:,} موقع")
-        st.caption(f"🔢 إجمالي عدد اللوحات: {int(total_boards):,}")
-    
-    st.divider()
-    
-    # ============================================================
-    # تطبيق التصفية
-    # ============================================================
-    filtered_data = available_data.copy()
-    
-    # تصفية حسب المحافظة
-    if selected_filter != "🌍 جميع المحافظات":
-        filtered_data = filtered_data[filtered_data['المحافظة'] == selected_filter]
-    
-    # تصفية حسب الحجم
-    if selected_size_filter == "📏 أعمدة إنارة (2×1)":
-        filtered_data = filtered_data[filtered_data['size_group'] == 'أعمدة إنارة (2×1)']
-    elif selected_size_filter == "📏 منصفات (125×185)":
-        filtered_data = filtered_data[filtered_data['size_group'] == 'منصفات (125×185)']
-    elif selected_size_filter == "📏 أحجام أخرى":
-        filtered_data = filtered_data[filtered_data['size_group'] == 'أحجام أخرى']
-    
-    # ============================================================
-    # عرض النتائج
-    # ============================================================
-    if filtered_data.empty:
-        st.warning("⚠️ لا توجد نتائج تطابق معايير التصفية")
-    else:
-        # إحصائيات النتائج
-        st.subheader(f"📊 النتائج ({len(filtered_data)} موقع - {filtered_data['العدد'].sum()} لوحة)")
-        
-        # عرض الجدول الكامل للنتائج
-        st.dataframe(
-            filtered_data[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
-            use_container_width=True,
-            height=400
-        )
+    if st.session_state.get('show_city_details', False):
+        city = st.session_state['selected_city']
+        city_data = available_data[available_data['المحافظة'] == city]
         
         st.divider()
+        st.subheader(f"📍 محافظة {city}")
         
-        # ============================================================
-        # عرض ملخص حسب المحافظة (للنتائج)
-        # ============================================================
-        st.subheader("📋 ملخص حسب المحافظة")
-        summary = filtered_data.groupby('المحافظة').agg({
-            'رقم اللوحة': 'count',
-            'العدد': 'sum'
-        }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
-        st.dataframe(summary, use_container_width=True)
-        
-        st.divider()
-        
-        # ============================================================
-        # عرض ملخص حسب نوع الحجم (للنتائج)
-        # ============================================================
-        st.subheader("📋 ملخص حسب نوع الحجم")
-        size_summary = filtered_data.groupby('size_group').agg({
-            'رقم اللوحة': 'count',
-            'العدد': 'sum'
-        }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
-        st.dataframe(size_summary, use_container_width=True)
-        
-        # ============================================================
-        # خريطة تفاعلية (عند اختيار محافظة محددة)
-        # ============================================================
-        if selected_filter != "🌍 جميع المحافظات":
-            st.divider()
-            st.subheader(f"🗺️ خريطة الأعمدة المتاحة في {selected_filter}")
-            
-            # تصفية الإحداثيات الصالحة
-            valid_coords = filtered_data[
-                filtered_data['Latitude'].notna() & 
-                (filtered_data['Latitude'] != 0) &
-                filtered_data['Longitude'].notna() & 
-                (filtered_data['Longitude'] != 0)
-            ].copy()
-            
-            if not valid_coords.empty:
-                import folium
-                from streamlit_folium import st_folium
-                
-                # تحديد مركز الخريطة حسب المحافظة المختارة
-                city_coords = SYRIA_COORDS.get(selected_filter, SYRIA_COORDS["سوريا"])
-                m = folium.Map(location=city_coords, zoom_start=10)
-                
-                for _, row in valid_coords.iterrows():
-                    folium.Marker(
-                        [row['Latitude'], row['Longitude']],
-                        popup=f"""
-                        <b>{row['اسم العمود']}</b><br>
-                        📍 {row['المحافظة']}<br>
-                        📡 {row['الشبكة']}<br>
-                        📏 {row['الحجم']}
-                        """,
-                        icon=folium.Icon(color='green', icon='info-sign')
-                    ).add_to(m)
-                
-                st_folium(m, width="100%", height=500)
+        for size_name in ['أعمدة إنارة (2×1)', 'منصفات (125×185)', 'أحجام أخرى']:
+            group_data = city_data[city_data['size_group'] == size_name]
+            if not group_data.empty:
+                total = group_data['العدد'].sum()
+                with st.expander(f"📏 {size_name} - {int(total)} عمود", expanded=True):
+                    valid_coords = filter_valid_coordinates(group_data)
+                    if not valid_coords.empty:
+                        m = folium.Map(location=[34.8, 38.9], zoom_start=8)
+                        for _, row in valid_coords.iterrows():
+                            folium.Marker(
+                                [row['Latitude'], row['Longitude']],
+                                popup=f"<b>{row['اسم العمود']}</b><br>{row['الشبكة']}<br>{row['الحجم']}",
+                                icon=folium.Icon(color='green', icon='info-sign')
+                            ).add_to(m)
+                        st_folium(m, width="100%", height=400)
+                    
+                    st.dataframe(group_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
             else:
-                st.info("📍 لا توجد إحداثيات لعرضها على الخريطة للمحافظة المختارة")
+                with st.expander(f"📏 {size_name}"):
+                    st.info("لا توجد أعمدة في هذه الفئة")
         
-        # ============================================================
-        # تصدير التقرير
-        # ============================================================
-        st.divider()
-        csv_data = filtered_data.to_csv(index=False, encoding='utf-8-sig')
-        st.download_button(
-            "📥 تحميل التقرير (CSV)", 
-            csv_data, 
-            f"available_columns_{selected_filter.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.csv", 
-            "text/csv", 
-            use_container_width=True
-        )
+        if st.button("🔙 العودة إلى قائمة المحافظات", key="back_to_cities"):
+            st.session_state['show_city_details'] = False
+            st.rerun()
 
 elif page == "📊 Dashboard":
     st.markdown("""
@@ -1964,3 +1569,4 @@ elif page == "⚙️ الإعدادات":
 # إغلاق الاتصال
 # ============================================================
 
+conn.close()
