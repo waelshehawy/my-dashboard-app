@@ -384,22 +384,22 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري معالجة طلب المدير عبر المسار السحابي المباشر والمستقر..."):
+        with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
             try:
-                # تأكد من استيراد المكتبات القياسية في أعلى الملف أو هنا
                 import requests
                 import json
                 
-                # 1. المفتاح الصافي الخاص بك (تأكد من كتابته بدقة وبدون مسافات)
-                RAW_KEY = "AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"  
-                GEMINI_API_KEY = RAW_KEY.strip()
+                # 1. استدعاء المفتاح بأمان من ملف السيرفر المخفي (Secrets) دون أن يظهر في الكود
+                if "GEMINI_KEY" in st.secrets:
+                    GEMINI_API_KEY = st.secrets["GEMINI_KEY"].strip()
+                else:
+                    st.error("⚠️ خطأ أمني: مفتاح الـ API غير معرف في إعدادات السيرفر (Secrets)!")
+                    st.stop()
                 
-                # 2. الرابط المباشر لنموذج Gemini 1.5 Pro الأكثر مرونة مع المفاتيح السحابية
-                gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
+                # 2. الرابط المباشر لنموذج Gemini 1.5 Flash السريع والآمن
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                 
-                # 3. الحيلة الأمنية الحاسمة: تمرير المفتاح في الـ Headers لتفادي الخطأ 401
                 headers = {
-                    "x-goog-api-key": GEMINI_API_KEY,
                     "Content-Type": "application/json"
                 }
                 
@@ -428,7 +428,6 @@ if user_query:
                     }
                 }
                 
-                # إرسال الطلب عبر requests الصافية لتفادي صراع الحزم تماماً
                 response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
                 
                 if response.status_code == 200:
@@ -438,14 +437,14 @@ if user_query:
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 نجاح باهر! تم الاتصال المباشر بنجاح وانطلق المساعد الذكي بكفاءة مطلقة!")
+                    st.success("🟢 نجاح باهر وأمان مطلق! تم التوثيق وتشغيل المساعد الذكي!")
                     st.rerun()
                 else:
-                    st.error(f"❌ خطأ في السيرفر السحابي. كود الاستجابة: {response.status_code}")
+                    st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
                     st.info(f"تفاصيل الرد: {response.text}")
                     
             except Exception as e:
-                st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
+                st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
