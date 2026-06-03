@@ -384,13 +384,19 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر المستند المستقر..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام..."):
             try:
-                # تأكد أن مفتاحك الحقيقي مكتوب هنا تماماً
-                GEMINI_API_KEY = "AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q".strip() 
+                # 1. تنظيف المفتاح تماماً من أي فراغات
+                RAW_KEY = "AIzaSy..."  # ضع مفتاحك الحقيقي هنا
+                GEMINI_API_KEY = RAW_KEY.strip()
                 
-                # 🟢 العودة للرابط المستقر الذي يقبل الـ API Key مباشرة وبدون خطأ 401
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                # 2. تمرير المفتاح في الرابط (وهي الطريقة الرسمية المضمونة لـ API Key)
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key= AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q "
+                
+                # 3. الـ Headers النظيفة تماماً بدون سطر Bearer المسبب للـ 401
+                headers = {
+                    "Content-Type": "application/json"
+                }
                 
                 full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 
@@ -417,7 +423,8 @@ if user_query:
                     }
                 }
                 
-                response = requests.post(gemini_url, json=payload, timeout=15)
+                # إرسال الطلب بالصيغة الصافية
+                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
                 
                 if response.status_code == 200:
                     ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
@@ -426,7 +433,7 @@ if user_query:
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم فهم الطلب وصياغة الاستعلام بنجاح!")
+                    st.success("🟢 تم الاتصال بنجاح وعاد المساعد الذكي للعمل!")
                     st.rerun()
                 else:
                     st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
