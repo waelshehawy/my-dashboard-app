@@ -397,7 +397,7 @@ if user_query:
                     st.stop()
                 
                 # 2. الرابط المباشر لنموذج Gemini 1.5 Flash السريع والآمن
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                 
                 headers = {
                     "Content-Type": "application/json"
