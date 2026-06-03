@@ -303,6 +303,17 @@ conn = get_connection()
 # الشريط الجانبي
 # ============================================================
 
+import streamlit as st
+import io
+import json
+import requests
+import speech_recognition as sr
+from streamlit_mic_recorder import mic_recorder
+
+# ============================================================
+# الشريط الجانبي المطور مع المساعد الذكي
+# ============================================================
+
 with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
@@ -314,6 +325,59 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
+    st.divider()
+
+    # 🎙️ إضافة المساعد الصوتي في مكان استراتيجي ثابت
+    st.markdown("<p style='text-align: center; font-weight: bold; color: #667eea;'>🎙️ المساعد الصوتي الذكي</p>", unsafe_allow_html=True)
+    
+    # مكون الميكروفون المجاني
+    audio = mic_recorder(
+        start_prompt="تحدث الآن 🎤",
+        stop_prompt="إيقاف ومعالجة ⏹️",
+        key='sidebar_recorder'
+    )
+
+    if audio:
+        audio_file = io.BytesIO(audio['bytes'])
+        r = sr.Recognizer()
+        with sr.AudioFile(audio_file) as source:
+            audio_data = r.record(source)
+            try:
+                # تحويل الصوت لنص عربي
+                user_text = r.recognize_google(audio_data, language='ar-SA')
+                st.info(f"🗣️ سمعت: {user_text}")
+                
+                # إرسال النص لـ Gemini API عبر مشروعك في Google AI Studio
+                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_هنا"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                
+                payload = {
+                    "contents": [{"parts": [{"text": user_text}]}]
+                }
+                
+                with st.spinner("جاري التحليل والمفاضلة..."):
+                    response = requests.post(gemini_url, json=payload)
+                    if response.status_code == 200:
+                        ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                        
+                        # تنظيف وتحميل مخرجات الـ JSON القادمة من الـ AI
+                        # أحياناً يضيف الذكاء الاصطناعي علامات ```json نقوم بتنظيفها
+                        clean_json = ai_result.replace("```json", "").replace("```", "").strip()
+                        parsed_data = json.loads(clean_json)
+                        
+                        # حفظ النتائج في الـ session_state لتمريرها لباقي الصفحات أو لتنفيذ الـ SQL
+                        st.session_state['ai_intent'] = parsed_data.get('intent')
+                        st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
+                        st.session_state['ai_package_details'] = parsed_data.get('package_details')
+                        
+                        # إظهار رد النظام للمدير
+                        st.success(parsed_data.get('spoken_response', 'تمت المعالجة'))
+                        
+            except sr.UnknownValueError:
+                st.error("لم أفهم الصوت بوضوح.")
+            except Exception as e:
+                st.error(f"خطأ في المعالجة: {e}")
+
     st.divider()
     
     user_icon = "👑" if is_admin() else "👤"
@@ -351,7 +415,7 @@ with st.sidebar:
     with col_s1:
         st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
     with col_s2:
-        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
+        st.markdown(create_metric_card_3d("العملاء", total_clients, "success"), unsafe_allow_html=True)
     
     st.divider()
     
