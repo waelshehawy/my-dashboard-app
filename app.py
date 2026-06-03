@@ -387,7 +387,7 @@ if user_query:
         with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر المستند المستقر..."):
             try:
                 # تأكد أن مفتاحك الحقيقي مكتوب هنا تماماً
-                GEMINI_API_KEY = AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q".strip() 
+                GEMINI_API_KEY = "AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q".strip() 
                 
                 # 🟢 العودة للرابط المستقر الذي يقبل الـ API Key مباشرة وبدون خطأ 401
                 gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
