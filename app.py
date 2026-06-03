@@ -386,8 +386,7 @@ with st.sidebar:
         with st.spinner("🧠 جاري ترجمة وتحليل الطلب ومفاضلة العروض..."):
             try:
                 # يفضل تخزين المفتاح في st.secrets بأمان، وإذا لم يوجد نضعه يدوياً هنا
-                GEMINI_API_KEY = st.secrets.get("AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q
-") or "ضع_مفتاح_جوجل_الجديد_هنا"
+                GEMINI_API_KEY = st.secrets.get(" AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q ") or "ضع_مفتاح_جوجل_الجديد_هنا"
                 gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key= AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
                 
                 payload = {
