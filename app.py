@@ -302,158 +302,135 @@ conn = get_connection()
 # ============================================================
 # الشريط الجانبي
 # ============================================================
-import google.generativeai as genai
-import json
+import pandas as pd
+import io
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ============================================================
-# الشريط الجانبي المطور والمضمون 100%
+# منطقة التحكم والتنفيذ للمساعد الذكي (الصفحة الرئيسية)
 # ============================================================
 
-with st.sidebar:
-    st.markdown("""
-    <div style="text-align: center; padding: 20px 0;">
-        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-            <span style="font-size: 40px;">🎯</span>
-        </div>
-        <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
-        <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
-    </div>
-    """, unsafe_allow_html=True)
+# التحقق من وجود استعلام SQL بانتظار موافقة المدير
+if st.session_state.get('ai_sql'):
+    st.markdown("### 🧠 وحدة تحكم المساعد الذكي")
     
-    st.divider()
+    # عرض الاستعلام المقترح للمدير لمراجعته
+    st.info("📋 استعلام الـ SQL المقترح بناءً على طلبك:")
+    st.code(st.session_state['ai_sql'], language="sql")
+    
+    # إنشاء صف من الأزرار للتحكم
+    col_btn1, col_btn2 = st.columns([1, 4])
+    
+    with col_btn1:
+        # زر إضافي صريح لتنفيذ الاستعلام بناءً على طلبك
+        execute_click = st.button("⚡ تنفيذ الاستعلام", type="primary", use_container_width=True)
+    
+    with col_btn2:
+        if st.button("🧹 إلغاء ومسح الأمر", type="secondary"):
+            st.session_state['ai_sql'] = None
+            st.session_state['ai_intent'] = None
+            st.session_state['ai_package_details'] = None
+            st.rerun()
 
-    # 🎙️ المساعد الذكي (يدعم الإملاء الصوتي من كيبورد الجوال)
-    st.markdown("<p style='text-align: right; font-weight: bold; color: #667eea;'>🎙️ المساعد الذكي (اكتب بالعامية):</p>", unsafe_allow_html=True)
-    
-    # صندوق إدخال الأمر
-    user_query = st.text_input(
-        label="أمر المدير",
-        placeholder="مثال: شف لي اللوحات المحجوزة مؤقت...",
-        label_visibility="collapsed",
-        key="ai_text_input"
-    )
+    # تفعيل التنفيذ عند الضغط على الزر
+    if execute_click:
+        st.session_state['ai_execution_triggered'] = True
 
-    # معالجة النص فور ضغط إنتر أو إدخال أمر
-    if user_query:
-        # التحقق الآمن من المفتاح
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key or api_key == "ضع_مفتاحك_هنا":
-            st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
-        else:
-            with st.spinner("🧠 جاري تحليل الطلب ومفاضلة العروض..."):
-                try:
-                    # تهيئة مكتبة جوجل الرسمية
-                    genai.configure(api_key=api_key)
+    # إذا تم تفعيل زر التنفيذ، نقوم بجلب البيانات وعرض خيارات التصدير
+    if st.session_state.get('ai_execution_triggered'):
+        with st.spinner("🔄 جاري جلب البيانات من السحابة وتجهيز التقرير..."):
+            try:
+                # 1. الاتصال بالقاعدة وتنفيذ الاستعلام
+                cursor = conn.cursor()
+                cursor.execute(st.session_state['ai_sql'])
+                columns = [desc[0] for desc in cursor.description]
+                data = cursor.fetchall()
+                cursor.close()
+                
+                if data:
+                    # 2. تحويل البيانات إلى DataFrame لعرضها وتصديرها
+                    df_result = pd.DataFrame(data, columns=columns)
                     
-                    # الـ Prompt الهندسي الصارم لتوجيه الموديل للبنية والسيناريوهات المطلوبة
-                    system_prompt = """
-                    أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات (PreView Ads).
-                    مهمتك تحليل طلب المدير وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                    # عرض الجدول للمدير
+                    st.success(f"📊 تم العثور على {len(df_result)} سجل.")
+                    st.dataframe(df_result, use_container_width=True)
                     
-                    هيكلية قاعدة البيانات المتاحة (PostgreSQL):
-                    1. جدول "حجوزات1":
-                       الحقول: id, "رقم الححز", "رقم اللوحة", "اسم الزبون", "اسم اللوحة", "اللوحة", "المحافظة", "توصيف العمود", "الحجم", "فترة الحجز", "العام", "أجور عرض", "شد وتركيب", "اجور طباعة", "الحسم", TimeOfTask
-                    2. جدول "offers_history":
-                       الحقول: id, client_name, offer_date, cart_json, start_p, end_p, year, status
+                    st.divider()
+                    st.markdown("#### 📥 خيارات التصدير والتحميل:")
+                    col_dl1, col_dl2 = st.columns(2)
                     
-                    قواعد المفاضلة وتحليل النية (Intent Matching):
-                    - get_available: إذا طلب اللوحات المتوفرة/الفارغة/غير المحجوزة. (الشرط: "اسم الزبون" IS NULL أو "اسم الزبون" = '').
-                    - check_temporary: إذا سأل عن الحجوزات المؤقتة أو المعلقة. (الشرط: "فترة الحجز" LIKE '%مؤقت%' في جدول "حجوزات1" أو status = 'pending' في جدول offers_history).
-                    - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
-                    
-                    قاعدة الـ SQL: أسماء الحقول العربية لجدول "حجوزات1" يجب حتماً وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون"). الحقول الإنجليزية تكتب عادية.
-                    
-                    يجب أن تطابق المخرجات الهيكل التالي تماماً:
-                    {
-                        "intent": "get_available / check_temporary / create_package",
-                        "confidence": 0.95,
-                        "extracted_sql": "استعلام SQL الصحيح هنا أو نص فارغ إذا لم يتطلب الأمر SQL",
-                        "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
-                        "spoken_response": "رد تفاعلي ذكي وموجز للمدير بالعامية العربية حول ما تم إنجازه"
-                    }
-                    """
-                    
-                    # استخدام نموذج السيرفر المحدث لحل مشكلة الـ 404
-                    model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash",
-                        generation_config={"response_mime_type": "application/json"},
-                        system_instruction=system_prompt
-                    )
-                    
-                    # إرسال طلب المدير
-                    response = model.generate_content(user_query)
-                    
-                    if response.text:
-                        # تحويل النص المستلم إلى قاموس بايثون بأمان
-                        parsed_data = json.loads(response.text.strip())
+                    # ----------------- خيار التصدير إلى Excel -----------------
+                    with col_dl1:
+                        excel_buffer = io.BytesIO()
+                        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                            df_result.to_excel(writer, index=False, sheet_name='التقرير الذكي')
+                        excel_data = excel_buffer.getvalue()
                         
-                        # تخزين البيانات في الـ session لتنفيذ الـ SQL في بقية أجزاء النظام
-                        st.session_state['ai_intent'] = parsed_data.get('intent')
-                        st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
-                        st.session_state['ai_package_details'] = parsed_data.get('package_details')
+                        st.download_button(
+                            label="📥 تحميل كملف Excel (.xlsx)",
+                            data=excel_data,
+                            file_name="تقرير_لوحات_الاعلانات.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    
+                    # ----------------- خيار التصدير إلى Word -----------------
+                    with col_dl2:
+                        doc = Document()
                         
-                        # رد النظام الذكي المكتوب للمدير
-                        st.success(parsed_data.get('spoken_response', 'تم فهم الأمر بنجاح.'))
+                        # إعداد الصفحة لتخدم اللغة العربية (من اليمين لليسار)
+                        sections = doc.sections
+                        for section in sections:
+                            section.top_margin = Inches(1)
+                            section.bottom_margin = Inches(1)
                         
-                        # عرض الـ SQL للتأكد من سلامته قبل التنفيذ
-                        if st.session_state['ai_sql']:
-                            st.code(st.session_state['ai_sql'], language="sql")
-                    else:
-                        st.error("❌ لم يتمكن السيرفر من معالجة الطلب، حاول مرة أخرى.")
+                        # إضافة عنوان التقرير
+                        title = doc.add_paragraph()
+                        title_run = title.add_run("تقرير نظام PreView Ads لإدارة الإعلانات")
+                        title_run.font.size = Pt(20)
+                        title_run.font.bold = True
+                        title.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                         
-                except json.JSONDecodeError:
-                    st.error("⚠️ فشل النظام في تحليل استجابة الذكاء الاصطناعي (JSON Error).")
-                except Exception as e:
-                    st.error(f"⚠️ حدث خطأ في المعالجة: {e}")
+                        doc.add_paragraph("تم توليد هذا التقرير ملقائياً بواسطة المساعد الذكي.").alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        doc.add_paragraph(f"استعلام الـ SQL المستخدم: {st.session_state['ai_sql']}").alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        
+                        # إنشاء الجدول داخل ملف الورد
+                        table = doc.add_table(rows=1, cols=len(columns))
+                        table.style = 'Light Shading Accent 1'
+                        
+                        # تعبئة الهيدر (أعمدة الجدول)
+                        hdr_cells = table.rows[0].cells
+                        for i, col_name in enumerate(columns):
+                            hdr_cells[i].text = str(col_name)
+                            
+                        # تعبئة الصفوف بالبيانات حلقة بحلقة
+                        for _, row in df_result.iterrows():
+                            row_cells = table.add_row().cells
+                            for i, value in enumerate(row):
+                                row_cells[i].text = str(value)
+                        
+                        # حفظ الملف في الذاكرة لتوفيره للتحميل
+                        word_buffer = io.BytesIO()
+                        doc.save(word_buffer)
+                        word_data = word_buffer.getvalue()
+                        
+                        st.download_button(
+                            label="📝 تحميل كتقرير Word (.docx)",
+                            data=word_data,
+                            file_name="تقرير_المساعد_الذكي.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                        
+                else:
+                    st.warning("📭 لا توجد سجلات مطابقة لهذا الاستعلام في قاعدة البيانات حالياً.")
+                    
+            except Exception as e:
+                st.error(f"❌ خطأ أثناء تنفيذ الاستعلام في Supabase: {e}")
 
     st.divider()
-    
-    # معلومات المستخدم
-    user_icon = "👑" if is_admin() else "👤"
-    st.markdown(f"""
-    <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
-        <div style="font-size: 30px;">{user_icon}</div>
-        <div style="font-weight: bold;">{st.session_state.get('username', '')}</div>
-        <div style="font-size: 12px; opacity: 0.7;">{'مدير النظام' if is_admin() else 'موظف'}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # القائمة الرئيسية
-    page = st.radio("📋 القائمة الرئيسية", [
-        "🏢 لوحات الشركات",
-        "📍 الأعمدة المتاحة",
-        "📊 Dashboard",
-        "📄 عرض سعر",
-        "📋 تقرير الجرد",
-        "📅 تقرير التوفر الشهري",
-        "🗺️ تقرير جميع المواقع",
-        "📐 تقرير تجميعي حسب الحجوم",
-        "⚙️ الإعدادات"
-    ], key="main_menu")
-    
-    st.divider()
-    
-    # الإحصائيات السريعة من قاعدة البيانات
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
-    total_boards_sidebar = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
-    total_clients = cursor.fetchone()[0]
-    cursor.close()
-    
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
-    with col_s2:
-        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # تسجيل الخروج
-    if st.button("🚪 تسجيل الخروج", use_container_width=True):
-        st.session_state.auth = False
-        st.session_state.cart = {}
-        st.rerun()
 
 
 # ============================================================
