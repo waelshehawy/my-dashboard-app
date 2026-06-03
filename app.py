@@ -398,7 +398,7 @@ with st.sidebar:
     if user_query:
         with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام..."):
             try:
-                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_الحقيقي_هنا"
+                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
                 
                 # استخدام الرابط الرسمي لنموذج v1beta المستقر والمباشر
                 gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
