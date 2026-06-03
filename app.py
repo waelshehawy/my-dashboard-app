@@ -419,14 +419,22 @@ if user_query:
                 
                 طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
                 
+gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                
+                headers = {
+                    "Content-Type": "application/json"
+                }
+                
                 payload = {
                     "contents": [{
                         "parts": [{"text": full_prompt}]
                     }],
                     "generationConfig": {
-                        "response_mime_type": "application/json"
+                        "responseMimeType": "application/json"
                     }
                 }
+                
+                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
                 
                 response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
                 
