@@ -311,7 +311,7 @@ import speech_recognition as sr
 from streamlit_mic_recorder import mic_recorder
 
 # ============================================================
-# الشريط الجانبي المطور مع المساعد الذكي
+# الشريط الجانبي الكامل والمصحح 100%
 # ============================================================
 
 with st.sidebar:
@@ -325,77 +325,6 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    st.divider()
-
-    # 🎙️ إضافة المساعد الصوتي في مكان استراتيجي ثابت
-# 🎙️ المساعد الصوتي الذكي في الشريط الجانبي
-st.markdown("<p style='text-align: center; font-weight: bold; color: #667eea;'>🎙️ المساعد الصوتي الذكي</p>", unsafe_allow_html=True)
-
-# عرض زر المايك
-audio = mic_recorder(
-    start_prompt="إصدار أمر صوتي 🎤",
-    stop_prompt="إيقاف ومعالجة ⏹️",
-    key='sidebar_recorder'
-)
-
-# هنا نضمن الرد في كل الأحوال
-if audio:
-    audio_file = io.BytesIO(audio['bytes'])
-    r = sr.Recognizer()
-    
-    # رسالة فورية للمستخدم تشير إلى أن النظام استلم الملف ويقوم بمعالجته الآن
-    with st.status("⏳ جاري تحويل صوتك إلى نص...", expanded=True) as status:
-        with sr.AudioFile(audio_file) as source:
-            # تقليل الضوضاء لرفع دقة العامية
-            r.adjust_for_ambient_noise(source, duration=0.5)
-            audio_data = r.record(source)
-            
-            try:
-                # محاولة تحويل الصوت
-                user_text = r.recognize_google(audio_data, language='ar-SA')
-                status.update(label=f"🟢 تم التقاط النص بنجاح!", state="complete", expanded=False)
-                
-                # طباعة الكلام المفهوم فوراً ليرى المدير أن كلامه وُجد
-                st.chat_message("user").write(user_text)
-                
-                # --- إرسال النص إلى Gemini API ---
-                with st.spinner("🧠 جاري تفكيك النية وتوليد الـ SQL..."):
-                    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_هنا"
-                   # الرابط المحدث لتوجه الاستعلام مباشرة إلى نموذج Flash-Light السريع
-# الرابط الصحيح والمطابق للمواصفات الرسمية لـ Google AI Studio
-gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-                    
-                    payload = {"contents": [{"parts": [{"text": user_text}]}]}
-                    response = requests.post(gemini_url, json=payload, timeout=10)
-                    
-                    if response.status_code == 200:
-                        ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
-                        clean_json = ai_result.replace("```json", "").replace("```", "").strip()
-                        parsed_data = json.loads(clean_json)
-                        
-                        # تخزين البيانات في الـ session
-                        st.session_state['ai_intent'] = parsed_data.get('intent')
-                        st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
-                        st.session_state['ai_package_details'] = parsed_data.get('package_details')
-                        
-                        # رد الذكاء الاصطناعي التفاعلي المكتوب
-                        st.chat_message("assistant").write(parsed_data.get('spoken_response', 'تمت العملية بنجاح.'))
-                    else:
-                        st.error("❌ استجاب سيرفر الذكاء الاصطناعي بخطأ، يرجى التحقق من المفتاح.")
-                        
-            except sr.UnknownValueError:
-                # الرد الإجباري في حال عدم فهم الصوت
-                status.update(label="❌ لم أستطع سماع أي كلام!", state="error", expanded=True)
-                st.warning("⚠️ يبدو أن الصوت لم يكن واضحاً أو المايك بعيد. يرجى الضغط مجدداً والتحدث عن قرب.")
-                
-            except sr.RequestError:
-                status.update(label="❌ خطأ في الاتصال بالشبكة!", state="error", expanded=True)
-                st.error("🌐 تعذر الوصول إلى محرك تحويل الصوت. تحقق من اتصال الإنترنت الخاص بك.")
-                
-            except Exception as e:
-                status.update(label="❌ حدث خطأ غير متوقع!", state="error", expanded=True)
-                st.error(f"تفاصيل الخطأ: {e}")
-
     st.divider()
     
     user_icon = "👑" if is_admin() else "👤"
@@ -433,7 +362,7 @@ gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.
     with col_s1:
         st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
     with col_s2:
-        st.markdown(create_metric_card_3d("العملاء", total_clients, "success"), unsafe_allow_html=True)
+        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
     
     st.divider()
     
@@ -441,9 +370,65 @@ gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.
         st.session_state.auth = False
         st.session_state.cart = {}
         st.rerun()
-import pandas as pd
-import io
-import docx  # مكتبة python-docx لتوليد الوورد
+
+    # --------------------------------------------------------
+    # 🎙️ قسم المساعد الذكي المعزول والمحمي تماماً من أخطاء الـ Syntax
+    # --------------------------------------------------------
+    st.divider()
+    st.markdown("<p style='text-align: right; font-weight: bold; color: #667eea;'>🎙️ المساعد الذكي (اكتب بالعامية):</p>", unsafe_allow_html=True)
+    
+    user_query = st.text_input(
+        label="أمر المدير",
+        placeholder="مثال: وريني اللوحات المحجوزة مؤقت...",
+        label_visibility="collapsed",
+        key="ai_sidebar_input"
+    )
+
+    if user_query:
+        with st.spinner("🧠 جاري تحليل الطلب..."):
+            try:
+                # جلب المفتاح الآمن وإعداد الرابط لنموذج جيرمني فلاش
+                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_الجديد_هنا"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                
+                payload = {
+                    "contents": [{"parts": [{"text": user_query}]}],
+                    "systemInstruction": {
+                        "parts": [{
+                            "text": """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير إلى استعلام SQL لـ PostgreSQL على Supabase.
+                            جداولك الحقيقية هي:
+                            1. "حجوزات1": يحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
+                            2. "offers_history": يحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
+                            يجب أن ترد دائماً بصيغة JSON نقي يحتوي على الحقول التالية فقط وبدون علامات زائدة خارج الـ JSON:
+                            {
+                              "intent": "نوع النية",
+                              "confidence": 1.0,
+                              "extracted_sql": "استعلام SQL الصحيح هنا",
+                              "spoken_response": "ردك الذكي على المدير باللغة العربية"
+                            }"""
+                        }]
+                    }
+                }
+                
+                response = requests.post(gemini_url, json=payload, timeout=10)
+                
+                if response.status_code == 200:
+                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                    clean_json = ai_result.replace("```json", "").replace("```", "").strip()
+                    parsed_data = json.loads(clean_json)
+                    
+                    # حفظ البيانات المستخرجة في الجلسة لتنفيذها في الصفحة الرئيسية
+                    st.session_state['ai_intent'] = parsed_data.get('intent')
+                    st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
+                    st.session_state['spoken_response'] = parsed_data.get('spoken_response')
+                    
+                    st.success("🟢 تم الفهم! راجع لوحة المراجعة.")
+                else:
+                    st.error(f"❌ خطأ في السيرفر. كود: {response.status_code}")
+            
+            except Exception as e:
+                # بلوك الحماية الشامل لمنع كسر الصفحة
+                st.error(f"⚠️ حدث اختلاف في المعالجة: {e}")
 
 # ------------------------------------------------------------
 # 🔍 منطقة مراجعة وتنفيذ الاستعلام الذكي
