@@ -1459,21 +1459,32 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 # 🎙️ صفحة المساعد الذكي المطور (صفحة مستقلة بالكامل)
 # ============================================================
-# اذهب إلى هذا السطر في كودك الرئيسي:
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    # --- 🌟 هنا نقطة اللصق الدقيقة للمتغير المطور لمنع إغلاق المايك 🌟 ---
     import streamlit.components.v1 as components
-    
+
+    # جلب النص القادم من المايك عبر الرابط إن وجد
+    query_params = st.query_params
+    voice_result = query_params.get("voice_text", "")
+
+    # إذا وجدنا نصاً جديداً قادماً من المايك، نضعه في الـ Session ونمسح الرابط
+    if voice_result:
+        st.session_state["page_ai_query_value"] = voice_result
+        st.query_params.clear()
+        st.rerun()
+
+    # القيمة الافتراضية داخل صندوق النص
+    default_text = st.session_state.get("page_ai_query_value", "")
+
     st.markdown("### 🗣️ الإدخال الصوتي الفوري:")
-    st.caption("اضغط على زر (ابدأ التحدث) وتكلم بالعامية، وسيتم كتابة أمرك بالأسفل تلقائياً.")
     
-    st_speech_html = """
+    # كود جافاسكريبت مطور يتخطى حماية المتصفح المعزولة
+    st_speech_html = f"""
     <div style="text-align: right; direction: rtl;">
-        <button id="mic-btn" style="background-color: #667eea; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;">
+        <button id="mic-btn" style="background-color: #667eea; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;">
             🎙️ ابدأ التحدث بالصوت الآن...
         </button>
         <p id="mic-status" style="color: #a0a0a0; font-size: 12px; margin-top: 5px;">الميكروفون مغلق</p>
@@ -1482,82 +1493,58 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     <script>
         const micBtn = document.getElementById('mic-btn');
         const micStatus = document.getElementById('mic-status');
-        let finalTranscript = ''; 
         
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {{
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             const recognition = new SpeechRecognition();
             
             recognition.lang = 'ar-SY'; 
-            recognition.continuous = true;     
-            recognition.interimResults = true;  
-            recognition.maxAlternatives = 1;
+            recognition.continuous = false; // نجعله يغلق عند الصمت ليرسل النص تلقائياً لبايثون
+            recognition.interimResults = false;
 
-            let isListening = false;
-
-            micBtn.onclick = function() {
-                if (!isListening) {
-                    finalTranscript = ''; 
-                    recognition.start();
-                } else {
-                    recognition.stop();
-                }
-            };
-
-            recognition.onstart = function() {
-                isListening = true;
+            micBtn.onclick = function() {{
+                recognition.start();
                 micBtn.style.backgroundColor = '#e53e3e';
-                micBtn.innerText = '🛑 اضغط هنا لإنهاء الحديث وإرسال الطلب';
-                micStatus.innerText = 'الميكروفون مستمر بالاستماع... تكلم براحتك وعند الانتهاء اضغط الزر الأحمر.';
-            };
+                micBtn.innerText = '🛑 جاري الاستماع صوتياً... تحدث الآن';
+                micStatus.innerText = 'الميكروفون نشط...';
+            }};
 
-            recognition.onresult = function(event) {
-                let interimTranscript = '';
+            recognition.onresult = function(event) {{
+                const text = event.results[0][0].transcript;
+                micStatus.innerText = 'تم التقاط: ' + text;
                 
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i].transcript + ' ';
-                    } else {
-                        interimTranscript += event.results[i].transcript;
-                    }
-                }
-                
-                const currentText = finalTranscript + interimTranscript;
-                
-                if (currentText.trim()) {
-                    window.parent.postMessage({
-                        type: 'streamlit:setComponentValue',
-                        value: currentText.trim()
-                    }, '*');
-                }
-            };
+                # إرسال النص إلى تطبيق Streamlit عبر إعادة توجيه الرابط بأمان
+                const baseUrl = window.parent.location.origin + window.parent.location.pathname;
+                window.parent.location.href = baseUrl + '?voice_text=' + encodeURIComponent(text);
+            }};
 
-            recognition.onerror = function(event) {
-                micStatus.innerText = 'حدث خطأ في التقاط الصوت: ' + event.error;
-            };
-            
-            recognition.onend = function() {
-                isListening = false;
+            recognition.onerror = function(event) {{
                 micBtn.style.backgroundColor = '#667eea';
                 micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
-                micStatus.innerText = 'تم حفظ وإرسال الأمر الصوتي إلى صندوق الإدخال بنجاح!';
-            };
-        } else {
-            micStatus.innerText = 'عذراً، متصفحك الحالي لا يدعم ميزة التعرف المطور على الصوت.';
-        }
+                micStatus.innerText = 'خطأ: ' + event.error;
+            }};
+        }} else {{
+            micStatus.innerText = 'المتصفح لا يدعم التقاط الصوت البرمجي.';
+        }}
     </script>
     """
     
-    # يليه مباشرة كود عرض الـ HTML وصندوق النص (موجودين مسبقاً في كودك):
-    audio_text_output = components.html(st_speech_html, height=80)
-    
+    components.html(st_speech_html, height=85)
+
+    # صندوق إدخال الأمر يستقبل الآن النص المكتوب أو القادم من المايك بنجاح
     user_query = st.text_input(
         label="أمر الإدارة الحالي:",
+        value=default_text,
         placeholder="مثال: شف لي اللوحات الفاضية بدمشق والي حجمها 2*1...",
         key="page_ai_query"
     )
     
-    # ... [باقي الكود المستقر دون أي تغيير] ...
+    # تفريغ النص من الذاكرة لكي يتمكن المدير من كتابة أمر جديد لاحقاً
+    if default_text:
+        st.session_state["page_ai_query_value"] = ""
+
+    # ... [باقي الكود الخاص بـ زر التحليل و الـ SQL والرد الصوتي المسموع لـ Gemini دون أي تغيير] ...
+
 
 
     # زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
