@@ -10,3 +10,5 @@ psycopg2-binary==2.9.9
 supabase==2.5.1
 python-dotenv==1.0.1
 pillow==10.3.0
+streamlit-mic-recorder==0.0.4
+SpeechRecognition==3.10.4
