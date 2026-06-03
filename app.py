@@ -384,56 +384,68 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر الجيل الجديد Gemini 3.5..."):
+        with st.spinner("🧠 جاري معالجة طلب المدير عبر المسار السحابي المباشر والمستقر..."):
             try:
-                # 1. استيراد المكتبة القياسية الجديدة لعام 2026
-                from google import genai
+                # تأكد من استيراد المكتبات القياسية في أعلى الملف أو هنا
+                import requests
+                import json
                 
-                # 2. تنظيف المفتاح وإدخاله في كائن الـ Client الموحد
-                RAW_KEY = "AQ.Ab8RN6KoDfYnJAvMTPB6N41IbnDblovo6p0Pp4rtIXTzPoOugw"  # مفتاحك الحالي الشغال
+                # 1. المفتاح الصافي الخاص بك (تأكد من كتابته بدقة وبدون مسافات)
+                RAW_KEY = "AQ.Ab8RXXXXXXXXXX"  
                 GEMINI_API_KEY = RAW_KEY.strip()
                 
-                # إنشاء العميل مع حقن المفتاح بشكل أمني صحيح داخلياً
-                client = genai.Client(api_key=GEMINI_API_KEY)
+                # 2. الرابط المباشر لنموذج Gemini 1.5 Pro الأكثر مرونة مع المفاتيح السحابية
+                gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
                 
-                # 3. إعداد سياق التعليمات البرمجية الصارمة (System Instruction)
-                system_instruction = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+                # 3. الحيلة الأمنية الحاسمة: تمرير المفتاح في الـ Headers لتفادي الخطأ 401
+                headers = {
+                    "x-goog-api-key": AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA,
+                    "Content-Type": "application/json"
+                }
+                
+                full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 
                 جداولك الحقيقية هي:
                 1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
                 2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
                 
                 يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
-                {
+                {{
                   "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
                   "confidence": 1.0,
                   "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
                   "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
-                }"""
+                }}
                 
-                # دمج التعليمات مع طلب المدير في الـ prompt
-                full_prompt = f"{system_instruction}\n\nطلب المدير الحالي المطلوب تحويله هو: {user_query}"
+                طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
                 
-                # 4. استدعاء الموديل الحديث وطريقة التوليد الرسمية المعتمدة
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash",
-                    contents=full_prompt
-                )
+                payload = {
+                    "contents": [{
+                        "parts": [{"text": full_prompt}]
+                    }],
+                    "generationConfig": {
+                        "response_mime_type": "application/json"
+                    }
+                }
                 
-                if response.text:
-                    # تنظيف وتفكيك الـ JSON العائد بنجاح
-                    parsed_data = json.loads(response.text.strip())
+                # إرسال الطلب عبر requests الصافية لتفادي صراع الحزم تماماً
+                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
+                
+                if response.status_code == 200:
+                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                    parsed_data = json.loads(ai_result.strip())
                     
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 معجزة برمجية! تم الاتصال بنجاح وتفعيل نظام PreView Ads بأحدث تقنيات 2026!")
+                    st.success("🟢 نجاح باهر! تم الاتصال المباشر بنجاح وانطلق المساعد الذكي بكفاءة مطلقة!")
                     st.rerun()
                 else:
-                    st.error("❌ لم يتم توليد أي استجابة، يرجى إعادة المحاولة.")
+                    st.error(f"❌ خطأ في السيرفر السحابي. كود الاستجابة: {response.status_code}")
+                    st.info(f"تفاصيل الرد: {response.text}")
                     
             except Exception as e:
-                st.error(f"⚠️ حدث خطأ أثناء المعالجة عبر الـ GenAI SDK الجديد: {e}")
+                st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
