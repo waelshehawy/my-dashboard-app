@@ -299,14 +299,23 @@ if not st.session_state.auth:
 import os
 import json
 import io
+import requests  # مكتبة بايثون القياسية المستقرة 100%
 import pandas as pd
 import psycopg2
 import streamlit as st
 import docx  # لتوليد ملفات الوورد
-# 🟢 استيراد المكتبة الرسمية الحديثة من جوجل بناءً على التوثيق الجديد
-from google import genai
-from google.genai import types
 
+def get_connection():
+    """اتصال مباشر بـ Supabase PostgreSQL"""
+    return psycopg2.connect(
+        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
+        port=os.environ.get("SUPABASE_PORT", "6543"),
+        database=os.environ.get("SUPABASE_DB", "postgres"),
+        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
+        password=os.environ.get("SUPABASE_PASSWORD", "xxxxxxxxx"),
+        sslmode="require",
+        connect_timeout=30
+    )
 
 # ============================================================
 # الشريط الجانبي (Sidebar)
@@ -375,7 +384,7 @@ with st.sidebar:
         st.session_state.cart = {}
         st.rerun()
 
-    # 🎙️ قسم المساعد الذكي الحديث (المطابق لتوثيق google-genai)
+    # 🎙️ قسم المساعد الذكي المستقر كلياً عبر الـ REST API المباشر
     st.divider()
     st.markdown("<p style='text-align: right; font-weight: bold; color: #764ba2;'>🎙️ المساعد الذكي الفوري:</p>", unsafe_allow_html=True)
     
@@ -387,49 +396,50 @@ with st.sidebar:
     )
     
     if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب بالأسلوب الجديد..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام..."):
             try:
-                # 🟢 جلب المفتاح وإعداد العميل الرسمي (الجديد)
-                GEMINI_API_KEY = st.secrets.get("AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q ") or "ضع_مفتاحك_الحقيقي_هنا"
-                client = genai.Client(api_key=GEMINI_API_KEY)
+                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_الحقيقي_هنا"
                 
-                # إعداد التعليمات الصارمة والفرز بناءً على الحقول المطلوبة
+                # استخدام الرابط الرسمي لنموذج v1beta المستقر والمباشر
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                
                 system_prompt = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 جداولك الحقيقية هي:
-                1. "حجوزات1": يحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
-                2. "offers_history": يحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
-                يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط:
+                1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
+                2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
+                يجب أن ترد دائماً بصيغة JSON نقي يحتوي على الحقول التالية فقط:
                 {
                   "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
                   "confidence": 1.0,
-                  "extracted_sql": "استعلام SQL الصحيح مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
+                  "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
                   "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
                 }"""
                 
-                # ضبط الإعدادات لتجبر النموذج على إرجاع JSON نقي (بناءً على مواصفات المكتبة الحديثة)
-                config = types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    response_mime_type="application/json"
-                )
+                # الهيكل القياسي الذي يضمن استقبال الـ System Instructions وتفعيل وضع الـ JSON النقي
+                payload = {
+                    "contents": [{"parts": [{"text": user_query}]}],
+                    "systemInstruction": {
+                        "parts": [{"text": system_prompt}]
+                    },
+                    "generationConfig": {
+                        "responseMimeType": "application/json"
+                    }
+                }
                 
-                # 🟢 طلب المحتوى باستخدام النموذج السريع الموصى به
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",  # أو الإصدار الحالي المدعوم في حسابك
-                    contents=user_query,
-                    config=config
-                )
+                response = requests.post(gemini_url, json=payload, timeout=15)
                 
-                if response.text:
-                    parsed_data = json.loads(response.text.strip())
+                if response.status_code == 200:
+                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                    parsed_data = json.loads(ai_result.strip())
                     
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
                     st.success("🟢 تم فهم الطلب وصياغة الاستعلام بنجاح!")
                 else:
-                    st.error("❌ استجابة فارغة من خادم الذكاء الاصطناعي.")
+                    st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
             except Exception as e:
-                st.error(f"⚠️ خطأ في معالجة الطلب بالمكتبة الجديدة: {e}")
+                st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
 
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
@@ -470,7 +480,6 @@ if 'ai_sql' in st.session_state and st.session_state['ai_sql']:
                     
                     intent = st.session_state.get('ai_intent', 'استعلام_بيانات')
                     
-                    # 📄 الحالة الأولى: نية عرض السعر -> ملف Word
                     if "عرض" in intent or "سعر" in intent:
                         st.markdown("#### 📥 مستندات جاهزة للتحميل الفوري:")
                         doc = docx.Document()
@@ -497,7 +506,6 @@ if 'ai_sql' in st.session_state and st.session_state['ai_sql']:
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True
                         )
-                    # 📊 الحالة الثانية: استعلام جرد عادي -> ملف Excel
                     else:
                         st.markdown("#### 📥 تقارير جاهزة للتحميل الفوري:")
                         excel_buffer = io.BytesIO()
