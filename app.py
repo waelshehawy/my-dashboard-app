@@ -362,7 +362,8 @@ if audio:
                 with st.spinner("🧠 جاري تفكيك النية وتوليد الـ SQL..."):
                     GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_هنا"
                    # الرابط المحدث لتوجه الاستعلام مباشرة إلى نموذج Flash-Light السريع
-gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flashlite:generateContent?key= AQ.Ab8RN6I6OJfePZP_-ww95Qp_SiQJ2V29BCVYANEZ9LOJYbil3w "
+# الرابط الصحيح والمطابق للمواصفات الرسمية لـ Google AI Studio
+gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                     
                     payload = {"contents": [{"parts": [{"text": user_text}]}]}
                     response = requests.post(gemini_url, json=payload, timeout=10)
