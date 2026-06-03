@@ -373,9 +373,9 @@ with st.sidebar:
                     }
                     """
                     
-                    # استخدام نموذج السيرفر السريع والمستقر مع إجبار مخرجات JSON لمنع أخطاء 400
+                    # استخدام نموذج السيرفر المحدث لحل مشكلة الـ 404
                     model = genai.GenerativeModel(
-                        model_name="gemini-1.5-flash",
+                        model_name="gemini-2.5-flash",
                         generation_config={"response_mime_type": "application/json"},
                         system_instruction=system_prompt
                     )
@@ -408,7 +408,7 @@ with st.sidebar:
 
     st.divider()
     
-    # [باقي الكود الخاص بك دون أي تعديل لضمان عدم حدوث أخطاء جانبية]
+    # معلومات المستخدم
     user_icon = "👑" if is_admin() else "👤"
     st.markdown(f"""
     <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
@@ -418,6 +418,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
+    # القائمة الرئيسية
     page = st.radio("📋 القائمة الرئيسية", [
         "🏢 لوحات الشركات",
         "📍 الأعمدة المتاحة",
@@ -432,6 +433,7 @@ with st.sidebar:
     
     st.divider()
     
+    # الإحصائيات السريعة من قاعدة البيانات
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
     total_boards_sidebar = cursor.fetchone()[0]
@@ -447,6 +449,7 @@ with st.sidebar:
     
     st.divider()
     
+    # تسجيل الخروج
     if st.button("🚪 تسجيل الخروج", use_container_width=True):
         st.session_state.auth = False
         st.session_state.cart = {}
