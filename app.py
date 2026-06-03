@@ -1464,131 +1464,186 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    import google.generativeai as genai
-    import json
+    # --- 🎙️ الجيل الجديد: تفعيل المايك البرمجي عبر المتصفح ---
+    import streamlit.components.v1 as components
+    
+    # كود جافاسكريبت مخفي ومستقر لفتح مايك المتصفح وتحويل الصوت إلى نص بدقة عالية
+    st.markdown("### 🗣️ الإدخال الصوتي الفوري:")
+    st.caption("اضغط على زر (ابدأ التحدث) وتكلم بالعامية، وسيتم كتابة أمرك بالأسفل تلقائياً.")
+    
+    st_speech_html = """
+    <div style="text-align: right; direction: rtl;">
+        <button id="mic-btn" style="background-color: #667eea; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;">
+            🎙️ ابدأ التحدث بالصوت الآن...
+        </button>
+        <p id="mic-status" style="color: #a0a0a0; font-size: 12px; margin-top: 5px;">الميكروفون مغلق</p>
+    </div>
 
-    st.markdown("### 🎙️ أملي أمرك صوتياً:")
-    st.caption("اضغط على زر التسجيل المدمج أدناه، قل أمرك بالعامية، ثم أوقف التسجيل ليقوم النظام بتحليله فوراً.")
+    <script>
+        const micBtn = document.getElementById('mic-btn');
+        const micStatus = document.getElementById('mic-status');
+        
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
+            
+            recognition.lang = 'ar-SY'; // تعيين اللهجة العربية الشامية/المحيطة لتفهم العامية بدقة
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            micBtn.onclick = function() {
+                recognition.start();
+                micBtn.style.backgroundColor = '#e53e3e';
+                micBtn.innerText = '🛑 جاري الاستماع صوتياً... تحدث الآن';
+                micStatus.innerText = 'الميكروفون نشط ويستمع...';
+            };
+
+            recognition.onresult = function(event) {
+                const speechToText = event.results[0][0].confidence > 0.4 ? event.results[0][0].transcript : '';
+                micBtn.style.backgroundColor = '#667eea';
+                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+                micStatus.innerText = 'تم تحويل الصوت بنجاح!';
+                
+                // تمرير النص المولد من الصوت إلى صندوق بايثون في Streamlit
+                if (speechToText) {
+                    window.parent.postMessage({
+                        type: 'streamlit:setComponentValue',
+                        value: speechToText
+                    }, '*');
+                }
+            };
+
+            recognition.onerror = function(event) {
+                micBtn.style.backgroundColor = '#667eea';
+                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+                micStatus.innerText = 'حدث خطأ في التقاط الصوت: ' + event.error;
+            };
+            
+            recognition.onend = function() {
+                micBtn.style.backgroundColor = '#667eea';
+                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+            };
+        } else {
+            micStatus.innerText = 'عذراً، متصفحك الحالي لا يدعم ميزة التعرف على الصوت.';
+        }
+    </script>
+    """
     
-    # 🌟 أداة Streamlit الرسمية والمدمجة تلقائياً (لا تحتاج أي تثبيت أو تعديل في Requirements)
-    audio_file = st.audio_input("سجل أمرك هنا:")
+    # عرض مكون التقاط الصوت الفوري وتخزين النص الناتج منه
+    audio_text_output = components.html(st_speech_html, height=80)
     
-    # صندوق نصي اختياري في حال أراد المدير الكتابة يدوياً بدلاً من الصوت
+    # 2. صندوق إدخال الأمر للمدير (يستقبل تلقائياً مخرجات المايك أو الكتابة اليدوية)
     user_query = st.text_input(
-        label="أو اكتب أمر الإدارة هنا يدوياً:",
-        placeholder="مثال: شف لي اللوحات الفاضية بدمشق والي حجمها 2*1...",
+        label="أمر الإدارة الحالي:",
+        placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
         key="page_ai_query"
     )
 
-    # زر بدء المعالجة
+    # زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
     if st.button("🧠 تحليل الطلب ومفاضلة العروض", type="primary", use_container_width=True):
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key or api_key == "ضع_مفتاحك_هنا":
-            st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
+        if not user_query:
+            st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
         else:
-            with st.spinner("🧠 جاري تحليل الطلب وسياق الـ ERP..."):
-                try:
-                    genai.configure(api_key=api_key)
-                    
-                    system_prompt = """
-                    أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات (PreView Ads).
-                    وظيفتك تحليل طلب المدير (سواء كان نصاً أو تسجيلاً صوتياً) وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
-                    
-                    هيكلية قاعدة البيانات المتاحة (PostgreSQL):
-                    1. جدول "حجوزات1":
-                       الحقول: id, "رقم الححز", "رقم اللوحة", "اسم الزبون", "اسم اللوحة", "اللوحة", "المحافظة", "توصيف العمود", "الحجم", "فترة الحجز", "العام", "أجور عرض", "شد وتركيب", "اجور طباعة", "الحسم", TimeOfTask
-                    2. جدول "offers_history":
-                       الحقول: id, client_name, offer_date, cart_json, start_p, end_p, year, status
-                    
-                    قواعد المفاضلة وتحليل النية (Intent Matching):
-                    - get_available: إذا طلب اللوحات المتوفرة/الفارغة/غير المحجوزة. (الشرط: "اسم الزبون" IS NULL أو "اسم الزبون" = '').
-                    - check_temporary: إذا سأل عن الحجوزات المؤقتة أو العروض المعلقة. (الشرط: "فترة الحجز" LIKE '%مؤقت%' في جدول "حجوزات1" أو status = 'pending' في جدول offers_history).
-                    - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
-                    
-                    قاعدة الـ SQL: أسماء الحقول العربية لجدول "حجوزات1" يجب حتماً وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون"). الحقول الإنجليزية تكتب عادية.
-                    
-                    يجب أن تطابق المخرجات الهيكل التالي تماماً:
-                    {
-                        "intent": "get_available / check_temporary / create_package",
-                        "confidence": 0.95,
-                        "extracted_sql": "استعلام SQL الصحيح هنا أو نص فارغ إذا لم يتطلب الأمر SQL",
-                        "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
-                        "spoken_response": "رد تفاعلي ذكي وموجز جداً وبسيط بالعامية العربية للمدير حول اللوحات التي وجدتها فقط بدون ذكر تفاصيل الأكواد الفنية"
-                    }
-                    """
-                    
-                    model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash",
-                        generation_config={"response_mime_type": "application/json"},
-                        system_instruction=system_prompt
-                    )
-                    
-                    contents = []
-                    
-                    # قراءة بايتات ملف الصوت المدمج وتمريرها مباشرة لجمناي
-                    if audio_file is not None:
-                        audio_bytes = audio_file.read()
-                        contents.append({
-                            "mime_type": "audio/wav",
-                            "data": audio_bytes
-                        })
-                    
-                    if user_query:
-                        contents.append(user_query)
+            api_key = st.secrets.get("GEMINI_API_KEY")
+            if not api_key or api_key == "ضع_مفتاحك_هنا":
+                st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
+            else:
+                with st.spinner("🧠 جاري تحليل النص ومطابقة الجداول وسياق الـ ERP..."):
+                    try:
+                        import google.generativeai as genai
+                        genai.configure(api_key=api_key)
                         
-                    if not contents:
-                        st.warning("⚠️ الرجاء تسجيل صوتك أو كتابة أمر أولاً.")
-                    else:
-                        response = model.generate_content(contents)
+                        system_prompt = """
+                        أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات (PreView Ads).
+                        مهمتك تحليل طلب المدير وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                        
+                        هيكلية قاعدة البيانات المتاحة (PostgreSQL):
+                        1. جدول "حجوزات1":
+                           الحقول: id, "رقم الححز", "رقم اللوحة", "اسم الزبون", "اسم اللوحة", "اللوحة", "المحافظة", "توصيف العمود", "الحجم", "فترة الحجز", "العام", "أجور عرض", "شد وتركيب", "اجور طباعة", "الحسم", TimeOfTask
+                        2. جدول "offers_history":
+                           الحقول: id, client_name, offer_date, cart_json, start_p, end_p, year, status
+                        
+                        قواعد المفاضلة وتحليل النية (Intent Matching):
+                        - get_available: إذا طلب اللوحات المتوفرة/الفارغة/غير المحجوزة. (الشرط: "اسم الزبون" IS NULL أو "اسم الزبون" = '').
+                        - check_temporary: إذا سأل عن الحجوزات المؤقتة أو العروض المعلقة. (الشرط: "فترة الحجز" LIKE '%مؤقت%' في جدول "حجوزات1" أو status = 'pending' في جدول offers_history).
+                        - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
+                        
+                        قاعدة الـ SQL: أسماء الحقول العربية لجدول "حجوزات1" يجب حتماً وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون"). الحقول الإنجليزية تكتب عادية.
+                        
+                        يجب أن تطابق المخرجات الهيكل التالي تماماً:
+                        {
+                            "intent": "get_available / check_temporary / create_package",
+                            "confidence": 0.95,
+                            "extracted_sql": "استعلام SQL الصحيح هنا أو نص فارغ إذا لم يتطلب الأمر SQL",
+                            "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
+                            "spoken_response": "رد تفاعلي ذكي وموجز جداً وبسيط بالعامية العربية للمدير حول اللوحات التي وجدتها فقط بدون ذكر تفاصيل الأكواد الفنية"
+                        }
+                        """
+                        
+                        model = genai.GenerativeModel(
+                            model_name="gemini-2.5-flash",
+                            generation_config={"response_mime_type": "application/json"},
+                            system_instruction=system_prompt
+                        )
+                        
+                        response = model.generate_content(user_query)
                         
                         if response.text:
+                            import json
                             parsed_data = json.loads(response.text.strip())
                             
                             st.session_state['page_ai_intent'] = parsed_data.get('intent')
                             st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
                             st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                             st.session_state['page_ai_package_details'] = parsed_data.get('package_details')
+                            
                             st.session_state['page_ai_executed_data'] = None
+                            
+                            # تفعيل النطق الصوتي للرد فقط فور الاستلام لمنع تكراره
                             st.session_state['should_speak'] = True
                             st.rerun()
                         else:
-                            st.error("❌ لم يتمكن المساعد من معالجة الطلب.")
-                except Exception as e:
-                    st.error(f"⚠️ خطأ أثناء المعالجة: {e}")
+                            st.error("❌ لم يتمكن الذكاء الاصطناعي من توليد استجابة.")
+                    except Exception as e:
+                        st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
 
-    # 3. عرض النتيجة وتشغيل الرد الصوتي للمدير تلقائياً
+    # 3. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
     if st.session_state.get('page_ai_sql'):
         st.divider()
         spoken_text = st.session_state.get('page_ai_spoken', 'تم الفهم بنجاح.')
         st.success(spoken_text)
         
-        # نطق الرد الصوتي عبر المتصفح بأمان تام
+        # --- 🔊 حقن كود النطق الصوتي عبر المتصفح (للرد فقط وليس للجدول) ---
         if st.session_state.get('should_speak', False):
-            import streamlit.components.v1 as components
+            # كود جافاسكريبت خفيف لنطق الرد العامي بلهجة عربية واضحة للمدير فوراً
             tts_html = f"""
             <script>
                 if ('speechSynthesis' in window) {{
-                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.cancel(); // إلغاء أي نطق سابق معلق
                     const utterance = new SpeechSynthesisUtterance("{spoken_text}");
-                    utterance.lang = "ar-SA";
+                    utterance.lang = "ar-SA"; // قراءة النص باللغة العربية
+                    utterance.pitch = 1.0;
+                    utterance.rate = 1.0; // السرعة الطبيعية
                     window.speechSynthesis.speak(utterance);
                 }}
             </script>
             """
             components.html(tts_html, height=0, width=0)
+            # إغلاق ميزة النطق لكي لا ينطق مجدداً عند نقر أزرار التصدير
             st.session_state['should_speak'] = False
-
+        
         with st.expander("🛠️ عرض كود الاستعلام الفني المقترح (SQL)", expanded=False):
             st.code(st.session_state['page_ai_sql'], language="sql")
             
         col_exec, col_cancel = st.columns(2)
+        # هذا السطر موجود في كودك، الصق ما تحته مباشرة:
         with col_exec:
             if st.button("⚡ تنفيذ الاستعلام وجلب البيانات الفورية", type="secondary", use_container_width=True):
                 with st.spinner("🔄 جاري الاتصال بـ Supabase وجلب السجلات الحية..."):
                     try:
                         cursor = conn.cursor()
                         cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc for desc in cursor.description]
+                        columns = [desc[0] for desc in cursor.description]
                         data = cursor.fetchall()
                         cursor.close()
                         
@@ -1610,6 +1665,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 st.session_state['should_speak'] = False
                 st.rerun()
 
+        # عرض الجدول وأزرار التصدير بناءً على البيانات المخزنة
         executed_res = st.session_state.get('page_ai_executed_data')
         
         if executed_res is not None:
@@ -1639,34 +1695,27 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         use_container_width=True
                     )
                 
-                # --- هذا هو كود تصدير تقرير Word المنسق والمنظم بالكامل داخل الـ Block الخاص به ---
                 with col_word:
                     import io
                     from docx import Document
                     
                     doc = Document()
-                    
-                    # بناء جدول الوورد ديناميكياً بناءً على الأعمدة والبيانات المستخرجة
                     table = doc.add_table(rows=1, cols=len(executed_res.columns))
                     table.style = 'Light Shading Accent 1'
                     
-                    # تعبئة خلايا الهيدر (أسماء الأعمدة)
-                    hdr_cells = table.rows[0].cells
+                    hdr_cells = table.rows.cells
                     for i, col_name in enumerate(executed_res.columns):
                         hdr_cells[i].text = str(col_name)
                         
-                    # تعبئة خلايا الصفوف بالبيانات الحية سطر بسطر
                     for _, row in executed_res.iterrows():
                         row_cells = table.add_row().cells
                         for i, val in enumerate(row):
                             row_cells[i].text = str(val)
                             
-                    # حفظ الملف في الذاكرة لتوفيره للتحميل الآمن
                     word_buffer = io.BytesIO()
                     doc.save(word_buffer)
                     word_data = word_buffer.getvalue()
                     
-                    # زر تحميل التقرير الرسمي لملف الورد
                     st.download_button(
                         label="📝 تحميل كتقرير Word (.docx)",
                         data=word_data,
@@ -1674,6 +1723,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
                     )
+
 
                     
 
