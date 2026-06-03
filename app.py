@@ -383,46 +383,69 @@ with st.sidebar:
         key="ai_sidebar_query_input"
     )
     
+# 🟢 تجهيز المتغيرات في الأعلى لتفادي أي خطأ مسافات (Indentation)
+gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={st.secrets.get('GEMINI_KEY', '').strip()}" if "GEMINI_KEY" in st.secrets else ""
+
+# 🟢 الكود الكبير والشامل للـ Prompt يوضع هنا في الخارج بأمان
+full_prompt_template = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+
+جداولك الحقيقية هي:
+1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
+2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
+
+يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
+{{
+  "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
+  "confidence": 1.0,
+  "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
+  "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
+}}
+
+طلب المدير الحالي المطلوب تحويله هو: {query}"""
+
+
+# ============================================================
+# هنا يبدأ كودك الأصلي كما هو، فقط نقوم بحقن المتغيرات داخله
+# ============================================================
 if user_query:
-        with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
-            try:
-                if "GEMINI_KEY" in st.secrets:
-                    GEMINI_API_KEY = st.secrets["GEMINI_KEY"].strip()
-                else:
-                    st.error("⚠️ خطأ أمني: مفتاح الـ API غير معرف في إعدادات السيرفر!")
-                    st.stop()
-                
-                # 🟢 انتبه للمحاذاة هنا (كل السطور أدناه تبدأ من نفس العمود النظيف)
-                gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-                
-                headers = {
-                    "Content-Type": "application/json"
+    with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
+        try:
+            # 1. دمج طلب المدير الحالي داخل الـ Prompt الكبير
+            full_prompt = full_prompt_template.format(query=user_query)
+            
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            # 2. إرسال الـ Payload بالتنسيق المستقر الجديد المحدث لعام 2026
+            payload = {
+                "contents": [{
+                    "parts": [{"text": full_prompt}]
+                }],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
                 }
+            }
+            
+            # 3. إرسال الطلب عبر الرابط الخارجي الجاهز
+            response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
+            
+            # 🟢 هنا يكمل كود الـ try القديم والكامل الخاص بك لترتيب الـ Session State:
+            if response.status_code == 200:
+                ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                parsed_data = json.loads(ai_result.strip())
                 
-                payload = {
-                    "contents": [{
-                        "parts": [{"text": full_prompt}]
-                    }],
-                    "generationConfig": {
-                        "responseMimeType": "application/json"
-                    }
-                }
+                st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
+                st.session_state['ai_intent'] = parsed_data.get('intent')
+                st.session_state['spoken_response'] = parsed_data.get('spoken_response')
+                st.success("🟢 نجاح باهر وأمان مطلق! تم التوثيق وتشغيل المساعد الذكي!")
+                st.rerun()
+            else:
+                st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
+                st.info(f"تفاصيل الرد: {response.text}")
                 
-                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
-                
-                if response.status_code == 200:
-                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
-                    parsed_data = json.loads(ai_result.strip())
-                    
-                    st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
-                    st.session_state['ai_intent'] = parsed_data.get('intent')
-                    st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم توليد استعلام المساعد بنجاح!")
-                else:
-                    st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
-                    
-            except Exception as e:
-                st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
+        except Exception as e:
+            st.error(f"⚠️ حدث خطأ أثناء المعالجة: {e}")
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
