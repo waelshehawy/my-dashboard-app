@@ -322,9 +322,10 @@ with st.sidebar:
     
     st.divider()
 
-    # 🎙️ المساعد الذكي
+    # 🎙️ المساعد الذكي (يدعم الإملاء الصوتي من كيبورد الجوال)
     st.markdown("<p style='text-align: right; font-weight: bold; color: #667eea;'>🎙️ المساعد الذكي (اكتب بالعامية):</p>", unsafe_allow_html=True)
     
+    # صندوق إدخال الأمر
     user_query = st.text_input(
         label="أمر المدير",
         placeholder="مثال: شف لي اللوحات المحجوزة مؤقت...",
@@ -332,66 +333,124 @@ with st.sidebar:
         key="ai_text_input"
     )
 
+    # معالجة النص فور ضغط إنتر أو إدخال أمر
     if user_query:
-        # 1. التحقق من وجود مفتاح الـ API في الـ Secrets أولاً لمنع خطأ 401
+        # التحقق الآمن من المفتاح
         api_key = st.secrets.get("GEMINI_API_KEY")
-        
         if not api_key or api_key == "ضع_مفتاحك_هنا":
-            st.error("🔑 خطأ: لم يتم ضبط مفتاح الـ API في ملف secrets.toml الخاص بـ Streamlit.")
+            st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
         else:
             with st.spinner("🧠 جاري تحليل الطلب ومفاضلة العروض..."):
                 try:
-                    # 2. إعداد مكتبة جوجل الرسمية
+                    # تهيئة مكتبة جوجل الرسمية
                     genai.configure(api_key=api_key)
                     
-                    # 3. بناء الـ System Instruction ليفهم النظام بنية الجداول لديك مجاناً
+                    # الـ Prompt الهندسي الصارم لتوجيه الموديل للبنية والسيناريوهات المطلوبة
                     system_prompt = """
                     أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات (PreView Ads).
-                    وظيفتك تحويل طلبات المدير بالعامية أو الفصحى إلى استعلام SQL صحيح ورد صوتي/نصي.
-                    قاعدة البيانات تحتوي على الجداول التالية:
-                    1. جدول "اعمدة انارة" ويحتوي على بيانات اللوحات والمواقع.
-                    2. جدول "حجوزات1" ويحتوي على (اسم الزبون، حالة الحجز، تاريخ البدء، تاريخ الانتهاء).
+                    مهمتك تحليل طلب المدير وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
                     
-                    يجب أن يكون ردك دائماً بصيغة JSON حصراً وبالمفاتيح التالية فقط:
+                    هيكلية قاعدة البيانات المتاحة (PostgreSQL):
+                    1. جدول "حجوزات1":
+                       الحقول: id, "رقم الححز", "رقم اللوحة", "اسم الزبون", "اسم اللوحة", "اللوحة", "المحافظة", "توصيف العمود", "الحجم", "فترة الحجز", "العام", "أجور عرض", "شد وتركيب", "اجور طباعة", "الحسم", TimeOfTask
+                    2. جدول "offers_history":
+                       الحقول: id, client_name, offer_date, cart_json, start_p, end_p, year, status
+                    
+                    قواعد المفاضلة وتحليل النية (Intent Matching):
+                    - get_available: إذا طلب اللوحات المتوفرة/الفارغة/غير المحجوزة. (الشرط: "اسم الزبون" IS NULL أو "اسم الزبون" = '').
+                    - check_temporary: إذا سأل عن الحجوزات المؤقتة أو المعلقة. (الشرط: "فترة الحجز" LIKE '%مؤقت%' في جدول "حجوزات1" أو status = 'pending' في جدول offers_history).
+                    - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
+                    
+                    قاعدة الـ SQL: أسماء الحقول العربية لجدول "حجوزات1" يجب حتماً وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون"). الحقول الإنجليزية تكتب عادية.
+                    
+                    يجب أن تطابق المخرجات الهيكل التالي تماماً:
                     {
-                        "intent": "نوع الطلب مثل استعلام أو عرض سعر",
-                        "extracted_sql": "استعلام الـ SQL المتوافق مع الجداول أعلاه",
-                        "spoken_response": "رد ترحيبي ذكي بالعامية للمدير يخبره بما وجدته",
-                        "package_details": "تفاصيل العرض إذا طلب تصميم عرض"
+                        "intent": "get_available / check_temporary / create_package",
+                        "confidence": 0.95,
+                        "extracted_sql": "استعلام SQL الصحيح هنا أو نص فارغ إذا لم يتطلب الأمر SQL",
+                        "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
+                        "spoken_response": "رد تفاعلي ذكي وموجز للمدير بالعامية العربية حول ما تم إنجازه"
                     }
                     """
                     
-                    # 4. تهيئة النموذج مع إجبار المخرجات لتكون JSON لمنع خطأ 400
+                    # استخدام نموذج السيرفر السريع والمستقر مع إجبار مخرجات JSON لمنع أخطاء 400
                     model = genai.GenerativeModel(
                         model_name="gemini-1.5-flash",
                         generation_config={"response_mime_type": "application/json"},
                         system_instruction=system_prompt
                     )
                     
-                    # 5. إرسال الطلب
+                    # إرسال طلب المدير
                     response = model.generate_content(user_query)
                     
-                    # 6. معالجة النتيجة بأمان
                     if response.text:
-                        parsed_data = json.loads(response.text)
+                        # تحويل النص المستلم إلى قاموس بايثون بأمان
+                        parsed_data = json.loads(response.text.strip())
                         
-                        # تخزين البيانات في الـ session
+                        # تخزين البيانات في الـ session لتنفيذ الـ SQL في بقية أجزاء النظام
                         st.session_state['ai_intent'] = parsed_data.get('intent')
                         st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                         st.session_state['ai_package_details'] = parsed_data.get('package_details')
                         
-                        # عرض النتائج للمستخدم
+                        # رد النظام الذكي المكتوب للمدير
                         st.success(parsed_data.get('spoken_response', 'تم فهم الأمر بنجاح.'))
+                        
+                        # عرض الـ SQL للتأكد من سلامته قبل التنفيذ
                         if st.session_state['ai_sql']:
                             st.code(st.session_state['ai_sql'], language="sql")
                     else:
-                        st.error("❌ لم يتمكن النموذج من توليد استجابة.")
+                        st.error("❌ لم يتمكن السيرفر من معالجة الطلب، حاول مرة أخرى.")
                         
+                except json.JSONDecodeError:
+                    st.error("⚠️ فشل النظام في تحليل استجابة الذكاء الاصطناعي (JSON Error).")
                 except Exception as e:
-                    st.error(f"⚠️ حدث خطأ أثناء الاتصال بـ Gemini: {e}")
+                    st.error(f"⚠️ حدث خطأ في المعالجة: {e}")
 
     st.divider()
-    # (باقي كود القائمة الرئيسية والإحصائيات كمية هي بدون تعديل...)
+    
+    # [باقي الكود الخاص بك دون أي تعديل لضمان عدم حدوث أخطاء جانبية]
+    user_icon = "👑" if is_admin() else "👤"
+    st.markdown(f"""
+    <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
+        <div style="font-size: 30px;">{user_icon}</div>
+        <div style="font-weight: bold;">{st.session_state.get('username', '')}</div>
+        <div style="font-size: 12px; opacity: 0.7;">{'مدير النظام' if is_admin() else 'موظف'}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    page = st.radio("📋 القائمة الرئيسية", [
+        "🏢 لوحات الشركات",
+        "📍 الأعمدة المتاحة",
+        "📊 Dashboard",
+        "📄 عرض سعر",
+        "📋 تقرير الجرد",
+        "📅 تقرير التوفر الشهري",
+        "🗺️ تقرير جميع المواقع",
+        "📐 تقرير تجميعي حسب الحجوم",
+        "⚙️ الإعدادات"
+    ], key="main_menu")
+    
+    st.divider()
+    
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
+    total_boards_sidebar = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
+    total_clients = cursor.fetchone()[0]
+    cursor.close()
+    
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
+    with col_s2:
+        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
+    
+    st.divider()
+    
+    if st.button("🚪 تسجيل الخروج", use_container_width=True):
+        st.session_state.auth = False
+        st.session_state.cart = {}
+        st.rerun()
 
 
 # ============================================================
