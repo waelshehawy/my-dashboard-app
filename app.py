@@ -326,26 +326,18 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     
     # قاموس لترجمة المعرف البرمجي إلى الاسم المعروض للمدير
-    page_titles = {
-        "companies_boards": "🏢 لوحات الشركات",
-        "ai_assistant": "🎙️ المساعد الذكي والتقارير",
-        "available_columns": "📍 الأعمدة المتاحة",
-        "dashboard": "📊 Dashboard",
-        "price_offer": "📄 عرض سعر",
-        "inventory_report": "📋 تقرير الجرد",
-        "monthly_availability": "📅 تقرير التوفر الشهري",
-        "all_locations": "🗺️ تقرير جميع المواقع",
-        "size_summary": "📐 تقرير تجميعي حسب الحجوم",
-        "settings": "⚙️ الإعدادات"
-    }
-
-    # الـ radio يتعامل داخلياً مع المفاتيح المستقرة (مثل "ai_assistant") لمنع أي NameError
-    st.radio(
-        "📋 القائمة الرئيسية", 
-        options=list(page_titles.keys()), 
-        format_func=lambda x: page_titles[x],
-        key="main_menu"
-    )
+st.radio("📋 القائمة الرئيسية", [
+        "🏢 لوحات الشركات",
+        "📍 الأعمدة المتاحة",
+        "📊 Dashboard",
+        "📄 عرض سعر",
+        "📋 تقرير الجرد",
+        "📅 تقرير التوفر الشهري",
+        "🗺️ تقرير جميع المواقع",
+        "📐 تقرير تجميعي حسب الحجوم",
+        "🎙️ المساعد الذكي والتقارير",  # الصفحة قبل الأخيرة هنا
+        "⚙️ الإعدادات"
+    ], key="main_menu")
 
 
     
