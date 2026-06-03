@@ -384,61 +384,53 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد استعلام SQL..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر المكتبة الرسمية..."):
             try:
-                # 1. الصق مفتاحك الجديد كاملاً هنا بين علامتي الاقتباس مباشرة
-                RAW_KEY = "AQ.Ab8RXXXXXXXXXX"  
-                GEMINI_API_KEY = RAW_KEY.strip()
+                import google.generativeai as genai
                 
-                # 2. الرابط المباشر والمستقر المربوط بمفتاحك النظيف
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"
+                # 1. تهيئة وإعداد المفتاح النظيف داخل المكتبة الرسمية
+                RAW_KEY = "AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"  # ضع مفتاحك هنا بدقة
+                genai.configure(api_key=RAW_KEY.strip())
                 
-                headers = {
-                    "Content-Type": "application/json"
-                }
-                
-                full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+                # 2. إعداد prompt النظام الموجه بدقة بالغة
+                system_instruction = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 
                 جداولك الحقيقية هي:
                 1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
                 2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
                 
                 يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
-                {{
+                {
                   "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
                   "confidence": 1.0,
                   "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
                   "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
-                }}
+                }"""
                 
-                طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
+                # 3. استدعاء النموذج المستقر والسريع عبر الـ SDK الرسمي
+                model = genai.GenerativeModel(
+                    model_name="gemini-1.5-flash",
+                    system_instruction=system_instruction,
+                    generation_config={"response_mime_type": "application/json"}
+                )
                 
-                payload = {
-                    "contents": [{
-                        "parts": [{"text": full_prompt}]
-                    }],
-                    "generationConfig": {
-                        "response_mime_type": "application/json"
-                    }
-                }
+                # إرسال طلب المدير
+                response = model.generate_content(user_query)
                 
-                # إرسال الطلب الصافي
-                response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
-                
-                if response.status_code == 200:
-                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
-                    parsed_data = json.loads(ai_result.strip())
+                if response.text:
+                    # تنظيف وتفكيك الـ JSON العائد من الموديل
+                    parsed_data = json.loads(response.text.strip())
                     
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 مبروك! تم التوثيق بنجاح وانطلق المساعد الذكي!")
+                    st.success("🟢 مبروك! عبر التوثيق الرسمي وانطلق المساعد الذكي!")
                     st.rerun()
                 else:
-                    st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
-                    st.info(f"تفاصيل الرد: {response.text}")
+                    st.error("❌ لم يتم توليد أي استجابة من الموديل، يرجى المحاولة مجدداً.")
+                    
             except Exception as e:
-                st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
+                st.error(f"⚠️ حدث خطأ أثناء المعالجة عبر الـ SDK: {e}")
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
