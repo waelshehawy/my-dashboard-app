@@ -384,14 +384,14 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر المستودع السحابي المستقر..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد استعلام SQL..."):
             try:
-                # 1. المفتاح الصافي الخاص بك (تأكد من خلوه من أي مسافات)
-                RAW_KEY = "AQ.xxxxxxxxxxxx"  
+                # 1. الصق مفتاحك الجديد كاملاً هنا بين علامتي الاقتباس مباشرة
+                RAW_KEY = "AQ.Ab8RXXXXXXXXXX"  
                 GEMINI_API_KEY = RAW_KEY.strip()
                 
-                # 2. التوجه إلى النموذج الاحترافي المستقر الذي يدعم مفاتيح الـ Cloud مباشرة
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"
+                # 2. الرابط المباشر والمستقر المربوط بمفتاحك النظيف
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"
                 
                 headers = {
                     "Content-Type": "application/json"
@@ -422,6 +422,7 @@ if user_query:
                     }
                 }
                 
+                # إرسال الطلب الصافي
                 response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
                 
                 if response.status_code == 200:
@@ -431,7 +432,7 @@ if user_query:
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم الاتصال بنجاح وفتح بوابة المساعد الذكي!")
+                    st.success("🟢 مبروك! تم التوثيق بنجاح وانطلق المساعد الذكي!")
                     st.rerun()
                 else:
                     st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
