@@ -1464,14 +1464,82 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    # 1. صندوق إدخال الأمر للمدير في منتصف الصفحة
+    # --- 🎙️ الجيل الجديد: تفعيل المايك البرمجي عبر المتصفح ---
+    import streamlit.components.v1 as components
+    
+    # كود جافاسكريبت مخفي ومستقر لفتح مايك المتصفح وتحويل الصوت إلى نص بدقة عالية
+    st.markdown("### 🗣️ الإدخال الصوتي الفوري:")
+    st.caption("اضغط على زر (ابدأ التحدث) وتكلم بالعامية، وسيتم كتابة أمرك بالأسفل تلقائياً.")
+    
+    st_speech_html = """
+    <div style="text-align: right; direction: rtl;">
+        <button id="mic-btn" style="background-color: #667eea; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;">
+            🎙️ ابدأ التحدث بالصوت الآن...
+        </button>
+        <p id="mic-status" style="color: #a0a0a0; font-size: 12px; margin-top: 5px;">الميكروفون مغلق</p>
+    </div>
+
+    <script>
+        const micBtn = document.getElementById('mic-btn');
+        const micStatus = document.getElementById('mic-status');
+        
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
+            
+            recognition.lang = 'ar-SY'; // تعيين اللهجة العربية الشامية/المحيطة لتفهم العامية بدقة
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            micBtn.onclick = function() {
+                recognition.start();
+                micBtn.style.backgroundColor = '#e53e3e';
+                micBtn.innerText = '🛑 جاري الاستماع صوتياً... تحدث الآن';
+                micStatus.innerText = 'الميكروفون نشط ويستمع...';
+            };
+
+            recognition.onresult = function(event) {
+                const speechToText = event.results[0][0].confidence > 0.4 ? event.results[0][0].transcript : '';
+                micBtn.style.backgroundColor = '#667eea';
+                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+                micStatus.innerText = 'تم تحويل الصوت بنجاح!';
+                
+                // تمرير النص المولد من الصوت إلى صندوق بايثون في Streamlit
+                if (speechToText) {
+                    window.parent.postMessage({
+                        type: 'streamlit:setComponentValue',
+                        value: speechToText
+                    }, '*');
+                }
+            };
+
+            recognition.onerror = function(event) {
+                micBtn.style.backgroundColor = '#667eea';
+                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+                micStatus.innerText = 'حدث خطأ في التقاط الصوت: ' + event.error;
+            };
+            
+            recognition.onend = function() {
+                micBtn.style.backgroundColor = '#667eea';
+                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
+            };
+        } else {
+            micStatus.innerText = 'عذراً، متصفحك الحالي لا يدعم ميزة التعرف على الصوت.';
+        }
+    </script>
+    """
+    
+    # عرض مكون التقاط الصوت الفوري وتخزين النص الناتج منه
+    audio_text_output = components.html(st_speech_html, height=80)
+    
+    # 2. صندوق إدخال الأمر للمدير (يستقبل تلقائياً مخرجات المايك أو الكتابة اليدوية)
     user_query = st.text_input(
-        label="أدخل أمر الإدارة هنا (يدعم الإملاء الصوتي من الجوال):",
+        label="أمر الإدارة الحالي:",
         placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
         key="page_ai_query"
     )
 
-    # 2. زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
+    # زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
     if st.button("🧠 تحليل الطلب ومفاضلة العروض", type="primary", use_container_width=True):
         if not user_query:
             st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
@@ -1508,7 +1576,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             "confidence": 0.95,
                             "extracted_sql": "استعلام SQL الصحيح هنا أو نص فارغ إذا لم يتطلب الأمر SQL",
                             "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
-                            "spoken_response": "رد تفاعلي ذكي وموجز للمدير بالعامية العربية حول ما تم إنجازه"
+                            "spoken_response": "رد تفاعلي ذكي وموجز جداً وبسيط بالعامية العربية للمدير حول اللوحات التي وجدتها فقط بدون ذكر تفاصيل الأكواد الفنية"
                         }
                         """
                         
@@ -1524,107 +1592,55 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             import json
                             parsed_data = json.loads(response.text.strip())
                             
-                            # حفظ البيانات في الـ Session الخاص بالصفحة المستقلة لضمان بقائها بين النقرات
                             st.session_state['page_ai_intent'] = parsed_data.get('intent')
                             st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
                             st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                             st.session_state['page_ai_package_details'] = parsed_data.get('package_details')
                             
-                            # تصفير حالة التنفيذ السابقة لأن هذا طلب جديد تماماً
                             st.session_state['page_ai_executed_data'] = None
+                            
+                            # تفعيل النطق الصوتي للرد فقط فور الاستلام لمنع تكراره
+                            st.session_state['should_speak'] = True
                             st.rerun()
                         else:
                             st.error("❌ لم يتمكن الذكاء الاصطناعي من توليد استجابة.")
                     except Exception as e:
                         st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
 
-    # 3. عرض النتيجة التحليلية للمدير (إذا كانت موجودة في الذاكرة)
+    # 3. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
     if st.session_state.get('page_ai_sql'):
         st.divider()
-        st.success(st.session_state.get('page_ai_spoken', 'تم تحليل الطلب بنجاح.'))
+        spoken_text = st.session_state.get('page_ai_spoken', 'تم الفهم بنجاح.')
+        st.success(spoken_text)
+        
+        # --- 🔊 حقن كود النطق الصوتي عبر المتصفح (للرد فقط وليس للجدول) ---
+        if st.session_state.get('should_speak', False):
+            # كود جافاسكريبت خفيف لنطق الرد العامي بلهجة عربية واضحة للمدير فوراً
+            tts_html = f"""
+            <script>
+                if ('speechSynthesis' in window) {{
+                    window.speechSynthesis.cancel(); // إلغاء أي نطق سابق معلق
+                    const utterance = new SpeechSynthesisUtterance("{spoken_text}");
+                    utterance.lang = "ar-SA"; // قراءة النص باللغة العربية
+                    utterance.pitch = 1.0;
+                    utterance.rate = 1.0; // السرعة الطبيعية
+                    window.speechSynthesis.speak(utterance);
+                }}
+            </script>
+            """
+            components.html(tts_html, height=0, width=0)
+            # إغلاق ميزة النطق لكي لا ينطق مجدداً عند نقر أزرار التصدير
+            st.session_state['should_speak'] = False
         
         with st.expander("🛠️ عرض كود الاستعلام الفني المقترح (SQL)", expanded=False):
             st.code(st.session_state['page_ai_sql'], language="sql")
             
-        # 4. الأزرار المطلوبة: زر تنفيذ الاستعلام الفعلي بقاعدة البيانات
         col_exec, col_cancel = st.columns(2)
         with col_exec:
             if st.button("⚡ تنفيذ الاستعلام وجلب البيانات الفورية", type="secondary", use_container_width=True):
                 with st.spinner("🔄 جاري الاتصال بـ Supabase وجلب السجلات الحية..."):
                     try:
                         cursor = conn.cursor()
-                        cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc[0] for desc in cursor.description]
-                        data = cursor.fetchall()
-                        cursor.close()
-                        
-                        if data:
-                            import pandas as pd
-                            # حفظ جدول البيانات المقروء في الـ session لعرضه وضمان استقرار أزرار التحميل
-                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
-                        else:
-                            st.session_state['page_ai_executed_data'] = "EMPTY"
-                    except Exception as e:
-                        st.error(f"❌ خطأ أثناء تشغيل الـ SQL في قاعدة البيانات: {e}")
-                        st.session_state['page_ai_executed_data'] = None
-        
-        with col_cancel:
-            if st.button("🧹 تفريغ ومسح البحث الحالي", use_container_width=True):
-                st.session_state['page_ai_sql'] = None
-                st.session_state['page_ai_intent'] = None
-                st.session_state['page_ai_spoken'] = None
-                st.session_state['page_ai_executed_data'] = None
-                st.rerun()
-
-        # 5. عرض جدول البيانات وأزرار التصدير (Excel & Word) بناءً على ضغط زر التنفيذ
-        executed_res = st.session_state.get('page_ai_executed_data')
-        
-        if executed_res is not None:
-            if isinstance(executed_res, str) and executed_res == "EMPTY":
-                st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
-            elif not executed_res.empty:
-                st.markdown("### 📊 جدول البيانات المستخرج:")
-                st.dataframe(executed_res, use_container_width=True)
-                st.info(f"💡 تم العثور على {len(executed_res)} لوحة/سجل.")
-                
-                # أزرار التصدير تحت الجدول مباشرة
-                st.markdown("#### 📥 تصدير التقرير الفوري:")
-                col_excel, col_word = st.columns(2)
-                
-                # تصدير إكسل
-                with col_excel:
-                    import io
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                        executed_res.to_excel(writer, index=False, sheet_name='تقرير المساعد الذكي')
-                    excel_data = excel_buffer.getvalue()
-                    
-                    st.download_button(
-                        label="📥 تحميل كملف Excel (.xlsx)",
-                        data=excel_data,
-                        file_name="تقرير_لوحات_الاعلان.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                
-                # تصدير وورد
-                with col_word:
-                    from docx import Document
-                    from docx.shared import Inches, Pt
-                    from docx.enum.text import WD_ALIGN_PARAGRAPH
-                    
-                    doc = Document()
-                    # ضبط ترويسة التقرير العربي
-                    title = doc.add_paragraph()
-                    title_run = title.add_run("تقرير نظام PreView Ads المولد ذكياً")
-                    title_run.font.size = Pt(18)
-                    title_run.font.bold = True
-                    title.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                    
-                    doc.add_paragraph(f"الأمر الموجه: {user_query}").alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                    
-                    # بناء جدول الوورد ديناميكياً
-                    table = doc.add_table(rows=1, cols=len(executed_res.columns))
 
 
 
