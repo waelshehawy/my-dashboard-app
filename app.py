@@ -296,24 +296,35 @@ if not st.session_state.auth:
 # ============================================================
 # الاتصال بقاعدة البيانات بعد تسجيل الدخول
 # ============================================================
+import os
+import json
+import requests
+import io
+import pandas as pd
+import psycopg2
+import streamlit as st
+import docx  # تأكد من إضافة python-docx في ملف requirements.txt
 
+def get_connection():
+    """اتصال مباشر بـ Supabase PostgreSQL"""
+    return psycopg2.connect(
+        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
+        port=os.environ.get("SUPABASE_PORT", "6543"),
+        database=os.environ.get("SUPABASE_DB", "postgres"),
+        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
+        password=os.environ.get("SUPABASE_PASSWORD", "xxxxxxxxx"),
+        sslmode="require",
+        connect_timeout=30
+    )
+
+# ============================================================
+# الاتصال بقاعدة البيانات بعد تسجيل الدخول
+# ============================================================
 conn = get_connection()
 
 # ============================================================
-# الشريط الجانبي
+# الشريط الجانبي (Sidebar)
 # ============================================================
-
-import streamlit as st
-import io
-import json
-import requests
-import speech_recognition as sr
-from streamlit_mic_recorder import mic_recorder
-
-# ============================================================
-# الشريط الجانبي الكامل والمصحح 100%
-# ============================================================
-
 with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
@@ -371,6 +382,150 @@ with st.sidebar:
         st.session_state.cart = {}
         st.rerun()
 
+    # 🎙️ إضافة قسم المساعد الذكي الصوتي والنصي داخل الشريط الجانبي بسلام وأمان
+    st.divider()
+    st.markdown("<p style='text-align: right; font-weight: bold; color: #764ba2;'>🎙️ المساعد الذكي الفوري:</p>", unsafe_allow_html=True)
+    
+    user_query = st.text_input(
+        label="أمر المدير",
+        placeholder="تحدث أو اكتب بالعامية هنا...",
+        label_visibility="collapsed",
+        key="ai_sidebar_query_input"
+    )
+    
+    if user_query:
+        with st.spinner("🧠 جاري ترجمة وتحليل الطلب ومفاضلة العروض..."):
+            try:
+                # يفضل تخزين المفتاح في st.secrets بأمان، وإذا لم يوجد نضعه يدوياً هنا
+                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاح_جوجل_الجديد_هنا"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                
+                payload = {
+                    "contents": [{"parts": [{"text": user_query}]}],
+                    "systemInstruction": {
+                        "parts": [{
+                            "text": """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+                            جداولك الحقيقية هي:
+                            1. "حجوزات1": يحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
+                            2. "offers_history": يحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
+                            يجب أن ترد دائماً بصيغة JSON نقي يحتوي على الحقول التالية فقط وبدون علامات دوت كوم أو كود برمجية زائدة خارج الـ JSON:
+                            {
+                              "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
+                              "confidence": 1.0,
+                              "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
+                              "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية الفصحى أو العامية المهذبة"
+                            }"""
+                        }]
+                    }
+                }
+                
+                response = requests.post(gemini_url, json=payload, timeout=10)
+                if response.status_code == 200:
+                    ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
+                    clean_json = ai_result.replace("```json", "").replace("```", "").strip()
+                    parsed_data = json.loads(clean_json)
+                    
+                    # حفظ النتائج الذكية في الـ Session State لاستدعائها في الصفحة الرئيسية للتحكم والتنفيذ
+                    st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
+                    st.session_state['ai_intent'] = parsed_data.get('intent')
+                    st.session_state['spoken_response'] = parsed_data.get('spoken_response')
+                    st.success("🟢 تم فهم الطلب وصياغة الاستعلام بنجاح!")
+                else:
+                    st.error(f"❌ لم يستجب خادم الذكاء الاصطناعي. كود: {response.status_code}")
+            except Exception as e:
+                st.error(f"⚠️ خطأ في معالجة الطلب: {e}")
+
+# ============================================================
+# منطقة العمل الرئيسية والتنفيذ (تظهر في وسط الصفحة المحددة)
+# ============================================================
+
+# التحقق من وجود استعلام جاهز ومخزن للمراجعة والتنفيذ من قِبل المدير
+if 'ai_sql' in st.session_state and st.session_state['ai_sql']:
+    st.markdown("### 🔍 صندوق مراجعة وتأكيد استعلام المساعد الذكي")
+    if 'spoken_response' in st.session_state:
+        st.info(f"💡 **المساعد الذكي يقول:** {st.session_state['spoken_response']}")
+    
+    # صندوق نصي يتيح للمدير فحص الـ SQL وتعديله بنفسه بحرية تامة قبل تشغيله
+    editable_sql = st.text_area(
+        "كود الـ SQL المستخرج (يمكنك التعديل عليه):", 
+        value=st.session_state['ai_sql'], 
+        height=120
+    )
+    
+    # تقسيم أزرار الإجراءات
+    col_btn1, col_btn2 = st.columns([3, 1])
+    with col_btn1:
+        execute_click = st.button("🚀 تنفيذ الاستعلام وجلب البيانات الحية من Supabase", use_container_width=True)
+    with col_btn2:
+        if st.button("🗑️ مسح الطلب", use_container_width=True):
+            st.session_state['ai_sql'] = None
+            st.session_state['ai_intent'] = None
+            st.session_state['spoken_response'] = None
+            st.rerun()
+
+    # عند ضغط زر التنفيذ الفعلي بطلب من المدير
+    if execute_click:
+        with st.spinner("جاري الاتصال بـ Supabase وقراءة السجلات الحالية..."):
+            try:
+                # الاتصال وجلب البيانات عبر دالة الاتصال المباشرة المرفقة
+                active_conn = get_connection()
+                df_results = pd.read_sql_query(editable_sql, active_conn)
+                active_conn.close() # إغلاق الاتصال فوراً
+                
+                if df_results.empty:
+                    st.warning("⚠️ نفذ الاستعلام بنجاح، ولكن قاعدة البيانات لا تحتوي على سجلات مطابقة لهذا الفرز.")
+                else:
+                    st.success(f"📊 تم جلب {len(df_results)} سجل مطبق ومحدّث بنجاح!")
+                    st.dataframe(df_results, use_container_width=True) # العرض المباشر التفاعلي
+                    
+                    intent = st.session_state.get('ai_intent', 'استعلام_بيانات')
+                    
+                    # 📄 الحالة الأولى: نية المدير هي عمل "عرض سعر" -> تصدير ملف Word منسق
+                    if "عرض" in intent or "سعر" in intent:
+                        st.markdown("#### 📥 مستندات جاهزة للتحميل الفوري:")
+                        doc = docx.Document()
+                        doc.add_heading('عرض سعر لوحات إعلانية - PreView Ads', level=0)
+                        doc.add_paragraph('بناءً على طلبكم الكريم، نرفق لكم أدناه قائمة اللوحات والأسعار المستخرجة تفصيلياً من النظام:')
+                        
+                        # إنشاء الجدول وتعبئته بالسجلات داخل ملف الوورد
+                        table = doc.add_table(rows=1, cols=len(df_results.columns))
+                        hdr_cells = table.rows[0].cells
+                        for i, col_name in enumerate(df_results.columns):
+                            hdr_cells[i].text = str(col_name)
+                        for index, row in df_results.iterrows():
+                            row_cells = table.add_row().cells
+                            for i, item in enumerate(row):
+                                row_cells[i].text = str(item)
+                                
+                        word_buffer = io.BytesIO()
+                        doc.save(word_buffer)
+                        word_buffer.seek(0)
+                        
+                        st.download_button(
+                            label="تحميل ملف عرض السعر المنسق (Word DOCX) 📄",
+                            data=word_buffer,
+                            file_name="عرض_سعر_preview_ads.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                    
+                    # 📊 الحالة الثانية: استعلام بيانات عام وجرد ومواقع -> تصدير ملف إكسيل XLSX
+                    else:
+                        st.markdown("#### 📥 تقارير جاهزة للتحميل الفوري:")
+                        excel_buffer = io.BytesIO()
+                        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                            df_results.to_excel(writer, index=False, sheet_name='بيانات التقرير المستخرج')
+                        excel_buffer.seek(0)
+                        
+                        st.download_button(
+                            label="تحميل التقرير الكامل المستخرج (Excel XLSX) 📊",
+                            data=excel_buffer,
+                            file_name="تقرير_جرد_بيانات_preview_ads.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+            except Exception as database_error:
+                st.error(f"❌ خطأ أثناء تشغيل وتمرير الـ SQL بقاعدة البيانات: {database_error}")
     # --------------------------------------------------------
     # 🎙️ قسم المساعد الذكي المعزول والمحمي تماماً من أخطاء الـ Syntax
     # --------------------------------------------------------
