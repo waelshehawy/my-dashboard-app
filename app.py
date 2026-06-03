@@ -1634,10 +1634,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             """
             # تشغيل المكون المخفي في الصفحة لتفعيل الصوت فوراً
             components.html(tts_html, height=0, width=0)
-            st.session_state['should_speak'] = False
-
-            """
-            components.html(tts_html, height=0, width=0)
             # إغلاق ميزة النطق لكي لا ينطق مجدداً عند نقر أزرار التصدير
             st.session_state['should_speak'] = False
         
