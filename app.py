@@ -296,110 +296,70 @@ if not st.session_state.auth:
 # ============================================================
 # الاتصال بقاعدة البيانات بعد تسجيل الدخول
 # ============================================================
-# ============================================================
-# 1. المكتبات والاستيراد (المعيار القياسي في الأعلى دائماً)
-# ============================================================
-import os
-import json
-import io
-import requests  
-import pandas as pd
-import psycopg2
-import docx  
-import streamlit as st
-import streamlit.components.v1 as components
 
-# إعداد الصفحة الأساسي
-st.set_page_config(page_title="PreView Ads - Management", page_icon="📊", layout="wide")
-
-# تهيئة متغيرات الجلسة (Session State)
-if 'auth' not in st.session_state:
-    st.session_state.auth = False
-if 'cart' not in st.session_state:
-    st.session_state.cart = {}
-if 'ai_sql' not in st.session_state:
-    st.session_state['ai_sql'] = None
-if 'ai_intent' not in st.session_state:
-    st.session_state['ai_intent'] = None
-if 'spoken_response' not in st.session_state:
-    st.session_state['spoken_response'] = None
-if 'username' not in st.session_state:
-    st.session_state['username'] = ''
-
-</div>"
+conn = get_connection()
 
 # ============================================================
-# 🔒 صفحة تسجيل الدخول الحديثة عبر بوابة Google HTML
+# الشريط الجانبي
 # ============================================================
-if not st.session_state.auth:
-    # تصميم الواجهة الأنيقة خلف المكون
+
+with st.sidebar:
     st.markdown("""
-    <div style="display: flex; justify-content: center; align-items: center; margin-top: 5vh;">
-        <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 30px; padding: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
-            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
-                <span style="font-size: 40px;">🎯</span>
-            </div>
-            <h1 style="color: white; font-family: sans-serif;">PreView Ads</h1>
-            <p style="color: rgba(255,255,255,0.7); font-family: sans-serif;">نظام إدارة الإعلانات الذكي</p>
-            <p style="color: rgba(255,255,255,0.5); font-size: 14px; font-family: sans-serif; margin-bottom: 20px;">يرجى تسجيل الدخول عبر بوابة جوجل المعتمدة:</p>
+    <div style="text-align: center; padding: 20px 0;">
+        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+            <span style="font-size: 40px;">🎯</span>
         </div>
+        <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
+        <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # قراءة معرف جوجل بأمان من الـ Secrets
-    if "GOOGLE_CLIENT_ID" in st.secrets:
-        CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"].strip()
-    else:
-        st.error("⚠️ خطأ أمني: GOOGLE_CLIENT_ID غير معرف في إعدادات السيرفر (Secrets)!")
-        st.stop()
-
-    # 🛠️ حقن كود الـ HTML والجافا سكريبت الحديث الخاص بجوجل لعام 2026
-    google_sign_in_html = f"""
-    <div dir="rtl" style="font-family: sans-serif; text-align: center;">
-        <script src="https://accounts.google.com/gsi/client" async defer></script>
-        
-        <script>
-            function handleCredentialResponse(response) {{
-                const idToken = response.credential;
-                // إرسال التوكن الآمن المولد إلى Streamlit
-                window.parent.postMessage({{
-                    type: 'streamlit:setComponentValue',
-                    value: idToken
-                }}, '*');
-            }}
-        </script>
-
-        <div id="g_id_onload"
-             data-client_id="{CLIENT_ID}"
-             data-callback="handleCredentialResponse"
-             data-auto_prompt="false">
-        </div>
-        
-        <div style="display: flex; justify-content: center; margin-top: 10px;">
-            <div class="g_id_signin"
-                 data-type="standard"
-                 data-size="large"
-                 data-theme="filled_blue"
-                 data-text="signin_with"
-                 data-shape="pill"
-                 data-logo_alignment="left">
-            </div>
-        </div>
+    st.divider()
+    
+    user_icon = "👑" if is_admin() else "👤"
+    st.markdown(f"""
+    <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; margin: 10px 0;">
+        <div style="font-size: 30px;">{user_icon}</div>
+        <div style="font-weight: bold;">{st.session_state.get('username', '')}</div>
+        <div style="font-size: 12px; opacity: 0.7;">{'مدير النظام' if is_admin() else 'موظف'}</div>
     </div>
-    """
-
-    # عرض الزر المدمج تحت لوحة التصميم
-    token_received = components.html(google_sign_in_html, height=100, scrolling=False)
-
-    if token_received:
-        # بمجرد ضغط الزر واستلام التوكن، نفتح البوابة ونثبت البيانات الافتراضية للمدير
-        st.session_state.auth = True
-        st.session_state.role = 'admin'  # افتراضي للمدير، يمكنك ربطها بجدول فحص لاحقاً
-        st.session_state.username = "مدير النظام الرقمي"
-        st.success("🟢 تم التوثيق بنجاح عبر حساب Google!")
+    """, unsafe_allow_html=True)
+    
+    page = st.radio("📋 القائمة الرئيسية", [
+        "🏢 لوحات الشركات",
+        "📍 الأعمدة المتاحة",
+        "📊 Dashboard",
+        "📄 عرض سعر",
+        "📋 تقرير الجرد",
+        "📅 تقرير التوفر الشهري",
+        "🗺️ تقرير جميع المواقع",
+        "📐 تقرير تجميعي حسب الحجوم",
+        "⚙️ الإعدادات"
+    ], key="main_menu")
+    
+    st.divider()
+    
+    # إحصائيات سريعة
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
+    total_boards_sidebar = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
+    total_clients = cursor.fetchone()[0]
+    cursor.close()
+    
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
+    with col_s2:
+        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
+    
+    st.divider()
+    
+    if st.button("🚪 تسجيل الخروج", use_container_width=True):
+        st.session_state.auth = False
+        st.session_state.cart = {}
         st.rerun()
-        
-    st.stop()
+
 
 # ============================================================
 # 📊 لوحة التحكم الرئيسية (تفتح فقط بعد تسجيل الدخول الناجح)
