@@ -305,17 +305,6 @@ import psycopg2
 import streamlit as st
 import docx  # تأكد من إضافة python-docx في ملف requirements.txt
 
-def get_connection():
-    """اتصال مباشر بـ Supabase PostgreSQL"""
-    return psycopg2.connect(
-        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
-        port=os.environ.get("SUPABASE_PORT", "6543"),
-        database=os.environ.get("SUPABASE_DB", "postgres"),
-        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
-        password=os.environ.get("SUPABASE_PASSWORD", "xxxxxxxxx"),
-        sslmode="require",
-        connect_timeout=30
-    )
 
 # ============================================================
 # الاتصال بقاعدة البيانات بعد تسجيل الدخول
