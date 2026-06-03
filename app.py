@@ -384,12 +384,13 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر الجيل الجديد Gemini 3.5..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر المستند المستقر..."):
             try:
-                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
+                # تأكد أن مفتاحك الحقيقي مكتوب هنا تماماً
+                GEMINI_API_KEY = "AIzaSy...".strip() 
                 
-                # 🟢 الرابط المحدث والمدعوم رسمياً لنموذج الجيل الجديد 3.5
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
+                # 🟢 العودة للرابط المستقر الذي يقبل الـ API Key مباشرة وبدون خطأ 401
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                 
                 full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 
@@ -407,7 +408,6 @@ if user_query:
                 
                 طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
                 
-                # الهيكل القياسي المتوافق تماماً مع بروتوكول v1beta والنموذج الحديث
                 payload = {
                     "contents": [{
                         "parts": [{"text": full_prompt}]
@@ -426,11 +426,11 @@ if user_query:
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم فهم الطلب وتوليد الاستعلام عبر Gemini 3.5 بنجاح!")
+                    st.success("🟢 تم فهم الطلب وصياغة الاستعلام بنجاح!")
                     st.rerun()
                 else:
                     st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
-                    st.info(f"تفاصيل الرد من جوجل: {response.text}")
+                    st.info(f"تفاصيل الرد: {response.text}")
             except Exception as e:
                 st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
 # ============================================================
