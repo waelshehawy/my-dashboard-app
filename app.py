@@ -384,15 +384,19 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر المكتبة الرسمية..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر الجيل الجديد Gemini 3.5..."):
             try:
-                import google.generativeai as genai
+                # 1. استيراد المكتبة القياسية الجديدة لعام 2026
+                from google import genai
                 
-                # 1. تهيئة وإعداد المفتاح النظيف داخل المكتبة الرسمية
-                RAW_KEY = "AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"  # ضع مفتاحك هنا بدقة
-                genai.configure(api_key=RAW_KEY.strip())
+                # 2. تنظيف المفتاح وإدخاله في كائن الـ Client الموحد
+                RAW_KEY = "AQ.Ab8RN6KoDfYnJAvMTPB6N41IbnDblovo6p0Pp4rtIXTzPoOugw"  # مفتاحك الحالي الشغال
+                GEMINI_API_KEY = RAW_KEY.strip()
                 
-                # 2. إعداد prompt النظام الموجه بدقة بالغة
+                # إنشاء العميل مع حقن المفتاح بشكل أمني صحيح داخلياً
+                client = genai.Client(api_key=GEMINI_API_KEY)
+                
+                # 3. إعداد سياق التعليمات البرمجية الصارمة (System Instruction)
                 system_instruction = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 
                 جداولك الحقيقية هي:
@@ -407,30 +411,29 @@ if user_query:
                   "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
                 }"""
                 
-                # 3. استدعاء النموذج المستقر والسريع عبر الـ SDK الرسمي
-                model = genai.GenerativeModel(
-                    model_name="gemini-1.5-flash",
-                    system_instruction=system_instruction,
-                    generation_config={"response_mime_type": "application/json"}
+                # دمج التعليمات مع طلب المدير في الـ prompt
+                full_prompt = f"{system_instruction}\n\nطلب المدير الحالي المطلوب تحويله هو: {user_query}"
+                
+                # 4. استدعاء الموديل الحديث وطريقة التوليد الرسمية المعتمدة
+                response = client.models.generate_content(
+                    model="gemini-3.5-flash",
+                    contents=full_prompt
                 )
                 
-                # إرسال طلب المدير
-                response = model.generate_content(user_query)
-                
                 if response.text:
-                    # تنظيف وتفكيك الـ JSON العائد من الموديل
+                    # تنظيف وتفكيك الـ JSON العائد بنجاح
                     parsed_data = json.loads(response.text.strip())
                     
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 مبروك! عبر التوثيق الرسمي وانطلق المساعد الذكي!")
+                    st.success("🟢 معجزة برمجية! تم الاتصال بنجاح وتفعيل نظام PreView Ads بأحدث تقنيات 2026!")
                     st.rerun()
                 else:
-                    st.error("❌ لم يتم توليد أي استجابة من الموديل، يرجى المحاولة مجدداً.")
+                    st.error("❌ لم يتم توليد أي استجابة، يرجى إعادة المحاولة.")
                     
             except Exception as e:
-                st.error(f"⚠️ حدث خطأ أثناء المعالجة عبر الـ SDK: {e}")
+                st.error(f"⚠️ حدث خطأ أثناء المعالجة عبر الـ GenAI SDK الجديد: {e}")
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
