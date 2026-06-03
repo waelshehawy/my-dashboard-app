@@ -384,14 +384,13 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر الجيل الجديد Gemini 3.5..."):
             try:
                 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_الحقيقي_هنا"
                 
-                # الرابط الرسمي المباشر والمستقر
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                # 🟢 الرابط المحدث والمدعوم رسمياً لنموذج الجيل الجديد 3.5
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
                 
-                # دمج التعليمات الصارمة والطلب في سياق نصي واحد متكامل لمنع الخطأ 400 كلياً
                 full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
                 
                 جداولك الحقيقية هي:
@@ -408,13 +407,13 @@ if user_query:
                 
                 طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
                 
-                # إرسال المحتوى وضبط صياغة الاستجابة لتكون JSON
+                # الهيكل القياسي المتوافق تماماً مع بروتوكول v1beta والنموذج الحديث
                 payload = {
                     "contents": [{
                         "parts": [{"text": full_prompt}]
                     }],
                     "generationConfig": {
-                        "responseMimeType": "application/json"
+                        "response_mime_type": "application/json"
                     }
                 }
                 
@@ -427,10 +426,11 @@ if user_query:
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم فهم الطلب وصياغة الاستعلام بنجاح!")
+                    st.success("🟢 تم فهم الطلب وتوليد الاستعلام عبر Gemini 3.5 بنجاح!")
+                    st.rerun()
                 else:
                     st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
-                    st.info("تأكد من صحة الـ API Key الخاص بك أو طريقة تخزينه في الـ Secrets.")
+                    st.info(f"تفاصيل الرد من جوجل: {response.text}")
             except Exception as e:
                 st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
 # ============================================================
