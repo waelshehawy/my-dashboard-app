@@ -597,7 +597,7 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # عرض الصفحات
 # ============================================================
 
-if page == "🏢 لوحات الشركات":
+elif page == "🏢 لوحات الشركات":
     st.title("🏢 لوحات الشركات المعلنة")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
