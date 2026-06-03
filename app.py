@@ -384,16 +384,15 @@ with st.sidebar:
     )
     
 if user_query:
-        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام..."):
+        with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام عبر الجيل الجديد Gemini 3.5..."):
             try:
-                # 1. تنظيف المفتاح تماماً من أي فراغات
-                RAW_KEY = "AIzaSy..."  # ضع مفتاحك الحقيقي هنا
+                # 1. المفتاح الصافي بدون أي مسافات أو أقواس
+                RAW_KEY = "AQ.xxxxxxxxxxxx"  # مفتاحك الحالي الشغال
                 GEMINI_API_KEY = RAW_KEY.strip()
                 
-                # 2. تمرير المفتاح في الرابط (وهي الطريقة الرسمية المضمونة لـ API Key)
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"
+                # 2. التوجه للنموذج المدعوم والمتاح حالياً في v1beta لمنع خطأ 404
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"
                 
-                # 3. الـ Headers النظيفة تماماً بدون سطر Bearer المسبب للـ 401
                 headers = {
                     "Content-Type": "application/json"
                 }
@@ -423,7 +422,7 @@ if user_query:
                     }
                 }
                 
-                # إرسال الطلب بالصيغة الصافية
+                # إرسال الطلب
                 response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
                 
                 if response.status_code == 200:
@@ -433,7 +432,7 @@ if user_query:
                     st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                     st.session_state['ai_intent'] = parsed_data.get('intent')
                     st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                    st.success("🟢 تم الاتصال بنجاح وعاد المساعد الذكي للعمل!")
+                    st.success("🟢 تم الاتصال بنجاح وفتح بوابة الذكاء الاصطناعي!")
                     st.rerun()
                 else:
                     st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
