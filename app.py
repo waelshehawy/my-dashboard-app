@@ -391,7 +391,7 @@ if user_query:
                 
                 # 1. استدعاء المفتاح بأمان من ملف السيرفر المخفي (Secrets) دون أن يظهر في الكود
                 if "GEMINI_KEY" in st.secrets:
-                    GEMINI_API_KEY = st.secrets["AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"].strip()
+                    GEMINI_API_KEY = st.secrets["GEMINI_KEY"].strip()
                 else:
                     st.error("⚠️ خطأ أمني: مفتاح الـ API غير معرف في إعدادات السيرفر (Secrets)!")
                     st.stop()
