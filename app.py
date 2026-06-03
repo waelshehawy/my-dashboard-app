@@ -386,7 +386,6 @@ with st.sidebar:
 # 🟢 تجهيز المتغيرات في الأعلى لتفادي أي خطأ مسافات (Indentation)
 gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={st.secrets.get('GEMINI_KEY', '').strip()}" if "GEMINI_KEY" in st.secrets else ""
 
-# 🟢 الكود الكبير والشامل للـ Prompt يوضع هنا في الخارج بأمان
 full_prompt_template = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
 
 جداولك الحقيقية هي:
@@ -404,33 +403,27 @@ full_prompt_template = """أنت مساعد نظام PreView Ads لإدارة ا
 طلب المدير الحالي المطلوب تحويله هو: {query}"""
 
 
-# ============================================================
-# هنا يبدأ كودك الأصلي كما هو، فقط نقوم بحقن المتغيرات داخله
-# ============================================================
 if user_query:
     with st.spinner("🧠 جاري معالجة طلب المدير عبر بيئة السيرفر الآمنة..."):
         try:
-            # 1. دمج طلب المدير الحالي داخل الـ Prompt الكبير
             full_prompt = full_prompt_template.format(query=user_query)
             
             headers = {
                 "Content-Type": "application/json"
             }
             
-            # 2. إرسال الـ Payload بالتنسيق المستقر الجديد المحدث لعام 2026
+            # التعديل المصحح هنا:
             payload = {
                 "contents": [{
                     "parts": [{"text": full_prompt}]
                 }],
-                "generationConfig": {
-                    "responseMimeType": "application/json"
+                "generation_config": {
+                    "response_mime_type": "application/json"
                 }
             }
             
-            # 3. إرسال الطلب عبر الرابط الخارجي الجاهز
             response = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
             
-            # 🟢 هنا يكمل كود الـ try القديم والكامل الخاص بك لترتيب الـ Session State:
             if response.status_code == 200:
                 ai_result = response.json()['candidates'][0]['content']['parts'][0]['text']
                 parsed_data = json.loads(ai_result.strip())
@@ -438,7 +431,7 @@ if user_query:
                 st.session_state['ai_sql'] = parsed_data.get('extracted_sql')
                 st.session_state['ai_intent'] = parsed_data.get('intent')
                 st.session_state['spoken_response'] = parsed_data.get('spoken_response')
-                st.success("🟢 نجاح باهر وأمان مطلق! تم التوثيق وتشغيل المساعد الذكي!")
+                st.success("🟢 نجاح باهر وأمان مطلق! تم تشغيل المساعد الذكي!")
                 st.rerun()
             else:
                 st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
