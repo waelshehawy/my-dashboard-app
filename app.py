@@ -383,32 +383,36 @@ with st.sidebar:
         key="ai_sidebar_query_input"
     )
     
-    if user_query:
+if user_query:
         with st.spinner("🧠 جاري تحليل الطلب وتوليد الاستعلام..."):
             try:
-                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
+                GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاحك_الحقيقي_هنا"
                 
-                # استخدام الرابط الرسمي لنموذج v1beta المستقر والمباشر
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key= AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q  "
+                # الرابط الرسمي المباشر والمستقر
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                 
-                system_prompt = """أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+                # دمج التعليمات الصارمة والطلب في سياق نصي واحد متكامل لمنع الخطأ 400 كلياً
+                full_prompt = f"""أنت مساعد نظام PreView Ads لإدارة اللوحات الإعلانية. مهمتك تحويل طلب المدير بالعامية إلى استعلام SQL لـ PostgreSQL على Supabase.
+                
                 جداولك الحقيقية هي:
                 1. "حجوزات1" ويحتوي على الحقول ("رقم الححز", "اسم الزبون", "رقم اللوحة", "المحافظة", "فترة الحجز", "العام", "أجور عرض"). الحقول العربية يجب وضعها بين اقتباس مزدوج دائماً مثل "اسم الزبون".
                 2. "offers_history" ويحتوي على حقول إنجليزية (id, client_name, offer_date, status, cart_json).
-                يجب أن ترد دائماً بصيغة JSON نقي يحتوي على الحقول التالية فقط:
-                {
+                
+                يجب أن ترد دائماً بصيغة JSON نقي ومغلق يحتوي على الحقول التالية فقط وبدون أي علامات كود زائدة:
+                {{
                   "intent": "نوع النية إما 'عرض_سعر' أو 'استعلام_بيانات'",
                   "confidence": 1.0,
                   "extracted_sql": "استعلام SQL الصحيح هنا مع الاقتباسات المزدوجة للحقول العربية وجدول حجوزات1",
                   "spoken_response": "ردك الذكي واللبق على المدير باللغة العربية"
-                }"""
+                }}
                 
-                # الهيكل القياسي الذي يضمن استقبال الـ System Instructions وتفعيل وضع الـ JSON النقي
+                طلب المدير الحالي المطلوب تحويله هو: {user_query}"""
+                
+                # إرسال المحتوى وضبط صياغة الاستجابة لتكون JSON
                 payload = {
-                    "contents": [{"parts": [{"text": user_query}]}],
-                    "systemInstruction": {
-                        "parts": [{"text": system_prompt}]
-                    },
+                    "contents": [{
+                        "parts": [{"text": full_prompt}]
+                    }],
                     "generationConfig": {
                         "responseMimeType": "application/json"
                     }
@@ -426,9 +430,9 @@ with st.sidebar:
                     st.success("🟢 تم فهم الطلب وصياغة الاستعلام بنجاح!")
                 else:
                     st.error(f"❌ خطأ في السيرفر. كود الاستجابة: {response.status_code}")
+                    st.info("تأكد من صحة الـ API Key الخاص بك أو طريقة تخزينه في الـ Secrets.")
             except Exception as e:
                 st.error(f"⚠️ حدث خطأ أثناء المعالجة المباشرة: {e}")
-
 # ============================================================
 # منطقة العمل الرئيسية والتنفيذ (تصدير ملفات الوورد والإكسيل)
 # ============================================================
