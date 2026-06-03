@@ -1611,7 +1611,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     if st.session_state.get('page_ai_sql'):
         st.divider()
         # عرض الرد المكتوب المعتمد في كودك
-        spoken_text = parsed_data.get('spoken_response', 'تم معالجة الطلب.')
+        spoken_text = st.session_state.get('page_ai_spoken', 'تم معالجة الطلب.')
         st.success(spoken_text)
         
         # 🌟 حقن كود جافاسكريبت المطور لإجبار المتصفح على النطق بالعربية حصراً 🌟
