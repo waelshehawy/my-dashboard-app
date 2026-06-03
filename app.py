@@ -440,7 +440,111 @@ gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.
         st.session_state.auth = False
         st.session_state.cart = {}
         st.rerun()
+import pandas as pd
+import io
+import docx  # مكتبة python-docx لتوليد الوورد
 
+# ------------------------------------------------------------
+# 🔍 منطقة مراجعة وتنفيذ الاستعلام الذكي
+# ------------------------------------------------------------
+
+# التحقق من أن الذكاء الاصطناعي قد استخرج استعلاماً وحفظه في الـ Session
+if 'ai_sql' in st.session_state and st.session_state['ai_sql']:
+    st.markdown("---")
+    st.markdown("### 🔍 مراجعة وتأكيد استعلام المساعد الذكي")
+    
+    # عرض رد الذكاء الاصطناعي للمدير
+    if 'spoken_response' in st.session_state:
+        st.info(f"💡 **مساعد PreView:** {st.session_state['spoken_response']}")
+    
+    # منطقة نصية تتيح للمدير رؤية الـ SQL وتعديله يدوياً لو أراد بكل حرية
+    editable_sql = st.text_area(
+        "تعديل كود الاستعلام (SQL) إذا لزم الأمر:", 
+        value=st.session_state['ai_sql'], 
+        height=150
+    )
+    
+    # زر التنفيذ والحسم
+    if st.button("🚀 تنفيذ الاستعلام وجلب البيانات الحالية", use_container_width=True):
+        with st.spinner("جاري الاتصال بـ Supabase وجلب البيانات..."):
+            try:
+                # فتح الاتصال بالقاعدة باستخدام دالتك الخاصة
+                conn = get_connection()
+                
+                # تنفيذ الاستعلام وقراءة النتائج مباشرة في Pandas DataFrame
+                df_results = pd.read_sql_query(editable_sql, conn)
+                
+                # إغلاق الاتصال فوراً للحفاظ على موارد الـ Pooler
+                conn.close()
+                
+                if df_results.empty:
+                    st.warning("⚠️ الاستعلام تم بنجاح، ولكن لا توجد سجلات مطابقة للبحث في قاعدة البيانات.")
+                else:
+                    st.success(f"📊 تم العثور على {len(df_results)} سجل بنجاح!")
+                    
+                    # عرض الجدول تفاعلياً أمام المدير للمعاينة الفورية
+                    st.dataframe(df_results, use_container_width=True)
+                    
+                    # قراءة نية المدير المحددة من Gemini لتحديد نوع الملف
+                    intent = st.session_state.get('ai_intent', 'استعلام_عادي')
+                    
+                    # --------------------------------------------------------
+                    # 📄 الحالة الأولى: الطلب يتضمن "عرض سعر" -> المخرج Word
+                    # --------------------------------------------------------
+                    if "عرض" in intent or "سعر" in intent:
+                        st.markdown("#### 📥 تحميل عرض السعر الجاهز")
+                        
+                        # إنشاء ملف الوورد في الذاكرة
+                        doc = docx.Document()
+                        doc.add_heading('عرض سعر لوحات إعلانية - PreView Ads', level=0)
+                        doc.add_paragraph('بناءً على طلبكم، نرفق لكم تفاصيل اللوحات المتاحة وأسعار العروض:')
+                        
+                        # توليد جدول داخل ملف الوورد ومملوئه بالبيانات المجلوبة
+                        table = doc.add_table(rows=1, cols=len(df_results.columns))
+                        hdr_cells = table.rows[0].cells
+                        for i, col_name in enumerate(df_results.columns):
+                            hdr_cells[i].text = str(col_name)
+                            
+                        for index, row in df_results.iterrows():
+                            row_cells = table.add_row().cells
+                            for i, item in enumerate(row):
+                                row_cells[i].text = str(item)
+                        
+                        # حفظ الملف في البافر (الذاكرة) دون لمس الهارد ديسك للحماية
+                        word_buffer = io.BytesIO()
+                        doc.save(word_buffer)
+                        word_buffer.seek(0)
+                        
+                        st.download_button(
+                            label="تحميل ملف عرض السعر (Word) 📄",
+                            data=word_buffer,
+                            file_name="عرض_سعر_preview_ads.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                        
+                    # --------------------------------------------------------
+                    # 📊 الحالة الثانية: استعلام بيانات عادي -> المخرج Excel
+                    # --------------------------------------------------------
+                    else:
+                        st.markdown("#### 📥 تحميل تقرير البيانات الجاهز")
+                        
+                        # إنشاء ملف الإكسيل في الذاكرة
+                        excel_buffer = io.BytesIO()
+                        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                            df_results.to_excel(writer, index=False, sheet_name='التقرير المستخرج')
+                        excel_buffer.seek(0)
+                        
+                        st.download_button(
+                            label="تحميل التقرير بصيغة (Excel) 📊",
+                            data=excel_buffer,
+                            file_name="تقرير_بيانات_preview_ads.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                        
+            except Exception as e:
+                st.error(f"❌ خطأ أثناء تنفيذ الاستعلام في Supabase: {e}")
 # ============================================================
 # دوال استعلامات Supabase (بصيغة PostgreSQL)
 # ============================================================
