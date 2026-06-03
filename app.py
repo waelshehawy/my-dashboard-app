@@ -1636,12 +1636,93 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             st.code(st.session_state['page_ai_sql'], language="sql")
             
         col_exec, col_cancel = st.columns(2)
+        # هذا السطر موجود في كودك، الصق ما تحته مباشرة:
         with col_exec:
             if st.button("⚡ تنفيذ الاستعلام وجلب البيانات الفورية", type="secondary", use_container_width=True):
                 with st.spinner("🔄 جاري الاتصال بـ Supabase وجلب السجلات الحية..."):
                     try:
                         cursor = conn.cursor()
+                        cursor.execute(st.session_state['page_ai_sql'])
+                        columns = [desc[0] for desc in cursor.description]
+                        data = cursor.fetchall()
+                        cursor.close()
+                        
+                        if data:
+                            import pandas as pd
+                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
+                        else:
+                            st.session_state['page_ai_executed_data'] = "EMPTY"
+                    except Exception as e:
+                        st.error(f"❌ خطأ أثناء تشغيل الـ SQL في قاعدة البيانات: {e}")
+                        st.session_state['page_ai_executed_data'] = None
+        
+        with col_cancel:
+            if st.button("🧹 تفريغ ومسح البحث الحالي", use_container_width=True):
+                st.session_state['page_ai_sql'] = None
+                st.session_state['page_ai_intent'] = None
+                st.session_state['page_ai_spoken'] = None
+                st.session_state['page_ai_executed_data'] = None
+                st.session_state['should_speak'] = False
+                st.rerun()
 
+        # عرض الجدول وأزرار التصدير بناءً على البيانات المخزنة
+        executed_res = st.session_state.get('page_ai_executed_data')
+        
+        if executed_res is not None:
+            if isinstance(executed_res, str) and executed_res == "EMPTY":
+                st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
+            elif not executed_res.empty:
+                import pandas as pd
+                st.markdown("### 📊 جدول البيانات المستخرج:")
+                st.dataframe(executed_res, use_container_width=True)
+                st.info(f"💡 تم العثور على {len(executed_res)} لوحة/سجل.")
+                
+                st.markdown("#### 📥 تصدير التقرير الفوري:")
+                col_excel, col_word = st.columns(2)
+                
+                with col_excel:
+                    import io
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                        executed_res.to_excel(writer, index=False, sheet_name='تقرير المساعد الذكي')
+                    excel_data = excel_buffer.getvalue()
+                    
+                    st.download_button(
+                        label="📥 تحميل كملف Excel (.xlsx)",
+                        data=excel_data,
+                        file_name="تقرير_لوحات_الاعلان.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                
+                with col_word:
+                    import io
+                    from docx import Document
+                    
+                    doc = Document()
+                    table = doc.add_table(rows=1, cols=len(executed_res.columns))
+                    table.style = 'Light Shading Accent 1'
+                    
+                    hdr_cells = table.rows.cells
+                    for i, col_name in enumerate(executed_res.columns):
+                        hdr_cells[i].text = str(col_name)
+                        
+                    for _, row in executed_res.iterrows():
+                        row_cells = table.add_row().cells
+                        for i, val in enumerate(row):
+                            row_cells[i].text = str(val)
+                            
+                    word_buffer = io.BytesIO()
+                    doc.save(word_buffer)
+                    word_data = word_buffer.getvalue()
+                    
+                    st.download_button(
+                        label="📝 تحميل كتقرير Word (.docx)",
+                        data=word_data,
+                        file_name="تقرير_المساعد_الذكي.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
 
 
 elif page == "⚙️ الإعدادات":
