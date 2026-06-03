@@ -391,7 +391,7 @@ if user_query:
                 import json
                 
                 # 1. المفتاح الصافي الخاص بك (تأكد من كتابته بدقة وبدون مسافات)
-                RAW_KEY = "AQ.Ab8RXXXXXXXXXX"  
+                RAW_KEY = "AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA"  
                 GEMINI_API_KEY = RAW_KEY.strip()
                 
                 # 2. الرابط المباشر لنموذج Gemini 1.5 Pro الأكثر مرونة مع المفاتيح السحابية
@@ -399,7 +399,7 @@ if user_query:
                 
                 # 3. الحيلة الأمنية الحاسمة: تمرير المفتاح في الـ Headers لتفادي الخطأ 401
                 headers = {
-                    "x-goog-api-key": AQ.Ab8RN6KVHbXGwoXWuJ67pYLJXF2WjjIj1ex-bZ5sCNaXcJNLbA,
+                    "x-goog-api-key": GEMINI_API_KEY,
                     "Content-Type": "application/json"
                 }
                 
