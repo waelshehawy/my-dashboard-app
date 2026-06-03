@@ -387,7 +387,7 @@ with st.sidebar:
             try:
                 # يفضل تخزين المفتاح في st.secrets بأمان، وإذا لم يوجد نضعه يدوياً هنا
                 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or "ضع_مفتاح_جوجل_الجديد_هنا"
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key= AQ.Ab8RN6IW4IBgny38CICodjWAvuTAVTVvf4_mYWnfT2VzYHl54Q"
                 
                 payload = {
                     "contents": [{"parts": [{"text": user_query}]}],
