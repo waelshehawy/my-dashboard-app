@@ -1460,15 +1460,19 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (صفحة مستقلة بالكامل)
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
-
-
+    st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    # --- 🎙️ الجيل الجديد: تفعيل المايك البرمجي عبر المتصفح ---
+    # تهيئة حقول الذاكرة المؤقتة لمنع اختفاء النصوص أثناء التحديث اللحظي للمتصفح
+    if 'submitted_query' not in st.session_state:
+        st.session_state['submitted_query'] = ""
+    if 'should_speak' not in st.session_state:
+        st.session_state['should_speak'] = False
+
+    # --- 🎙️ تفعيل المايك البرمجي عبر المتصفح وتحويل الصوت إلى نص بدقة عالية ---
     import streamlit.components.v1 as components
     
-    # كود جافاسكريبت مخفي ومستقر لفتح مايك المتصفح وتحويل الصوت إلى نص بدقة عالية
     st.markdown("### 🗣️ الإدخال الصوتي الفوري:")
     st.caption("اضغط على زر (ابدأ التحدث) وتكلم بالعامية، وسيتم كتابة أمرك بالأسفل تلقائياً.")
     
@@ -1488,7 +1492,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             const recognition = new SpeechRecognition();
             
-            recognition.lang = 'ar-SY'; // تعيين اللهجة العربية الشامية/المحيطة لتفهم العامية بدقة
+            recognition.lang = 'ar-SY'; // لهجة برمجية شامية لالتقاط العامية بدقة
             recognition.interimResults = false;
             recognition.maxAlternatives = 1;
 
@@ -1505,7 +1509,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
                 micStatus.innerText = 'تم تحويل الصوت بنجاح!';
                 
-                // تمرير النص المولد من الصوت إلى صندوق بايثون في Streamlit
                 if (speechToText) {
                     window.parent.postMessage({
                         type: 'streamlit:setComponentValue',
@@ -1533,18 +1536,23 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     # عرض مكون التقاط الصوت الفوري وتخزين النص الناتج منه
     audio_text_output = components.html(st_speech_html, height=80)
     
-    # 2. صندوق إدخال الأمر للمدير (يستقبل تلقائياً مخرجات المايك أو الكتابة اليدوية)
-    user_query = st.text_input(
-        label="أمر الإدارة الحالي:",
-        placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
-        key="page_ai_query"
-    )
+    # مجمع الـ Form الصارم لمنع تصفير القيم وحفظ مدخلات المدير عند الضغط
+    with st.form(key="ai_assistant_form"):
+        user_query = st.text_input(
+            label="أمر الإدارة الحالي:",
+            placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
+            key="page_ai_query"
+        )
+        submit_button = st.form_submit_button(label="🧠 تحليل الطلب ومفاضلة العروض", use_container_width=True)
 
-    # زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
-    if st.button("🧠 تحليل الطلب ومفاضلة العروض", type="primary", use_container_width=True):
-        if not user_query:
+    # معالجة الطلب فور ضغط زر الـ Form
+    if submit_button:
+        if not user_query.strip():
             st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
         else:
+            # تثبيت النص في الـ Session State فوراً لعرضه للمدير ومنع أي شك
+            st.session_state['submitted_query'] = user_query
+            
             api_key = st.secrets.get("GEMINI_API_KEY")
             if not api_key or api_key == "ضع_مفتاحك_هنا":
                 st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
@@ -1552,6 +1560,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 with st.spinner("🧠 جاري تحليل النص ومطابقة الجداول وسياق الـ ERP..."):
                     try:
                         import google.generativeai as genai
+                        import json
                         genai.configure(api_key=api_key)
                         
                         system_prompt = """
@@ -1570,7 +1579,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         قواعد المفاضلة وتحليل النية (Intent Matching):
                         - get_available: إذا طلب اللوحات المتاحة أو غير المحجوزة (الشرط: "اسم الزبون" LIKE '%مؤقت%' أو "فترة الحجز" LIKE '%مؤقت%' أو "اسم الزبون" IS NULL).
                         - check_temporary: إذا سأل عن الحجوزات المؤقتة، المعلقة، أو سجلات التجربة (الشرط: "اسم الزبون" LIKE '%مؤقت%' أو "اسم الزبون" LIKE '%تجربة%' أو "فترة الحجز" LIKE '%مؤقت%').
-                        - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
+                        - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر, باقة، مع حسم، أو في محافظة معينة.
                         
                         قاعدة الـ SQL الحتمية: 
                         1. أسماء الحقول العربية لجدول "حجوزات1" يجب وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون").
@@ -1580,12 +1589,11 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         {
                             "intent": "get_available / check_temporary / create_package",
                             "confidence": 0.95,
-                            "extracted_sql": "استعلام SQL الصحيح هنا"،
+                            "extracted_sql": "استعلام SQL الصحيح هنا",
                             "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
                             "spoken_response": "رد تفاعلي ذكي وموجز جداً بالعامية العربية للمدير يخبره عما وجده في السجلات الحية باختصار"
                         }
                         """
-
                         
                         model = genai.GenerativeModel(
                             model_name="gemini-2.5-flash-lite",
@@ -1596,17 +1604,13 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         response = model.generate_content(user_query)
                         
                         if response.text:
-                            import json
                             parsed_data = json.loads(response.text.strip())
                             
                             st.session_state['page_ai_intent'] = parsed_data.get('intent')
                             st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
                             st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                             st.session_state['page_ai_package_details'] = parsed_data.get('package_details')
-                            
                             st.session_state['page_ai_executed_data'] = None
-                            
-                            # تفعيل النطق الصوتي للرد فقط فور الاستلام لمنع تكراره
                             st.session_state['should_speak'] = True
                             st.rerun()
                         else:
@@ -1615,51 +1619,43 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
 
     # 3. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
-    # 3. عرض النتيجة التحليلية للمدير وتشغيل الرد الصوتي
     if st.session_state.get('page_ai_sql'):
         st.divider()
         
-        # 🌟 الإضافة الجديدة: عرض النص الذي سمعه أو استقبله المساعد فوراً لمنع الشك 🌟
+        # 🌟 المربع الأزرق الحامي للذاكرة البصرية (يطرد الشك نهائياً)
         st.markdown(f"""
         <div style="background-color: rgba(102, 126, 234, 0.1); border-right: 5px solid #667eea; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 14px; color: #a0a0a0; text-align: right;">📝 الأمر الصوتي المكتشف حالياً:</p>
-            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('page_ai_query', user_query)}"</h4>
+            <p style="margin: 0; font-size: 14px; color: #a0a0a0; text-align: right;">📝 الأمر الصوتي المكتشف حالياً والمثبت بالذاكرة السحابية:</p>
+            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('submitted_query')}"</h4>
         </div>
         """, unsafe_allow_html=True)
         
-        # عرض الرد المكتوب والناطق الأصلي الخاص بك (كما هو دون تعديل)
+        # This is where your code successfully resumes inside the editor:
         spoken_text = st.session_state.get('page_ai_spoken', 'تم معالجة الطلب.')
         st.success(spoken_text)
-
         
-        # 🌟 حقن كود جافاسكريبت المطور لإجبار المتصفح على النطق بالعربية حصراً 🌟
-        if st.session_state.get('should_speak', True):
-            import streamlit.components.v1 as components
+        # حقن كود جافاسكريبت المطور لمنع القراءة الإنجليزية والرد بلكنة عربية ناطقة
+        if st.session_state.get('should_speak', False):
             tts_html = f"""
             <script>
                 if ('speechSynthesis' in window) {{
-                    // إلغاء أي عمليات نطق سابقة معلقة في ذاكرة المتصفح
                     window.speechSynthesis.cancel(); 
-                    
                     const utterance = new SpeechSynthesisUtterance("{spoken_text}");
-                    utterance.lang = "ar-SA"; // ضبط اللغة على العربية حصراً لمنع القراءة اللاتينية/الإنجليزية
-                    utterance.pitch = 1.0;     // طبقة الصوت الطبيعية
-                    utterance.rate = 1.0;      // سرعة القراءة الطبيعية
-                    
+                    utterance.lang = "ar-SA";
+                    utterance.pitch = 1.0;
+                    utterance.rate = 1.0;
                     window.speechSynthesis.speak(utterance);
                 }}
             </script>
             """
-            # تشغيل المكون المخفي في الصفحة لتفعيل الصوت فوراً
             components.html(tts_html, height=0, width=0)
-            # إغلاق ميزة النطق لكي لا ينطق مجدداً عند نقر أزرار التصدير
             st.session_state['should_speak'] = False
         
         with st.expander("🛠️ عرض كود الاستعلام الفني المقترح (SQL)", expanded=False):
             st.code(st.session_state['page_ai_sql'], language="sql")
             
         col_exec, col_cancel = st.columns(2)
-        # هذا السطر موجود في كودك، الصق ما تحته مباشرة:
+        
         with col_exec:
             if st.button("⚡ تنفيذ الاستعلام وجلب البيانات الفورية", type="secondary", use_container_width=True):
                 with st.spinner("🔄 جاري الاتصال بـ Supabase وجلب السجلات الحية..."):
@@ -1685,6 +1681,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 st.session_state['page_ai_intent'] = None
                 st.session_state['page_ai_spoken'] = None
                 st.session_state['page_ai_executed_data'] = None
+                st.session_state['submitted_query'] = ""
                 st.session_state['should_speak'] = False
                 st.rerun()
 
@@ -1746,6 +1743,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
                     )
+
 
 
                     
