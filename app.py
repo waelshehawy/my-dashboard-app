@@ -1461,6 +1461,34 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
+    st.markdown("### 🔍 وحدة فحص هيكلية وقيم Supabase")
+if st.button("🔬 تشغيل فحص عينات البيانات الحية", type="secondary"):
+    try:
+        cursor = conn.cursor()
+        
+        # 1. جلب عينات من المحافظات المكتوبة فعلياً في قاعدتك
+        cursor.execute('SELECT DISTINCT "المحافظة" FROM "حجوزات1" LIMIT 5;')
+        provinces = cursor.fetchall()
+        
+        # 2. جلب عينات من حقل اسم الزبون لنرى كيف يُخزن الفراغ
+        cursor.execute('SELECT "اسم الزبون", COUNT(*) FROM "حجوزات1" GROUP BY "اسم الزبون" LIMIT 5;')
+        clients = cursor.fetchall()
+        
+        # 3. جلب أول 3 صفوف كاملة لنرى الأسماء الحقيقية للأعمدة
+        cursor.execute('SELECT * FROM "حجوزات1" LIMIT 3;')
+        columns = [desc[0] for desc in cursor.description]
+        sample_rows = cursor.fetchall()
+        
+        cursor.close()
+        
+        # عرض نتائج الفحص للمدير
+        st.write("📍 **المحافظات المسجلة فعلياً في القاعدة:**", provinces)
+        st.write("👥 **طريقة كتابة حقل الزبائن (هل هو NULL أم نص فارغ؟):**", clients)
+        st.write("📋 **أسماء الأعمدة كما تراها سحابة Supabase:**", columns)
+        
+    except Exception as e:
+        st.error(f"❌ فشل فحص القاعدة: {e}")
+
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
