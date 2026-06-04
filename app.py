@@ -1649,15 +1649,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 st.error(f"🚨 خطأ في المعالجة التلقائية لقاعدة البيانات: {e}")
                 st.session_state['page_ai_query'] = ''
 
-    # --- 3. عرض المخرجات الحية وجداول التصدير ---
-    executed_res = st.session_state.get('page_ai_executed_data')
-    if executed_res is not None:
-        st.divider()
-        
-        # صندوق إظهار ما تم سماعه بالكامل لإلغاء الشكوك
-        st.markdown(f"""
-        <div style="background-color: rgba(34, 197, 94, 0.1); border-right: 5px solid #22c55e; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-    # --- 3. عرض المخرجات الحية وجداول التصدير ---
+
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
         st.divider()
