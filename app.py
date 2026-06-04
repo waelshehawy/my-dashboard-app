@@ -1461,7 +1461,7 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 # ============================================================
-# 🎙️ صفحة المساعد الذكي (أبو الخير) - النسخة النهائية التي تعمل
+# 🎙️ صفحة المساعد الذكي (أبو الخير) - حل متوافق مع كل الإصدارات
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
@@ -1473,6 +1473,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     import pandas as pd
     import speech_recognition as sr
     from io import BytesIO
+
+    # عرض إصدار Streamlit للتشخيص
+    st.caption(f"🔧 إصدار Streamlit: {st.__version__}")
 
     # تهيئة session_state
     if 'text_captured' not in st.session_state:
@@ -1486,19 +1489,27 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     st.caption("اضغط الزر، تكلم بوضوح، ثم انتظر التحليل")
 
     # ========================================
-    # التسجيل الصوتي من المتصفح مباشرة
+    # التسجيل الصوتي - متوافق مع كل الإصدارات
     # ========================================
-    audio_value = st.audio_input("🎤 اضغط للتسجيل")
+    audio_value = None
     
-    # معالجة الصوت الجديد فقط
+    # تجربة الدالة الجديدة أولاً
+    if hasattr(st, 'audio_input'):
+        audio_value = st.audio_input("🎤 اضغط للتسجيل")
+    # ثم الدالة التجريبية القديمة
+    elif hasattr(st, 'experimental_audio_input'):
+        audio_value = st.experimental_audio_input("🎤 اضغط للتسجيل")
+    else:
+        st.error("❌ عذراً، متصفحك أو البيئة لا تدعم التسجيل الصوتي. الرجاء كتابة النص يدوياً في الحقل أدناه.")
+    
+    # معالجة الصوت المسجل
     if audio_value and audio_value != st.session_state['last_audio']:
         st.session_state['last_audio'] = audio_value
         
         with st.spinner("🎙️ جاري تحليل الصوت..."):
             try:
-                audio_bytes = audio_value.getvalue()
-                
-                with sr.AudioFile(BytesIO(audio_bytes)) as source:
+                # audio_value مباشرة هو كائن BytesIO[citation:2]
+                with sr.AudioFile(audio_value) as source:
                     recognizer = sr.Recognizer()
                     recognizer.adjust_for_ambient_noise(source)
                     audio_data = recognizer.record(source)
@@ -1510,7 +1521,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     st.rerun()
                     
             except sr.UnknownValueError:
-                st.error("❌ لم يتم فهم الصوت، حاول مرة أخرى")
+                st.error("❌ لم يتم فهم الصوت، حاول التحدث بوضوح أكثر")
+            except ValueError as e:
+                st.error(f"❌ ملف الصوت غير صالح: {e}")
             except Exception as e:
                 st.error(f"❌ خطأ: {e}")
 
@@ -1594,8 +1607,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     cells[i].text = str(val)
             word_buffer = BytesIO()
             doc.save(word_buffer)
-            st.download_button("📝 Word", word_buffer.getvalue(), "تقرير.docx", use_container_width=True)                    
-
+            st.download_button("📝 Word", word_buffer.getvalue(), "تقرير.docx", use_container_width=True)
 
 
 
