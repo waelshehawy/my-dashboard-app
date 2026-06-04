@@ -1464,16 +1464,25 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     st.markdown("نظام إدارة وتحليل اللوحات التفاعلي والمستمر صوتاً بدون أزرار.")
     st.divider()
 
-    import streamlit.components.v1 as components
     import google.generativeai as genai
     import json
+    import streamlit.components.v1 as components
 
-    # --- 🤖 PERSISTENT BACKGROUND VOICE AGENT: ABU AL-KHAIR ---
-    # This JavaScript handles hands-free wake-word detection, multi-state voice input, and automatic browser TTS.
+    # 1. الاستماع الآمن للرابط وجلب النص الصافي المنطوق من جافاسكريبت
+    query_params = st.query_params
+    voice_raw_text = query_params.get("abu_voice", "")
+
+    # إذا التقط المتصفح نصاً جديداً، نثبته في الـ Session وننظف الرابط لمنع التكرار
+    if voice_raw_text:
+        st.session_state['page_ai_query'] = voice_raw_text
+        st.query_params.clear()
+        st.rerun()
+
+    # --- 🤖 مجمع الخلفية الصوتي: المساعد التفاعلي أبو الخير ---
     abu_al_khair_html = """
     <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl;">
         <div id="status-light" style="width: 20px; height: 20px; background-color: #ef4444; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle; box-shadow: 0 0 10px #ef4444;"></div>
-        <span id="agent-status" style="color: #94a3b8; font-weight: bold; font-size: 16px;">أبو الخير في وضع الاستعداد (قل: أبو الخير)...</span>
+        <span id="agent-status" style="color: #94a3b8; font-weight: bold; font-size: 16px;">أبو الخير في وضع الاستعداد (نادني بـ: أبو الخير)...</span>
         <p id="live-transcript" style="color: #38bdf8; font-size: 14px; margin-top: 10px; font-style: italic;"></p>
     </div>
 
@@ -1487,21 +1496,21 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             const recognition = new SpeechRecognition();
             
             recognition.lang = 'ar-SY'; 
-            recognition.continuous = true; // Constantly keeps running in meetings or background
+            recognition.continuous = true;
             recognition.interimResults = true;
             
             let isAwake = false;
 
-            // Start listening automatically on page load
+            // تشغيل المايك تلقائياً فور الدخول للصفحة ليكون جاهزاً دائماً
             window.onload = function() {
-                recognition.start();
+                try { recognition.start(); } catch(e) {}
             };
 
             recognition.onstart = function() {
                 if(!isAwake) {
                     statusLight.style.backgroundColor = '#eab308';
                     statusLight.style.boxShadow = '0 0 10px #eab308';
-                    agentStatus.innerText = 'أبو الخير يستمع لوجهة النداء... (نادني بـ "أبو الخير")';
+                    agentStatus.innerText = 'أبو الخير يستمع في الخلفية... (نادني بـ "أبو الخير")';
                 }
             };
 
@@ -1518,65 +1527,53 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 }
 
                 let speechText = (finalTranscript + interimTranscript).trim().toLowerCase();
-                liveTranscript.innerText = "ما تم سماعه: " + speechText;
+                liveTranscript.innerText = "ما تم سماعه لحظياً: " + speechText;
 
-                // Scenario A: Wake word detection "أبو الخير"
+                // الحالة أ: رصد كلمة الاستيقاظ "أبو الخير"
                 if (!isAwake && (speechText.includes('ابو الخير') || speechText.includes('أبو الخير'))) {
                     isAwake = true;
                     statusLight.style.backgroundColor = '#22c55e';
                     statusLight.style.boxShadow = '0 0 10px #22c55e';
                     agentStatus.innerText = 'أبو الخير نشط ومستمع لك يا أستاذي...';
                     
-                    // Respond immediately via voice
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
                         const wakeUtterance = new SpeechSynthesisUtterance("اطلب مني أي استعلام يا أستاذي");
                         wakeUtterance.lang = "ar-SA";
                         window.speechSynthesis.speak(wakeUtterance);
                     }
-                    
-                    // Clear the transcript buffer to expect the actual query next
                     speechText = '';
                 }
                 
-                // Scenario B: User is awake and sends the query command
-                if (isAwake && speechText.length > 8 && !speechText.endsWith('ابو الخير') && !speechText.endsWith('أبو الخير')) {
-                    // Send voice text directly to Python layer instantly
-                    window.parent.postMessage({
-                        type: 'streamlit:setComponentValue',
-                        value: speechText
-                    }, '*');
-                    
-                    // Reset agent state automatically after capturing command
+                // الحالة ب: استقبال الطلب الفعلي بعد التنشيط
+                if (isAwake && speechText.length > 5 && !speechText.endsWith('ابو الخير') && !speechText.endsWith('أبو الخير')) {
                     isAwake = false;
+                    // تمرير النص الصافي للرابط الخارجي بشكل آمن يتخطى قيود الـ Sandbox
+                    const baseUrl = window.parent.location.origin + window.parent.location.pathname;
+                    window.parent.location.href = baseUrl + '?abu_voice=' + encodeURIComponent(speechText);
                 }
             };
 
             recognition.onerror = function(event) {
                 if(event.error === 'not-allowed') {
-                    agentStatus.innerText = '❌ يرجى السماح بصلاحية المايكروفون للمتصفح.';
+                    agentStatus.innerText = '❌ يرجى تفعيل صلاحية المايك من قفل المتصفح فوق.';
                 }
             };
 
-            // Keep recognition running infinitely
             recognition.onend = function() {
-                recognition.start();
+                try { recognition.start(); } catch(e) {}
             };
             
         } else {
-            agentStatus.innerText = '❌ المتصفح لا يدعم معالجة المايكروفون التلقائية.';
+            agentStatus.innerText = '❌ المتصفح الحالي لا يدعم محرك التقاط الصوت.';
         }
     </script>
     """
     
-    # Render the background listening component
-    voice_input_capture = components.html(abu_al_khair_html, height=130)
+    # عرض واجهة المساعد (عرض فقط بدون أخذ مخرجاتها ككائن للـ Blob)
+    components.html(abu_al_khair_html, height=130)
 
-    # Invisible sync mechanism keeping your text variables aligned
-    if voice_input_capture:
-        st.session_state['page_ai_query'] = voice_input_capture
-
-    # Auto-execute calculations if Abu Al-Khair yields an automated verbal task
+    # 2. بدء المعالجة التلقائية السحابية فور توفر نص مسموع حقيقي في الذاكرة
     active_query = st.session_state.get('page_ai_query', '')
 
     if active_query:
@@ -1587,15 +1584,15 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 
                 system_prompt = """
                 أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
-                مهمتك تحليل طلب المدير وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                مهمتك تحويل أمر المدير إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
                 
                 هيكلية قاعدة البيانات المتاحة (PostgreSQL):
                 جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
-                الأعمدة: "رقم الححز", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
                 
-                ⚠️ قاعدة صارمة لمنع الجداول الفارغة:
-                1. لا تقم بدمج شروط معقدة للحجم أو الزبائن المتاحة إلا إذا طلبها المدير صراحة.
-                2. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثل: "المحافظة" LIKE '%دمشق%').
+                ⚠️ قواعد صارمة لمنع الجداول الفارغة:
+                1. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثل: "المحافظة" LIKE '%دمشق%').
+                2. لا تضع شروطاً للأحجام أو التواريخ إلا إذا طلبها المدير صراحة بوضوح في كلامه.
                 
                 يجب أن تطابق المخرجات الهيكل التالي تماماً:
                 {
@@ -1603,7 +1600,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     "confidence": 0.95,
                     "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
                     "package_details": null,
-                    "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك سجلات دمشق الحالية فوراً."
+                    "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك سجلات دمشق الحالية فوراً من السحابة."
                 }
                 """
                 
@@ -1620,7 +1617,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                     st.session_state['page_ai_executed_data'] = None
                     
-                    # Instantly execute the database lookup silently for the user
+                    # تنفيذ استعلام الـ SQL المستخرج فوراً بشكل آمن في Supabase
                     cursor = conn.cursor()
                     cursor.execute(st.session_state['page_ai_sql'])
                     columns = [desc[0] for desc in cursor.description]
@@ -1631,29 +1628,64 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         import pandas as pd
                         st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
                         
-                        # Automated system response read aloud by Abu Al-Khair
-                        if 'speechSynthesis' in window:
-                            tts_html = f"""<script>window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance("{st.session_state['page_ai_spoken']}"); u.lang="ar-SA"; window.speechSynthesis.speak(u);</script>"""
-                            components.html(tts_html, height=0, width=0)
-                    st.session_state['page_ai_query'] = '' # Clear request queue
+                        # تفعيل نطق الرد الصوتي تلقائياً للمدير عبر المتصفح
+                        tts_html = f"""
+                        <script>
+                            if ('speechSynthesis' in window) {{
+                                window.speechSynthesis.cancel();
+                                const u = new SpeechSynthesisUtterance("{st.session_state['page_ai_spoken']}");
+                                u.lang = "ar-SA";
+                                window.speechSynthesis.speak(u);
+                            }}
+                        </script>
+                        """
+                        components.html(tts_html, height=0, width=0)
+                    
+                    # تصفير حقل الاستعلام للاستعداد لنداء جديد
+                    st.session_state['page_ai_query'] = ''
+                    st.rerun()
+                    
             except Exception as e:
-                st.error(f"🚨 خطأ معالجة تلقائي: {e}")
+                st.error(f"🚨 خطأ في المعالجة التلقائية لقاعدة البيانات: {e}")
+                st.session_state['page_ai_query'] = ''
 
-    # --- 4. VIEW RENDER OUTPUT TABLES ---
+    # --- 3. عرض المخرجات الحية وجداول التصدير ---
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
-        # جدول البيانات المستخرج وأزرار التصدير بمحاذاة هندسية صارمة
-        st.dataframe(executed_res, use_container_width=True)
-        st.info(f"💡 تم العثور على {len(executed_res)} سجل.")
+        st.divider()
         
-        st.markdown("#### 📥 تصدير التقرير الفوري:")
+        # صندوق إظهار ما تم سماعه بالكامل لإلغاء الشكوك
+        st.markdown(f"""
+        <div style="background-color: rgba(34, 197, 94, 0.1); border-right: 5px solid #22c55e; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+    # --- 3. عرض المخرجات الحية وجداول التصدير ---
+    executed_res = st.session_state.get('page_ai_executed_data')
+    if executed_res is not None:
+        st.divider()
+        
+        # 1. Pull the raw text cleanly to prevent string escaping crashes
+        current_spoken = st.session_state.get('page_ai_spoken', 'تم جلب السجلات')
+        
+        # 2. Render the visual card container safely
+        st.markdown(f"""
+        <div style="background-color: rgba(34, 197, 94, 0.1); border-right: 5px solid #22c55e; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 13px; color: #a0a0a0; text-align: right;">🎤 النص الصوتي المستلم والمخزن بالذاكرة الحية:</p>
+            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">{current_spoken}</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 3. Render the dynamic dataframe results block
+        st.dataframe(executed_res, use_container_width=True)
+        st.info(f"💡 تم العثور على {len(executed_res)} سجل يطابق طلب الإدارة.")
+        
+        # 4. Render the twin layout columns for instantaneous file export
         col_excel, col_word = st.columns(2)
         
         with col_excel:
             import io
+            import pandas as pd
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                executed_res.to_excel(writer, index=False, sheet_name='Abu Al-Khair Report')
+                executed_res.to_excel(writer, index=False, sheet_name='Abu Al-Khair')
             st.download_button(
                 label="📥 تحميل كملف Excel", 
                 data=excel_buffer.getvalue(), 
@@ -1670,22 +1702,20 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             table.style = 'Light Shading Accent 1'
             
             hdr_cells = table.rows.cells
-            for i, col_name in enumerate(executed_res.columns):
+            for i, col_name in enumerate(executed_res.columns): 
                 hdr_cells[i].text = str(col_name)
                 
             for _, row in executed_res.iterrows():
                 row_cells = table.add_row().cells
-                for i, val in enumerate(row):
+                for i, val in enumerate(row): 
                     row_cells[i].text = str(val)
                     
             word_buffer = io.BytesIO()
             doc.save(word_buffer)
-            
             st.download_button(
-                label="📝 تحميل كتقرير Word",
-                data=word_buffer.getvalue(),
-                file_name="تقرير_أبو_الخير.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                label="📝 تحميل كتقرير Word", 
+                data=word_buffer.getvalue(), 
+                file_name="تقرير_أبو_الخير.docx", 
                 use_container_width=True
             )
 
