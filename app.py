@@ -1461,7 +1461,7 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 # ============================================================
-# 🎙️ صفحة المساعد الذكي (أبو الخير) - نسخة التشخيص
+# 🎙️ صفحة المساعد الذكي (أبو الخير) - نسخة mic-recorder
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
@@ -1473,197 +1473,56 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     import pandas as pd
     import speech_recognition as sr
     from io import BytesIO
-    import traceback
+    from streamlit_mic_recorder import mic_recorder
 
     # تهيئة session_state
     if 'text_captured' not in st.session_state:
         st.session_state['text_captured'] = ""
     if 'result_df' not in st.session_state:
         st.session_state['result_df'] = None
-    if 'debug_info' not in st.session_state:
-        st.session_state['debug_info'] = ""
+    if 'waiting_for_query' not in st.session_state:
+        st.session_state['waiting_for_query'] = False
 
     # ========================================
-    # طريقة مبسطة للتسجيل - استخدام st.audio_recorder البديل
+    # زر التسجيل الصوتي - يعمل بشكل مضمون
     # ========================================
+    st.markdown("### 🗣️ اضغط على الميكروفون وتكلم:")
     
-    st.markdown("### 🗣️ طريقة التسجيل:")
+    # تسجيل الصوت مباشرة
+    audio = mic_recorder(
+        start_prompt="🎤 اضغط للتسجيل",
+        stop_prompt="⏹️ اضغط للإيقاف",
+        just_once=True,
+        use_container_width=True,
+        format="webm",
+    )
     
-    # طريقة 1: رفع ملف صوتي (للاختبار)
-    st.markdown("**الطريقة 1: ارفع ملف صوتي من جهازك (للتجربة)**")
-    uploaded_audio = st.file_uploader("اختر ملف صوتي بصيغة WAV أو MP3", type=['wav', 'mp3', 'm4a', 'webm'])
-    
-    st.markdown("**أو**")
-    
-    # طريقة 2: تسجيل مباشر من المتصفح (أبسط)
-    st.markdown("**الطريقة 2: سجل مباشرة من هنا**")
-    
-    # استخدام audio_recorder من streamlit (بديل بسيط)
-    audio_html = """
-    <div style="text-align: center; padding: 20px; border: 2px dashed #4caf50; border-radius: 10px; margin: 10px 0;">
-        <button id="recordBtn" style="background-color: #4caf50; color: white; font-size: 20px; padding: 15px 30px; border: none; border-radius: 10px; cursor: pointer;">
-            🎤 اضغط للتسجيل
-        </button>
-        <button id="stopBtn" style="background-color: #f44336; color: white; font-size: 20px; padding: 15px 30px; border: none; border-radius: 10px; cursor: pointer; display: none;">
-            ⏹️ اوقف التسجيل
-        </button>
-        <p id="recordStatus" style="margin-top: 15px; font-size: 14px; color: #666;">اضغط الزر لبدء التسجيل</p>
-        <audio id="audioPlayback" controls style="display: none; width: 100%; margin-top: 15px;"></audio>
-        <input type="file" id="audioFile" accept="audio/*" style="display: none;">
-    </div>
-    
-    <script>
-    const recordBtn = document.getElementById('recordBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statusDiv = document.getElementById('recordStatus');
-    const audioPlayback = document.getElementById('audioPlayback');
-    const audioFileInput = document.getElementById('audioFile');
-    
-    let mediaRecorder;
-    let audioChunks = [];
-    
-    recordBtn.onclick = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-            
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-            };
-            
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                const audioUrl = URL.createObjectURL(audioBlob);
-                audioPlayback.src = audioUrl;
-                audioPlayback.style.display = 'block';
-                
-                // إرسال الملف إلى Streamlit
-                const file = new File([audioBlob], "recording.webm", { type: "audio/webm" });
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                audioFileInput.files = dataTransfer.files;
-                
-                const changeEvent = new Event('change', { bubbles: true });
-                audioFileInput.dispatchEvent(changeEvent);
-                
-                statusDiv.innerHTML = '✅ تم التسجيل! جاري المعالجة...';
-                statusDiv.style.color = '#4caf50';
-                recordBtn.style.display = 'inline-block';
-                stopBtn.style.display = 'none';
-                
-                stream.getTracks().forEach(track => track.stop());
-            };
-            
-            mediaRecorder.start();
-            recordBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
-            statusDiv.innerHTML = '🎙️ جاري التسجيل... تحدث الآن ثم اضغط "ايقاف التسجيل"';
-            statusDiv.style.color = '#ff9800';
-            
-        } catch (err) {
-            statusDiv.innerHTML = '❌ خطأ: ' + err.message;
-            statusDiv.style.color = '#f44336';
-        }
-    };
-    
-    stopBtn.onclick = () => {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-    };
-    
-    audioFileInput.onchange = () => {
-        if (audioFileInput.files.length > 0) {
-            console.log('تم اختيار ملف:', audioFileInput.files[0].name);
-            const event = new Event('audio-ready', { bubbles: true });
-            document.dispatchEvent(event);
-        }
-    };
-    </script>
-    """
-    
-    st.components.v1.html(audio_html, height=250)
-    
-    # ========================================
-    # معالجة الصوت مع تشخيص مفصل
-    # ========================================
-    
-    audio_source = uploaded_audio
-    
-    # عرض معلومات التشخيص
-    with st.expander("🔧 معلومات التشخيص (لمعرفة أين حدثت المشكلة)", expanded=False):
-        debug_placeholder = st.empty()
-    
-    if audio_source:
-        st.info(f"📁 تم استلام ملف: {audio_source.name} - حجمه: {audio_source.size} بايت")
+    # معالجة الصوت المسجل
+    if audio:
+        st.audio(audio, format="audio/webm")  # تشغيل التسجيل للمستخدم
         
-        with st.spinner("🔄 جاري تحليل الصوت... قد يستغرق 5-10 ثوانٍ"):
-            
-            # الخطوة 1: محاولة قراءة الملف
+        with st.spinner("🎙️ جاري تحليل الصوت وتحويله إلى نص..."):
             try:
-                st.session_state['debug_info'] = "الخطوة 1: جاري قراءة ملف الصوت..."
-                debug_placeholder.code(st.session_state['debug_info'])
-                
-                # حفظ الملف مؤقتاً
-                audio_bytes = audio_source.getvalue()
-                st.session_state['debug_info'] += f"\n✅ تم قراءة {len(audio_bytes)} بايت من الملف"
-                debug_placeholder.code(st.session_state['debug_info'])
-                
-                # الخطوة 2: محاولة فتح الملف باستخدام SpeechRecognition
-                st.session_state['debug_info'] += "\nالخطوة 2: جاري فتح ملف الصوت باستخدام SpeechRecognition..."
-                debug_placeholder.code(st.session_state['debug_info'])
-                
-                with sr.AudioFile(BytesIO(audio_bytes)) as source:
+                # تحويل الصوت إلى نص
+                with sr.AudioFile(BytesIO(audio)) as source:
                     recognizer = sr.Recognizer()
-                    
-                    # الخطوة 3: ضبط للضوضاء
-                    st.session_state['debug_info'] += "\nالخطوة 3: جاري ضبط إعدادات التعرف على الصوت..."
-                    debug_placeholder.code(st.session_state['debug_info'])
-                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    
-                    # الخطوة 4: تسجيل الصوت
-                    st.session_state['debug_info'] += "\nالخطوة 4: جاري تسجيل الصوت من الملف..."
-                    debug_placeholder.code(st.session_state['debug_info'])
+                    recognizer.adjust_for_ambient_noise(source)
                     audio_data = recognizer.record(source)
                     
-                    st.session_state['debug_info'] += f"\n✅ تم تسجيل {len(audio_data.frame_data)} بايت من البيانات الصوتية"
-                    debug_placeholder.code(st.session_state['debug_info'])
+                    # التعرف على النص بالعربية
+                    detected_text = recognizer.recognize_google(audio_data, language='ar-SY')
+                    st.session_state['text_captured'] = detected_text
+                    st.success(f"✅ تم التعرف على: **{detected_text}**")
+                    st.balloons()
                     
-                    # الخطوة 5: إرسال إلى Google API
-                    st.session_state['debug_info'] += "\nالخطوة 5: جاري إرسال الصوت إلى Google Speech-to-Text API..."
-                    st.session_state['debug_info'] += "\n⚠️ هذه الخطوة تتطلب اتصال بالإنترنت وقد تستغرق 3-5 ثوانٍ"
-                    debug_placeholder.code(st.session_state['debug_info'])
-                    
-                    try:
-                        # محاولة التعرف بالعربية
-                        detected_text = recognizer.recognize_google(audio_data, language='ar-SY')
-                        st.session_state['debug_info'] += f"\n✅ نجح التعرف! النص المستخرج: '{detected_text}'"
-                        debug_placeholder.code(st.session_state['debug_info'])
-                        
-                        st.session_state['text_captured'] = detected_text
-                        st.success(f"✅ تم التعرف على النص: **{detected_text}**")
-                        st.balloons()
-                        
-                    except sr.UnknownValueError as e:
-                        st.session_state['debug_info'] += f"\n❌ فشل التعرف: UnknownValueError - لم يستطع Google فهم الصوت"
-                        st.session_state['debug_info'] += "\nالأسباب المحتملة: صوت غير واضح، ضوضاء، أو لغة غير مدعومة"
-                        debug_placeholder.code(st.session_state['debug_info'])
-                        st.error("❌ لم يستطع النظام فهم الصوت! تحدث بوضوح أكثر وبصوت أعلى قليلاً")
-                        st.info("💡 نصيحة: جرب التسجيل في مكان هادئ، وتحدث ببطء ووضوح")
-                        
-                    except sr.RequestError as e:
-                        st.session_state['debug_info'] += f"\n❌ فشل الاتصال: RequestError - {e}"
-                        debug_placeholder.code(st.session_state['debug_info'])
-                        st.error(f"❌ خطأ في الاتصال بخدمة Google: {e}")
-                        st.info("💡 تحقق من اتصال الإنترنت لديك")
-                        
+            except sr.UnknownValueError:
+                st.error("❌ لم يتم فهم الصوت! حاول التحدث بوضوح أكثر وبصوت أعلى")
+                st.info("💡 نصائح: تحدث ببطء، اجعل الميكروفون قريباً من فمك، وتجنب الضوضاء")
+            except sr.RequestError as e:
+                st.error(f"❌ خطأ في الاتصال: {e}")
             except Exception as e:
-                st.session_state['debug_info'] += f"\n❌ خطأ غير متوقع: {type(e).__name__} - {str(e)}"
-                st.session_state['debug_info'] += f"\n{traceback.format_exc()}"
-                debug_placeholder.code(st.session_state['debug_info'])
-                st.error(f"❌ حدث خطأ: {e}")
-    
+                st.error(f"❌ خطأ: {e}")
+
     # ========================================
     # عرض النص المستخلص
     # ========================================
@@ -1671,58 +1530,84 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     
     if st.session_state['text_captured']:
         st.markdown(f"""
-        <div style="background-color: #1e1e2f; padding: 15px; border-radius: 10px; border-right: 5px solid #4caf50;">
+        <div style="background-color: #1e1e2f; padding: 15px; border-radius: 10px; border-right: 5px solid #4caf50; margin: 10px 0;">
             <p style="margin: 0; color: #aaa; font-size: 12px;">📝 النص المستخلص من صوتك:</p>
-            <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #4caf50;">"{st.session_state['text_captured']}"</p>
+            <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: white;">"{st.session_state['text_captured']}"</p>
         </div>
         """, unsafe_allow_html=True)
-        
-        # زر تنفيذ الاستعلام
-        if st.button("🚀 تنفيذ الاستعلام", type="primary", use_container_width=True):
-            user_query = st.session_state['text_captured']
-            
-            api_key = st.secrets.get("GEMINI_API_KEY")
-            if api_key and api_key != "ضع_مفتاحك_هنا":
-                with st.spinner("🧠 جاري تحليل الطلب وتنفيذه..."):
-                    try:
-                        genai.configure(api_key=api_key)
-                        
-                        system_prompt = """
-                        أنت مساعد SQL. حول الأمر إلى استعلام على جدول "حجوزات1".
-                        الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
-                        
-                        أخرج JSON: {"sql": "الاستعلام", "reply": "الرد"}
-                        """
-                        
-                        model = genai.GenerativeModel(
-                            model_name="gemini-2.5-flash-lite",
-                            generation_config={"response_mime_type": "application/json"},
-                            system_instruction=system_prompt
-                        )
-                        
-                        response = model.generate_content(user_query)
-                        result = json.loads(response.text)
-                        
-                        cursor = conn.cursor()
-                        cursor.execute(result.get('sql', ''))
-                        columns = [desc[0] for desc in cursor.description]
-                        data = cursor.fetchall()
-                        cursor.close()
-                        
-                        if data:
-                            st.session_state['result_df'] = pd.DataFrame(data, columns=columns)
-                            st.success(f"🤖 {result.get('reply', 'تم')}")
-                        else:
-                            st.warning("📭 لا توجد نتائج")
-                            
-                    except Exception as e:
-                        st.error(f"🚨 خطأ: {e}")
-            else:
-                st.error("❌ مفتاح API غير موجود")
-    else:
-        st.info("💡 سجل صوتك باستخدام الزر أعلاه، وسيظهر النص هنا تلقائياً")
     
+    # صندوق تعديل النص
+    user_query = st.text_input(
+        "✏️ يمكنك تعديل النص أعلاه أو كتابة طلب جديد:",
+        value=st.session_state['text_captured'],
+        placeholder="مثال: اعرض لي اللوحات في حلب"
+    )
+
+    # ========================================
+    # زر تنفيذ الاستعلام
+    # ========================================
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🚀 تنفيذ الاستعلام على قاعدة البيانات", type="primary", use_container_width=True):
+            if user_query.strip():
+                api_key = st.secrets.get("GEMINI_API_KEY")
+                
+                if api_key and api_key != "ضع_مفتاحك_هنا":
+                    with st.spinner("🧠 أبو الخير يحلل طلبك ويتصل بقاعدة البيانات..."):
+                        try:
+                            genai.configure(api_key=api_key)
+                            
+                            system_prompt = """
+                            أنت مساعد لتحويل أوامر المستخدم إلى SQL.
+                            الجدول اسمه "حجوزات1" والأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                            
+                            أخرج JSON بهذا الشكل:
+                            {"sql": "استعلام SQL", "reply": "رد مختصر بالعربية"}
+                            
+                            مثال: "اعرض لي اللوحات في حلب"
+                            {"sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%حلب%'", "reply": "تم جلب اللوحات في محافظة حلب"}
+                            
+                            ملاحظة: استخدم LIKE مع % للبحث الجزئي في المحافظة
+                            """
+                            
+                            model = genai.GenerativeModel(
+                                model_name="gemini-2.5-flash-lite",
+                                generation_config={"response_mime_type": "application/json"},
+                                system_instruction=system_prompt
+                            )
+                            
+                            response = model.generate_content(user_query)
+                            result = json.loads(response.text)
+                            
+                            # عرض الاستعلام المنفذ
+                            with st.expander("🔍 عرض استعلام SQL المنفذ"):
+                                st.code(result.get('sql', ''), language='sql')
+                            
+                            # تنفيذ الاستعلام
+                            cursor = conn.cursor()
+                            cursor.execute(result.get('sql', ''))
+                            columns = [desc[0] for desc in cursor.description]
+                            data = cursor.fetchall()
+                            cursor.close()
+                            
+                            if data:
+                                st.session_state['result_df'] = pd.DataFrame(data, columns=columns)
+                                st.success(f"🤖 {result.get('reply', 'تم تنفيذ الاستعلام بنجاح')}")
+                                st.balloons()
+                            else:
+                                st.warning("📭 لا توجد نتائج تطابق طلبك")
+                                st.session_state['result_df'] = None
+                                
+                        except Exception as e:
+                            st.error(f"🚨 خطأ: {e}")
+                else:
+                    st.error("❌ لم يتم إعداد مفتاح API لـ Google Gemini")
+            else:
+                st.warning("⚠️ الرجاء كتابة طلب أو التحدث أولاً")
+    
+    # ========================================
     # عرض النتائج
+    # ========================================
     if st.session_state['result_df'] is not None:
         st.divider()
         st.subheader("📊 النتائج:")
@@ -1734,11 +1619,12 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             buffer = BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                 st.session_state['result_df'].to_excel(writer, index=False)
-            st.download_button("📥 Excel", buffer.getvalue(), "تقرير.xlsx", use_container_width=True)
+            st.download_button("📥 تحميل Excel", buffer.getvalue(), "تقرير_أبو_الخير.xlsx", use_container_width=True)
         
         with col2:
             from docx import Document
             doc = Document()
+            doc.add_heading('تقرير أبو الخير', 0)
             table = doc.add_table(rows=1, cols=len(st.session_state['result_df'].columns))
             for i, col in enumerate(st.session_state['result_df'].columns):
                 table.rows[0].cells[i].text = str(col)
@@ -1748,8 +1634,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     cells[i].text = str(val)
             word_buffer = BytesIO()
             doc.save(word_buffer)
-            st.download_button("📝 Word", word_buffer.getvalue(), "تقرير.docx", use_container_width=True)
-
+            st.download_button("📝 تحميل Word", word_buffer.getvalue(), "تقرير_أبو_الخير.docx", use_container_width=True)
 
                     
 
