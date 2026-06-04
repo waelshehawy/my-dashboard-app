@@ -1461,33 +1461,21 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
-    st.markdown("### 🔍 وحدة فحص هيكلية وقيم Supabase")
-if st.button("🔬 تشغيل فحص عينات البيانات الحية", type="secondary"):
+st.markdown("### 🔍 فحص الجدول البديل لبيانات دمشق")
+if st.button("🔬 تشغيل فحص الجدول المباشر", type="secondary"):
     try:
         cursor = conn.cursor()
         
-        # 1. جلب عينات من المحافظات المكتوبة فعلياً في قاعدتك
-        cursor.execute('SELECT DISTINCT "المحافظة" FROM "حجوزات1" LIMIT 5;')
-        provinces = cursor.fetchall()
-        
-        # 2. جلب عينات من حقل اسم الزبون لنرى كيف يُخزن الفراغ
-        cursor.execute('SELECT "اسم الزبون", COUNT(*) FROM "حجوزات1" GROUP BY "اسم الزبون" LIMIT 5;')
-        clients = cursor.fetchall()
-        
-        # 3. جلب أول 3 صفوف كاملة لنرى الأسماء الحقيقية للأعمدة
-        cursor.execute('SELECT * FROM "حجوزات1" LIMIT 3;')
-        columns = [desc[0] for desc in cursor.description]
-        sample_rows = cursor.fetchall()
+        # الفحص بدون علامات اقتباس حول اسم الجدول لمعرفة هل هو جدول آخر؟
+        cursor.execute('SELECT DISTINCT "المحافظة" FROM حجوزات1 LIMIT 5;')
+        provinces_alt = cursor.fetchall()
         
         cursor.close()
-        
-        # عرض نتائج الفحص للمدير
-        st.write("📍 **المحافظات المسجلة فعلياً في القاعدة:**", provinces)
-        st.write("👥 **طريقة كتابة حقل الزبائن (هل هو NULL أم نص فارغ؟):**", clients)
-        st.write("📋 **أسماء الأعمدة كما تراها سحابة Supabase:**", columns)
+        st.write("📍 **المحافظات في الجدول البديل:**", provinces_alt)
         
     except Exception as e:
-        st.error(f"❌ فشل فحص القاعدة: {e}")
+        st.error(f"❌ خطأ في فحص الجدول البديل: {e}")
+
 
     st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
