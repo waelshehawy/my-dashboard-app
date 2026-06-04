@@ -1461,16 +1461,14 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
-    st.markdown("تحليل بيانات اللوحات واستخراج استعلامات Supabase فوراً.")
+    st.markdown("نظام إدارة وتحليل اللوحات التفاعلي المستمر صوتاً.")
     st.divider()
 
     import google.generativeai as genai
     import json
     import pandas as pd
 
-    # Initialize session parameters to prevent data clearing on refresh
-    if 'submitted_query' not in st.session_state:
-        st.session_state['submitted_query'] = ""
+    # تهيئة الـ Session لمنع تصفير البيانات
     if 'page_ai_sql' not in st.session_state:
         st.session_state['page_ai_sql'] = None
     if 'page_ai_spoken' not in st.session_state:
@@ -1478,120 +1476,105 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     if 'page_ai_executed_data' not in st.session_state:
         st.session_state['page_ai_executed_data'] = None
 
-    # --- NATIVE CONTROL BOARD UI ---
-    st.markdown("### 🎛️ وحدة الإدخال السريع بدون كيبورد")
-    
-    st.info("""
-    💡 **لتفعيل الإدخال الصوتي الفوري على الكمبيوتر بدون عذاب:**
-    1. اضغط بالفأرة (الماوس) داخل صندوق النص المكتوب بالأسفل.
-    2. اضغط على اختصار النظام الفوري بجهازك:
-       - على نظام **ويندوز (Windows)**: اضغط زري **`Windows + H`** معاً وتكلم بالعامية.
-       - على نظام **ماك (Mac)**: اضغط زر **`Fn`** مرتين متتاليتين وتكلم بالعامية.
-    3. سيقوم نظام كمبيوترك بكتابة صوتك كـ نص صافي داخل الصندوق، ثم اضغط إنتر للتنفيذ!
-    """)
+    st.markdown("### 🗣️ تحدث مباشرة مع أبو الخير:")
+    st.caption("اضغط على المايك أدناه، قل طلبك بالعامية (مثل: فرجيني لوحات حلب)، ثم أوقف التسجيل ليقوم النظام بالتنفيذ فوراً.")
 
-    # 1. Strict Form container to freeze the user inputs during execution
-    with st.form(key="abu_al_khair_native_form"):
-        user_query = st.text_input(
-            label="أدخل أمر الإدارة الحالي (يدعم إملاء المايك الذكي لجهازك):",
-            placeholder="مثال: فرجيني اللوحات المحجوزة مؤقت في حلب...",
-            key="page_ai_query"
-        )
-        submit_button = st.form_submit_button(label="🧠 إرسال الأمر الفوري إلى أبو الخير", use_container_width=True)
+    # 🌟 أداة تسجيل الصوت السحابية الآمنة من Streamlit (تعمل على كل الأجهزة والنسخ القديمة والحديثة)
+    try:
+        # إذا كانت نسخة Streamlit حديثة ستظهر هذه الأداة تلقائياً
+        recorded_audio = st.audio_input("تكلم الآن مع أبو الخير:")
+    except AttributeError:
+        # إذا كانت النسخة قديمة، يظهر لك حقل لرفع الملف الصوتي مباشرة من موبايلك أو جهازك دون تعليق
+        recorded_audio = st.file_uploader("📥 قم برفع أو تسجيل ملف صوتي للأمر:", type=["wav", "mp3", "m4a"])
 
-    # 2. Database Lookup & AI Matrix execution
-    if submit_button:
-        if not user_query.strip():
-            st.warning("⚠️ الرجاء إملاء أو كتابة أمر أولاً.")
-        else:
-            st.session_state['submitted_query'] = user_query
-            api_key = st.secrets.get("GEMINI_API_KEY")
-            
-            if api_key and api_key != "ضع_مفتاحك_هنا":
-                with st.spinner("🧠 أبو الخير يتصل بـ Supabase لجلب البيانات الحية..."):
-                    try:
-                        genai.configure(api_key=api_key)
+    # صندوق نصي احتياطي للمستقبل إذا أردت الكتابة
+    user_typed_query = st.text_input(label="أو اكتب استعلامك يدوياً هنا:", placeholder="مثال: فرجيني سجلات دمشق الحالية...")
+
+    # تفعيل المعالجة فور توفر الصوت أو النص
+    if recorded_audio is not None or user_typed_query.strip():
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if api_key and api_key != "ضع_مفتاحك_هنا":
+            with st.spinner("🧠 أبو الخير يقوم بتحليل طلبك ومطابقة البيانات السحابية..."):
+                try:
+                    genai.configure(api_key=api_key)
+                    
+                    system_prompt = """
+                    أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
+                    مهمتك تحويل أمر المدير (سواء قاله صوتاً أو كتبه نصاً) إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                    
+                    هيكلية قاعدة البيانات المتاحة (PostgreSQL):
+                    جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
+                    الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                    
+                    ⚠️ قواعد صارمة لمنع الجداول الفارغة:
+                    1. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثال: "المحافظة" LIKE '%دمشق%').
+                    2. لا تضع شروطاً صارمة للأحجام إلا إذا طلبها المدير صراحة بوضوح في صوته.
+                    
+                    يجب أن تطابق المخرجات الهيكل التالي تماماً:
+                    {
+                        "intent": "get_available / check_temporary / create_package",
+                        "confidence": 0.95,
+                        "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
+                        "package_details": null,
+                        "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك سجلات دمشق الحالية فوراً من السحابة."
+                    }
+                    """
+                    
+                    model = genai.GenerativeModel(
+                        model_name="gemini-2.5-flash", # الفلاش القياسي يدعم معالجة الصوت والملفات مباشرة
+                        generation_config={"response_mime_type": "application/json"},
+                        system_instruction=system_prompt
+                    )
+                    
+                    contents = []
+                    # إذا تم تسجيل الصوت، نقرأ البايتات الصافية ونحقنها لـ Gemini فوراً ليفهم لهجتك السورية!
+                    if recorded_audio is not None:
+                        audio_data_bytes = recorded_audio.read()
+                        contents.append({
+                            "mime_type": "audio/wav",
+                            "data": audio_data_bytes
+                        })
+                    if user_typed_query.strip():
+                        contents.append(user_typed_query)
+
+                    response = model.generate_content(contents)
+                    if response.text:
+                        parsed_data = json.loads(response.text.strip())
+                        st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
+                        st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
+                        st.session_state['page_ai_executed_data'] = None
                         
-                        system_prompt = """
-                        أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
-                        وظيفتك تحويل أمر المدير إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                        # تنفيذ استعلام الـ SQL المستخرج فوراً بشكل آمن في Supabase
+                        cursor = conn.cursor()
+                        cursor.execute(st.session_state['page_ai_sql'])
+                        columns = [desc[0] for desc in cursor.description]
+                        data = cursor.fetchall()
+                        cursor.close()
                         
-                        هيكلية قاعدة البيانات المتاحة (PostgreSQL):
-                        جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
-                        الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
-                        
-                        ⚠️ قواعد صارمة لمنع الجداول الفارغة:
-                        1. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثال: "المحافظة" LIKE '%دمشق%').
-                        2. لا تضع شروطاً صارمة للأحجام أو التواريخ إلا إذا طلبها المدير صراحة بوضوح في صوته.
-                        
-                        يجب أن تطابق المخرجات الهيكل التالي تماماً:
-                        {
-                            "intent": "get_available / check_temporary / create_package",
-                            "confidence": 0.95,
-                            "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
-                            "package_details": null,
-                            "spoken_response": "أبشر يا أستاذي، لقيتلك السجلات المطلوبة فوراً وعرضتها على الشاشة."
-                        }
-                        """
-                        
-                        model = genai.GenerativeModel(
-                            model_name="gemini-2.5-flash-lite", 
-                            generation_config={"response_mime_type": "application/json"},
-                            system_instruction=system_prompt
-                        )
-                        
-                        response = model.generate_content(user_query)
-                        
-                        if response.text:
-                            parsed_data = json.loads(response.text.strip())
-                            st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
-                            st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
-                            st.session_state['page_ai_executed_data'] = None
+                        if data:
+                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
+                        else:
+                            st.session_state['page_ai_executed_data'] = "EMPTY"
                             
-                            # Silent continuous database execution block against Supabase
-                            cursor = conn.cursor()
-                            cursor.execute(st.session_state['page_ai_sql'])
-                            columns = [desc[0] for desc in cursor.description]
-                            data = cursor.fetchall()
-                            cursor.close()
-                            
-                            if data:
-                                st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
-                            else:
-                                st.session_state['page_ai_executed_data'] = "EMPTY"
-                                
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"🚨 خطأ معالجة تلقائي: {e}")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"🚨 خطأ معالجة تلقائي: {e}")
 
-    # --- 3. VIEW SECURE GRAPH AND DATA PAYLOADS ---
+    # --- 3. عرض المخرجات الحية وجداول التصدير للـ Excel والـ Word ---
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
         st.divider()
         
-        current_spoken = st.session_state.get('page_ai_spoken', 'تم معالجة السجلات')
-        
-        # Clean text message card block
+        current_spoken = st.session_state.get('page_ai_spoken', 'تم جلب السجلات')
         st.success(f"🤖 رد أبو الخير: {current_spoken}")
-        
-        st.markdown(f"""
-        <div style="background-color: rgba(34, 197, 94, 0.1); border-right: 5px solid #22c55e; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 13px; color: #a0a0a0; text-align: right;">الأمر المستلم في الذاكرة السحابية الحية:</p>
-            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('submitted_query')}"</h4>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Display underlying code logs
-        with st.expander("🛠️ عرض استعلام الـ SQL المطبق خلف الكواليس"):
-            st.code(st.session_state.get('page_ai_sql', ''), language="sql")
         
         if isinstance(executed_res, str) and executed_res == "EMPTY":
             st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
         else:
             st.dataframe(executed_res, use_container_width=True)
-            st.info("💡 تم العثور على السجلات التي تطابق طلب الإدارة بنجاح.")
+            st.info("💡 تم العثور على السجلات وتجهيز ملفات التحميل بنجاح.")
             
-            # Instant file packaging export arrays
+            # أزرار التصدير الفوري لملفات Excel و Word بمحاذاة صارمة ومستقرة
             col_excel, col_word = st.columns(2)
             
             with col_excel:
@@ -1599,12 +1582,25 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 excel_buffer = io.BytesIO()
                 with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                     executed_res.to_excel(writer, index=False, sheet_name='Abu Al-Khair')
-                st.download_button(
-                    label="📥 تحميل كملف Excel", 
-                    data=excel_buffer.getvalue(), 
-                    file_name="تقرير_أبو_الخير.xlsx", 
-                    use_container_width=True
-                )
+                st.download_button("📥 تحميل كملف Excel", excel_buffer.getvalue(), "report.xlsx", use_container_width=True)
+                
+            with col_word:
+                from docx import Document
+                import io
+                doc = Document()
+                table = doc.add_table(rows=1, cols=len(executed_res.columns))
+                table.style = 'Light Shading Accent 1'
+                hdr_cells = table.rows.cells
+                for i, col_name in enumerate(executed_res.columns): 
+                    hdr_cells[i].text = str(col_name)
+                for _, row in executed_res.iterrows():
+                    row_cells = table.add_row().cells
+                    for i, val in enumerate(row): 
+                        row_cells[i].text = str(val)
+                word_buffer = io.BytesIO()
+                doc.save(word_buffer)
+                st.download_button("📝 تحميل كتقرير Word", word_buffer.getvalue(), "report.docx", use_container_width=True)
+
                 
             with col_word:
                 from docx import Document
