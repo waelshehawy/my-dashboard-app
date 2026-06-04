@@ -1461,207 +1461,132 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 # ============================================================
-# 🎙️ صفحة المساعد الذكي (أبو الخير) - النسخة العاملة 100%
+# 🧪 صفحة اختبار الصوت فقط - بدون تعقيدات
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
-    st.title("🎙️ المساعد الذكي (أبو الخير)")
-    st.markdown("نظام إدارة وتحليل اللوحات")
-    st.divider()
-
-    import google.generativeai as genai
-    import json
-    import pandas as pd
-    from io import BytesIO
-
-    # تهيئة session_state
-    if 'result_df' not in st.session_state:
-        st.session_state['result_df'] = None
-
-    # ========================================
-    # واجهة إدخال الطلب
-    # ========================================
-    st.markdown("### 🗣️ اكتب طلبك بالعامية:")
     
-    # أمثلة للمستخدم
-    with st.expander("📖 أمثلة على الأوامر التي يمكنك كتابتها", expanded=True):
-        st.markdown("""
-        - 📍 عرض اللوحات في حلب
-        - 📍 جميع اللوحات في دمشق
-        - 📍 اللوحات المحجوزة في حمص
-        - 📍 اعرض لي كل اللوحات
-        """)
+    st.title("🎙️ اختبار تحويل الصوت إلى نص")
+    st.markdown("---")
     
-    # صندوق إدخال النص
-    user_query = st.text_input(
-        "اكتب أمرك هنا:",
-        placeholder="مثال: عرض اللوحات في حلب",
-        key="user_query_input"
-    )
-
-    # ========================================
-    # زر التنفيذ
-    # ========================================
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        execute_button = st.button("🚀 تنفيذ الاستعلام", type="primary", use_container_width=True)
+    # طريقة 1: رفع ملف صوتي للاختبار
+    st.subheader("الطريقة 1: ارفع ملف صوتي من جهازك")
+    uploaded_file = st.file_uploader("اختر ملف WAV أو MP3", type=['wav', 'mp3', 'm4a'])
     
-    # ========================================
-    # معالجة الطلب
-    # ========================================
-    if execute_button and user_query.strip():
-        api_key = st.secrets.get("GEMINI_API_KEY")
+    if uploaded_file is not None:
+        st.audio(uploaded_file)
         
-        if not api_key or api_key == "ضع_مفتاحك_هنا":
-            st.error("❌ مفتاح API غير موجود. يرجى إعداد GEMINI_API_KEY في secrets")
-        else:
-            with st.spinner("🧠 أبو الخير يحلل طلبك..."):
-                try:
-                    genai.configure(api_key=api_key)
-                    
-                    system_prompt = """
-                    أنت مساعد SQL محترف. المطلوب منك تحويل أمر المستخدم إلى استعلام SQL صحيح.
-                    
-                    قاعدة البيانات:
-                    الجدول: "حجوزات1"
-                    الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
-                    
-                    قواعد مهمة جداً:
-                    1. اسم الجدول必须有 علامات اقتباس مزدوجة: "حجوزات1"
-                    2. أسماء الأعمدة必须有 علامات اقتباس مزدوجة: "رقم اللوحة"
-                    3. استخدم LIKE مع % للبحث: WHERE "المحافظة" LIKE '%دمشق%'
-                    4. لا تضع ORDER BY除非 المستخدم طلب ترتيباً
-                    
-                    أخرج JSON فقط بهذا التنسيق:
-                    {
-                        "sql": "SELECT * FROM \"حجوزات1\" WHERE \"المحافظة\" LIKE '%دمشق%'",
-                        "reply": "تم جلب اللوحات في دمشق"
-                    }
-                    """
-                    
-                    model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash-lite",
-                        generation_config={"response_mime_type": "application/json"},
-                        system_instruction=system_prompt
-                    )
-                    
-                    response = model.generate_content(user_query)
-                    
-                    if response.text:
-                        result = json.loads(response.text.strip())
-                        
-                        sql_query = result.get('sql', '')
-                        reply = result.get('reply', 'تم تنفيذ الاستعلام')
-                        
-                        # عرض الاستعلام
-                        with st.expander("🔍 استعلام SQL المنفذ"):
-                            st.code(sql_query, language='sql')
-                        
-                        # تنفيذ الاستعلام
-                        if sql_query:
-                            cursor = conn.cursor()
-                            cursor.execute(sql_query)
-                            
-                            # جلب النتائج
-                            if cursor.description:
-                                columns = [desc[0] for desc in cursor.description]
-                                data = cursor.fetchall()
-                                
-                                if data:
-                                    df = pd.DataFrame(data, columns=columns)
-                                    st.session_state['result_df'] = df
-                                    st.success(f"✅ {reply}")
-                                    st.info(f"📊 تم العثور على {len(df)} سجل")
-                                else:
-                                    st.warning("📭 لا توجد نتائج مطابقة لطلبك")
-                                    st.session_state['result_df'] = None
-                            else:
-                                st.info("ℹ️ الاستعلام تم تنفيذه بنجاح ولكن لا توجد بيانات للعرض")
-                            
-                            cursor.close()
-                        else:
-                            st.error("❌ لم يتم إنشاء استعلام SQL صحيح")
-                    else:
-                        st.error("❌ لم يتم الحصول على رد من الذكاء الاصطناعي")
-                        
-                except json.JSONDecodeError as e:
-                    st.error(f"❌ خطأ في تحليل رد الذكاء الاصطناعي: {e}")
-                    st.text("الرد المستلم: " + response.text[:200] if 'response' in locals() else "لا يوجد رد")
-                except Exception as e:
-                    st.error(f"🚨 خطأ: {str(e)}")
+        with st.spinner("جاري تحويل الصوت إلى نص..."):
+            import speech_recognition as sr
+            from io import BytesIO
+            
+            try:
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(BytesIO(uploaded_file.getvalue())) as source:
+                    recognizer.adjust_for_ambient_noise(source)
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data, language='ar-SY')
+                    st.success(f"✅ النص المستخلص: **{text}**")
+                    st.session_state['test_text'] = text
+            except sr.UnknownValueError:
+                st.error("❌ لم يتم فهم الصوت")
+            except sr.RequestError as e:
+                st.error(f"❌ خطأ في الاتصال: {e}")
+            except Exception as e:
+                st.error(f"❌ خطأ: {e}")
     
-    # ========================================
-    # عرض النتائج
-    # ========================================
-    if st.session_state['result_df'] is not None:
-        st.divider()
-        st.subheader("📊 النتائج:")
-        st.dataframe(st.session_state['result_df'], use_container_width=True)
-        
-        # أزرار التحميل
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            excel_buffer = BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                st.session_state['result_df'].to_excel(writer, index=False, sheet_name='تقرير')
-            st.download_button(
-                label="📥 تحميل Excel",
-                data=excel_buffer.getvalue(),
-                file_name="تقرير_أبو_الخير.xlsx",
-                use_container_width=True
-            )
-        
-        with col2:
-            from docx import Document
-            
-            doc = Document()
-            doc.add_heading('تقرير أبو الخير', 0)
-            doc.add_paragraph(f'تاريخ التقرير: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")}')
-            doc.add_paragraph(f'عدد السجلات: {len(st.session_state["result_df"])}')
-            
-            # إضافة الجدول
-            table = doc.add_table(rows=1, cols=len(st.session_state['result_df'].columns))
-            table.style = 'Light Grid Accent 1'
-            
-            # رؤوس الأعمدة
-            for i, col in enumerate(st.session_state['result_df'].columns):
-                table.rows[0].cells[i].text = str(col)
-            
-            # البيانات
-            for _, row in st.session_state['result_df'].iterrows():
-                cells = table.add_row().cells
-                for i, val in enumerate(row):
-                    cells[i].text = str(val)
-            
-            word_buffer = BytesIO()
-            doc.save(word_buffer)
-            st.download_button(
-                label="📝 تحميل Word",
-                data=word_buffer.getvalue(),
-                file_name="تقرير_أبو_الخير.docx",
-                use_container_width=True
-            )
+    st.markdown("---")
     
-    # ========================================
-    # تعليمات للمستخدم
-    # ========================================
-    with st.expander("ℹ️ تعليمات الاستخدام"):
-        st.markdown("""
-        **كيفية استخدام المساعد الذكي (أبو الخير):**
+    # طريقة 2: تسجيل مباشر من المتصفح (إن أمكن)
+    st.subheader("الطريقة 2: تسجيل مباشر")
+    st.warning("⚠️ هذه الطريقة قد لا تعمل على Streamlit Cloud بسبب قيود المتصفح")
+    
+    # أبسط طريقة للتسجيل من المتصفح
+    audio_html = """
+    <div style="text-align:center; padding:20px; border:1px solid #ccc; border-radius:10px;">
+        <button onclick="startRecording()" style="background:#4CAF50; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer;">🎤 بدء التسجيل</button>
+        <button onclick="stopRecording()" style="background:#f44336; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer;">⏹️ إيقاف التسجيل</button>
+        <p id="status" style="margin-top:10px;">اضغط بدء التسجيل</p>
+        <input type="file" id="audioUpload" accept="audio/*" style="display:none;">
+    </div>
+    <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    
+    function startRecording() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const file = new File([audioBlob], "recording.wav", { type: "audio/wav" });
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    const fileInput = document.getElementById('audioUpload');
+                    fileInput.files = dataTransfer.files;
+                    const changeEvent = new Event('change', { bubbles: true });
+                    fileInput.dispatchEvent(changeEvent);
+                    document.getElementById('status').innerHTML = '✅ تم التسجيل! جاري المعالجة...';
+                };
+                mediaRecorder.start();
+                document.getElementById('status').innerHTML = '🔴 جاري التسجيل... اضغط إيقاف';
+                stream.getTracks().forEach(track => track.onended = () => mediaRecorder.stop());
+            })
+            .catch(err => document.getElementById('status').innerHTML = '❌ خطأ: ' + err.message);
+    }
+    
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+        }
+    }
+    </script>
+    """
+    
+    st.components.v1.html(audio_html, height=150)
+    
+    # استقبال الملف المسجل
+    recorded_audio = st.file_uploader("", type=['wav', 'webm'], key="recorded_audio", label_visibility="collapsed")
+    
+    if recorded_audio is not None:
+        st.audio(recorded_audio)
         
-        1. ✍️ اكتب طلبك بالعامية في مربع النص
-        2. 🚀 اضغط على زر "تنفيذ الاستعلام"
-        3. 📊 ستعرض النتائج في جدول
-        4. 📥 يمكنك تحميل النتائج بصيغة Excel أو Word
+        with st.spinner("جاري تحويل الصوت إلى نص..."):
+            import speech_recognition as sr
+            from io import BytesIO
+            
+            try:
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(BytesIO(recorded_audio.getvalue())) as source:
+                    recognizer.adjust_for_ambient_noise(source)
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data, language='ar-SY')
+                    st.success(f"✅ النص المستخلص: **{text}**")
+                    st.session_state['test_text'] = text
+            except sr.UnknownValueError:
+                st.error("❌ لم يتم فهم الصوت. تأكد من:")
+                st.markdown("""
+                - التحدث بوضوح وبصوت عالٍ
+                - أن الميكروفون يعمل بشكل صحيح
+                - أن اللغة عربية فصحى أو عامية قريبة منها
+                """)
+            except sr.RequestError as e:
+                st.error(f"❌ خطأ في الاتصال بخدمة Google: {e}")
+            except Exception as e:
+                st.error(f"❌ خطأ: {e}")
+    
+    st.markdown("---")
+    st.subheader("💡 الخلاصة")
+    
+    if 'test_text' in st.session_state and st.session_state['test_text']:
+        st.success(f"🎉 النص الذي تم فهمه: **{st.session_state['test_text']}**")
         
-        **أمثلة على الأوامر المدعومة:**
-        - "عرض اللوحات في حلب"
-        - "جميع اللوحات في دمشق"
-        - "اللوحات المحجوزة في حمص"
-        - "اعرض لي كل اللوحات"
-        
-        **ملاحظة:** الميزة الصوتية قيد التطوير وسيتم إضافتها قريباً!
-        """)
+        if st.button("🚀 تجربة الاستعلام مع هذا النص"):
+            st.write("سيتم تنفيذ الاستعلام مع النص:", st.session_state['test_text'])
+            # هنا ضع كود Gemini和执行
+    else:
+        st.info("📢 جرب تحميل ملف صوتي للتأكد من أن الخدمة تعمل")
                     
 
 
