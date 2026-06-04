@@ -1472,24 +1472,28 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     query_params = st.query_params
     voice_raw_text = query_params.get("abu_voice", "")
 
-    # إذا التقط المتصفح نصاً جديداً، نثبته في الـ Session وننظف الرابط لمنع التكرار
     if voice_raw_text:
         st.session_state['page_ai_query'] = voice_raw_text
         st.query_params.clear()
         st.rerun()
 
-    # --- 🤖 مجمع الخلفية الصوتي: المساعد التفاعلي أبو الخير ---
+    # --- 🤖 مجمع الخلفية الصوتي المطور والمحمي ضد الحجب ---
     abu_al_khair_html = """
     <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl;">
         <div id="status-light" style="width: 20px; height: 20px; background-color: #ef4444; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle; box-shadow: 0 0 10px #ef4444;"></div>
-        <span id="agent-status" style="color: #94a3b8; font-weight: bold; font-size: 16px;">أبو الخير في وضع الاستعداد (نادني بـ: أبو الخير)...</span>
-        <p id="live-transcript" style="color: #38bdf8; font-size: 14px; margin-top: 10px; font-style: italic;"></p>
+        <span id="agent-status" style="color: #94a3b8; font-weight: bold; font-size: 16px;">المايك بانتظار تفعيل الصلاحية...</span>
+        <br/><br/>
+        <button id="start-session-btn" style="background-color: #22c55e; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            🟢 تفعيل وتشغيل المساعد أبو الخير
+        </button>
+        <p id="live-transcript" style="color: #38bdf8; font-size: 14px; margin-top: 15px; font-style: italic;"></p>
     </div>
 
     <script>
         const statusLight = document.getElementById('status-light');
         const agentStatus = document.getElementById('agent-status');
         const liveTranscript = document.getElementById('live-transcript');
+        const startBtn = document.getElementById('start-session-btn');
         
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1501,16 +1505,16 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             
             let isAwake = false;
 
-            // تشغيل المايك تلقائياً فور الدخول للصفحة ليكون جاهزاً دائماً
-            window.onload = function() {
-                try { recognition.start(); } catch(e) {}
-            };
-
-            recognition.onstart = function() {
-                if(!isAwake) {
+            // تفعيل المايك وفك حجب المتصفح عند ضغط الزر الأخضر صراحة
+            startBtn.onclick = function() {
+                try {
+                    recognition.start();
+                    startBtn.style.display = 'none'; // إخفاء الزر بعد التفعيل لتنظيف الواجهة
                     statusLight.style.backgroundColor = '#eab308';
                     statusLight.style.boxShadow = '0 0 10px #eab308';
-                    agentStatus.innerText = 'أبو الخير يستمع في الخلفية... (نادني بـ "أبو الخير")';
+                    agentStatus.innerText = 'أبو الخير يستمع في الخلفية... نادني بـ "أبو الخير"';
+                } catch(e) {
+                    agentStatus.innerText = 'المايك يعمل بالفعل ويستمع لك...';
                 }
             };
 
@@ -1529,7 +1533,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 let speechText = (finalTranscript + interimTranscript).trim().toLowerCase();
                 liveTranscript.innerText = "ما تم سماعه لحظياً: " + speechText;
 
-                // الحالة أ: رصد كلمة الاستيقاظ "أبو الخير"
+                // رصد كلمة الاستيقاظ "أبو الخير"
                 if (!isAwake && (speechText.includes('ابو الخير') || speechText.includes('أبو الخير'))) {
                     isAwake = true;
                     statusLight.style.backgroundColor = '#22c55e';
@@ -1545,33 +1549,37 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     speechText = '';
                 }
                 
-                // الحالة ب: استقبال الطلب الفعلي بعد التنشيط
+                // استقبال الطلب الفعلي بعد التنشيط
                 if (isAwake && speechText.length > 5 && !speechText.endsWith('ابو الخير') && !speechText.endsWith('أبو الخير')) {
                     isAwake = false;
-                    // تمرير النص الصافي للرابط الخارجي بشكل آمن يتخطى قيود الـ Sandbox
                     const baseUrl = window.parent.location.origin + window.parent.location.pathname;
                     window.parent.location.href = baseUrl + '?abu_voice=' + encodeURIComponent(speechText);
                 }
             };
 
             recognition.onerror = function(event) {
+                statusLight.style.backgroundColor = '#ef4444';
                 if(event.error === 'not-allowed') {
-                    agentStatus.innerText = '❌ يرجى تفعيل صلاحية المايك من قفل المتصفح فوق.';
+                    agentStatus.innerText = '❌ خطأ: المايك محجوب. يرجى الضغط على علامة القفل بجانب رابط الموقع وفك الحجب.';
+                } else {
+                    agentStatus.innerText = 'خطأ في التقاط الصوت: ' + event.error;
                 }
             };
 
             recognition.onend = function() {
+                // الحفاظ على استمرارية الاستماع بشكل دائم
                 try { recognition.start(); } catch(e) {}
             };
             
         } else {
             agentStatus.innerText = '❌ المتصفح الحالي لا يدعم محرك التقاط الصوت.';
+            startBtn.style.display = 'none';
         }
     </script>
     """
     
-    # عرض واجهة المساعد (عرض فقط بدون أخذ مخرجاتها ككائن للـ Blob)
-    components.html(abu_al_khair_html, height=130)
+    components.html(abu_al_khair_html, height=160)
+
 
     # 2. بدء المعالجة التلقائية السحابية فور توفر نص مسموع حقيقي في الذاكرة
     active_query = st.session_state.get('page_ai_query', '')
