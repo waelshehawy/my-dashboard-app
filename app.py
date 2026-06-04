@@ -1461,7 +1461,7 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 # ============================================================
-# 🎙️ صفحة المساعد الذكي (أبو الخير) - حل متوافق مع كل الإصدارات
+# 🎙️ صفحة المساعد الذكي (أبو الخير) - مع زر تسجيل يعمل دائماً
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
@@ -1473,43 +1473,127 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     import pandas as pd
     import speech_recognition as sr
     from io import BytesIO
-
-    # عرض إصدار Streamlit للتشخيص
-    st.caption(f"🔧 إصدار Streamlit: {st.__version__}")
+    import base64
 
     # تهيئة session_state
     if 'text_captured' not in st.session_state:
         st.session_state['text_captured'] = ""
-    if 'last_audio' not in st.session_state:
-        st.session_state['last_audio'] = None
     if 'result_df' not in st.session_state:
         st.session_state['result_df'] = None
 
     st.markdown("### 🗣️ سجل واستعلم:")
-    st.caption("اضغط الزر، تكلم بوضوح، ثم انتظر التحليل")
-
-    # ========================================
-    # التسجيل الصوتي - متوافق مع كل الإصدارات
-    # ========================================
-    audio_value = None
     
-    # تجربة الدالة الجديدة أولاً
-    if hasattr(st, 'audio_input'):
-        audio_value = st.audio_input("🎤 اضغط للتسجيل")
-    # ثم الدالة التجريبية القديمة
-    elif hasattr(st, 'experimental_audio_input'):
-        audio_value = st.experimental_audio_input("🎤 اضغط للتسجيل")
-    else:
-        st.error("❌ عذراً، متصفحك أو البيئة لا تدعم التسجيل الصوتي. الرجاء كتابة النص يدوياً في الحقل أدناه.")
+    # ========================================
+    # زر تسجيل HTML يعمل على أي متصفح
+    # ========================================
+    audio_html = """
+    <div dir="ltr" style="text-align: center; margin: 20px 0;">
+        <button id="recordBtn" style="background-color: #ff4b4b; color: white; font-size: 24px; padding: 20px 40px; border: none; border-radius: 50px; cursor: pointer; font-weight: bold;">
+            🎤 اضغط وتكلم الآن
+        </button>
+        <p id="status" style="margin-top: 10px; color: #666;">اضغط الزر وابدأ التحدث...</p>
+        <audio id="audioPlayback" controls style="display: none; width: 100%; margin-top: 10px;"></audio>
+        <input type="file" id="audioFile" accept="audio/*" style="display: none;">
+    </div>
     
-    # معالجة الصوت المسجل
-    if audio_value and audio_value != st.session_state['last_audio']:
-        st.session_state['last_audio'] = audio_value
-        
+    <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const statusDiv = document.getElementById('status');
+    const audioPlayback = document.getElementById('audioPlayback');
+    const audioFileInput = document.getElementById('audioFile');
+    
+    let mediaRecorder;
+    let audioChunks = [];
+    
+    recordBtn.onclick = async () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            // إيقاف التسجيل
+            mediaRecorder.stop();
+            recordBtn.textContent = '🎤 اضغط وتكلم الآن';
+            recordBtn.style.backgroundColor = '#ff4b4b';
+            statusDiv.textContent = 'جاري معالجة الصوت...';
+        } else {
+            // بدء التسجيل
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPlayback.src = audioUrl;
+                    audioPlayback.style.display = 'block';
+                    
+                    // تحويل إلى ملف وإرساله إلى Streamlit
+                    const file = new File([audioBlob], "recording.wav", { type: "audio/wav" });
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    audioFileInput.files = dataTransfer.files;
+                    
+                    // إحداث تغيير ليتعرف عليه Streamlit
+                    const changeEvent = new Event('change', { bubbles: true });
+                    audioFileInput.dispatchEvent(changeEvent);
+                    
+                    statusDiv.textContent = '✅ تم التسجيل! انتظر المعالجة...';
+                    recordBtn.textContent = '🎤 اضغط وتكلم الآن';
+                    recordBtn.style.backgroundColor = '#ff4b4b';
+                    
+                    // إيقاف المسارات الصوتية
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.start();
+                recordBtn.textContent = '⏹️ اضغط لإنهاء التسجيل';
+                recordBtn.style.backgroundColor = '#ff6b6b';
+                statusDiv.textContent = '🎙️ جاري التسجيل... تحدث الآن';
+                
+            } catch (err) {
+                statusDiv.textContent = '❌ لا يمكن الوصول للميكروفون: ' + err.message;
+                console.error(err);
+            }
+        }
+    };
+    
+    // إرسال الملف إلى Streamlit عند اختياره
+    audioFileInput.onchange = () => {
+        if (audioFileInput.files.length > 0) {
+            const file = audioFileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // تخزين البيانات في عنصر مخفي لإرسالها
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.id = 'audioData';
+                hiddenInput.value = e.target.result;
+                document.body.appendChild(hiddenInput);
+                
+                // إرسال إشارة إلى Streamlit
+                const event = new Event('audio-ready', { bubbles: true });
+                document.dispatchEvent(event);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    </script>
+    """
+    
+    st.components.v1.html(audio_html, height=200)
+    
+    # رفع ملف الصوت
+    uploaded_audio = st.file_uploader("أو ارفع ملف صوتي (اختياري)", type=['wav', 'mp3', 'm4a'], key="audio_uploader")
+    
+    # معالجة الصوت المرفوع (سواء من التسجيل أو الرفع)
+    audio_source = uploaded_audio
+    
+    if audio_source:
         with st.spinner("🎙️ جاري تحليل الصوت..."):
             try:
-                # audio_value مباشرة هو كائن BytesIO[citation:2]
-                with sr.AudioFile(audio_value) as source:
+                with sr.AudioFile(audio_source) as source:
                     recognizer = sr.Recognizer()
                     recognizer.adjust_for_ambient_noise(source)
                     audio_data = recognizer.record(source)
@@ -1517,13 +1601,10 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     # التحويل إلى نص عربي
                     detected_text = recognizer.recognize_google(audio_data, language='ar-SY')
                     st.session_state['text_captured'] = detected_text
-                    st.success(f"✅ تم التعرف: {detected_text}")
-                    st.rerun()
+                    st.success(f"✅ تم التعرف على: {detected_text}")
                     
             except sr.UnknownValueError:
                 st.error("❌ لم يتم فهم الصوت، حاول التحدث بوضوح أكثر")
-            except ValueError as e:
-                st.error(f"❌ ملف الصوت غير صالح: {e}")
             except Exception as e:
                 st.error(f"❌ خطأ: {e}")
 
@@ -1534,7 +1615,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         placeholder="مثال: اعرض لي اللوحات في حلب"
     )
 
-    # زر التنفيذ اليدوي
+    # زر التنفيذ
     if st.button("🚀 تنفيذ الاستعلام", type="primary", use_container_width=True) and user_query.strip():
         api_key = st.secrets.get("GEMINI_API_KEY")
         
@@ -1549,9 +1630,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     
                     أخرج JSON بهذا الشكل:
                     {"sql": "استعلام SQL", "reply": "رد مختصر"}
-                    
-                    مثال عن الاستعلام الصحيح:
-                    {"sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%حلب%'", "reply": "تم جلب اللوحات في حلب"}
                     """
                     
                     model = genai.GenerativeModel(
@@ -1586,7 +1664,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.subheader("📊 النتائج:")
         st.dataframe(st.session_state['result_df'], use_container_width=True)
         
-        # خيارات التحميل
+        # أزرار التحميل
         col1, col2 = st.columns(2)
         with col1:
             buffer = BytesIO()
