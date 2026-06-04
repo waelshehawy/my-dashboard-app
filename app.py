@@ -1611,6 +1611,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         if api_key and api_key != "ضع_مفتاحك_هنا":
             with st.spinner("🧠 أبو الخير يتصل بـ Supabase لجلب جداول البيانات..."):
             # Ensure this try block lines up perfectly with your API configure script
+            # Ensure this try block lines up perfectly with your API configure script
             try:
                 genai.configure(api_key=api_key)
                 
@@ -1674,6 +1675,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             except Exception as e:
                 st.error(f"🚨 خطأ معالجة تلقائي: {e}")
                 st.session_state['captured_audio_b64'] = None
+
 
                     
 
