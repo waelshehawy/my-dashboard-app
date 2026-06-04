@@ -12,5 +12,5 @@ python-dotenv==1.0.1
 pillow==10.3.0 
 google-generativeai
 xlsxwriter
-streamlit-audiorec-ru-fork
+streamlit-audiorec
 SpeechRecognition
