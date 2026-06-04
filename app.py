@@ -1610,69 +1610,72 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         api_key = st.secrets.get("GEMINI_API_KEY")
         if api_key and api_key != "ضع_مفتاحك_هنا":
             with st.spinner("🧠 أبو الخير يتصل بـ Supabase لجلب جداول البيانات..."):
-                try:
-                    genai.configure(api_key=api_key)
+            # Ensure this try block lines up perfectly with your API configure script
+            try:
+                genai.configure(api_key=api_key)
+                
+                system_prompt = """
+                أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
+                مهمتك تحويل أمر المدير الصوتي المرفق إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                
+                هيكلية قاعدة البيانات المتاحة (PostgreSQL):
+                جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
+                الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                
+                ⚠️ قواعد صارمة لمنع الجداول الفارغة:
+                1. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثال: "المحافظة" LIKE '%دمشق%').
+                2. لا تضع شروطاً صارمة للأحجام إلا إذا طلبها المدير صراحة بوضوح في صوته.
+                
+                يجب أن تطابق المخرجات الهيكل التالي تماماً:
+                {
+                    "intent": "get_available / check_temporary / create_package",
+                    "confidence": 0.95,
+                    "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
+                    "package_details": null,
+                    "spoken_response": "أبشر يا أستاذي، لقيتلك السجلات المطلوبة فوراً وعرضتها على الشاشة."
+                }
+                """
+                
+                model = genai.GenerativeModel(
+                    model_name="gemini-2.5-flash", 
+                    generation_config={"response_mime_type": "application/json"},
+                    system_instruction=system_prompt
+                )
+                
+                response = model.generate_content([
+                    {"mime_type": "audio/wav", "data": recorded_bytes}
+                ])
+                
+                if response.text:
+                    parsed_data = json.loads(response.text.strip())
+                    st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
+                    st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
+                    st.session_state['page_ai_executed_data'] = None
                     
-                    system_prompt = """
-                    أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
-                    مهمتك تحويل أمر المدير الصوتي المرفق إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                    # ضرب قاعدة بيانات Supabase الحية بالتحديث المستخرج
+                    cursor = conn.cursor()
+                    cursor.execute(st.session_state['page_ai_sql'])
+                    columns = [desc for desc in cursor.description]
+                    data = cursor.fetchall()
+                    cursor.close()
                     
-                    هيكلية قاعدة البيانات المتاحة (PostgreSQL):
-                    جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
-                    الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
-                    
-                    ⚠️ قواعد صارمة لمنع الجداول الفارغة:
-                    1. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثال: "المحافظة" LIKE '%دمشق%').
-                    2. لا تضع شروطاً صارمة للأحجام إلا إذا طلبها المدير صراحة بوضوح في صوته.
-                    
-                    يجب أن تطابق المخرجات الهيكل التالي تماماً:
-                    {
-                        "intent": "get_available / check_temporary / create_package",
-                        "confidence": 0.95,
-                        "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
-                        "package_details": null,
-                        "spoken_response": "أبشر يا أستاذي، لقيتلك السجلات المطلوبة فوراً وعرضتها على الشاشة."
-                    }
-                    """
-                    
-                    model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash", 
-                        generation_config={"response_mime_type": "application/json"},
-                        system_instruction=system_prompt
-                    )
-                    
-                    response = model.generate_content([
-                        {"mime_type": "audio/wav", "data": recorded_bytes}
-                    ])
-                    
-                    if response.text:
-                        parsed_data = json.loads(response.text.strip())
-                        st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
-                        st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
-                        st.session_state['page_ai_executed_data'] = None
+                    if data:
+                        import pandas as pd
+                        st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
                         
-                        # Execute the calculated SQL directly inside your live Supabase cloud engine
-                        cursor = conn.cursor()
-                        cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc for desc in cursor.description]
-                        data = cursor.fetchall()
-                        cursor.close()
-                        
-                        if data:
-                            import pandas as pd
-                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
-                            
-                            # Play dynamic voice confirmation from Abu Al-Khair using pure text-to-speech rendering
-                            final_text = st.session_state['page_ai_spoken']
-                            tts_html = f"""<script>if('speechSynthesis' in window){{window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance("{final_text}"); u.lang="ar-SA"; window.speechSynthesis.speak(u);}}</script>"""
-                            components.html(tts_html, height=0, width=0)
-                        
-                        # Safely reset variables to clear queue registers for the next voice command loop
-                        st.session_state['captured_audio_b64'] = None
-                        st.rerun()
+                        # نطق جملة الاعتماد الأخيرة لأبو الخير
+                        final_text = st.session_state['page_ai_spoken']
+                        tts_html = f"""<script>if('speechSynthesis' in window){{window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance("{final_text}"); u.lang="ar-SA"; window.speechSynthesis.speak(u);}}</script>"""
+                        components.html(tts_html, height=0, width=0)
+                    
+                    # تصفير الذاكرة للاستعداد لأمر صوتي جديد
+                    st.session_state['captured_audio_b64'] = None
+                    st.rerun()
             except Exception as e:
                 st.error(f"🚨 خطأ معالجة تلقائي: {e}")
                 st.session_state['captured_audio_b64'] = None
+
+                    
 
 
 
