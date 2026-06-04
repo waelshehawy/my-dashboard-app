@@ -1461,80 +1461,47 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
-    st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
+    st.markdown("تحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    # تهيئة حقول الذاكرة المؤقتة لمنع اختفاء النصوص أثناء التحديث اللحظي للمتصفح
+    # تهيئة حقول الذاكرة المؤقتة لمنع اختفاء النصوص أثناء تحديث المتصفح
     if 'submitted_query' not in st.session_state:
         st.session_state['submitted_query'] = ""
     if 'should_speak' not in st.session_state:
         st.session_state['should_speak'] = False
 
-    # --- 🎙️ تفعيل المايك البرمجي عبر المتصفح وتحويل الصوت إلى نص بدقة عالية ---
-    import streamlit.components.v1 as components
-    
-    st.markdown("### 🗣️ الإدخال الصوتي الفوري:")
-    st.caption("اضغط على زر (ابدأ التحدث) وتكلم بالعامية، وسيتم كتابة أمرك بالأسفل تلقائياً.")
-    
-    st_speech_html = """
-    <div style="text-align: right; direction: rtl;">
-        <button id="mic-btn" style="background-color: #667eea; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;">
-            🎙️ ابدأ التحدث بالصوت الآن...
-        </button>
-        <p id="mic-status" style="color: #a0a0a0; font-size: 12px; margin-top: 5px;">الميكروفون مغلق</p>
-    </div>
+    st.markdown("### 🎙️ إملاء الأمر الصوتي الفوري:")
+    st.info("💡 **طريقة استخدام الصوت المضمونة:** اضغط داخل صندوق النص أدناه، ثم اضغط على **زر المايك المدمج في كيبورد جوالك** وتكلم بالعامية؛ سيقوم الجوال بكتابة أمرك فوراً بدقة خارقة!")
 
-    <script>
-        const micBtn = document.getElementById('mic-btn');
-        const micStatus = document.getElementById('mic-status');
-        
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            const recognition = new SpeechRecognition();
+    # مجمع الـ Form الصارم الذي يحافظ على النص المكتوب صوتياً بالكامل ويمع التصفير
+    with st.form(key="ai_assistant_form"):
+        user_query = st.text_input(
+            label="أمر الإدارة الحالي (تكلم عبر مايك الكيبورد):",
+            placeholder="مثال: شف لي اللوحات الفاضية بحلب...",
+            key="page_ai_query"
+        )
+        submit_button = st.form_submit_button(label="🧠 تحليل الطلب ومفاضلة العروض", use_container_width=True)
+
+    # معالجة الطلب فور ضغط زر الـ Form
+    if submit_button:
+        if not user_query.strip():
+            st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
+        else:
+            # تثبيت النص في الـ Session State فوراً لعرضه للمدير ومنع أي شك
+            st.session_state['submitted_query'] = user_query
             
-            recognition.lang = 'ar-SY'; // لهجة برمجية شامية لالتقاط العامية بدقة
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
+            api_key = st.secrets.get("GEMINI_API_KEY")
+            if not api_key or api_key == "ضع_مفتاحك_هنا":
+                st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
+            else:
+                with st.spinner("🧠 جاري تحليل النص ومطابقة الجداول وسياق الـ ERP..."):
+                    try:
+                        import google.generativeai as genai
+                        import json
+                        genai.configure(api_key=api_key)
+                        
+                        # تم تثبيت الـ system_prompt والـ model_name المستقر بالأسفل تلقائياً...
 
-            micBtn.onclick = function() {
-                recognition.start();
-                micBtn.style.backgroundColor = '#e53e3e';
-                micBtn.innerText = '🛑 جاري الاستماع صوتياً... تحدث الآن';
-                micStatus.innerText = 'الميكروفون نشط ويستمع...';
-            };
-
-            recognition.onresult = function(event) {
-                const speechToText = event.results[0][0].confidence > 0.4 ? event.results[0][0].transcript : '';
-                micBtn.style.backgroundColor = '#667eea';
-                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
-                micStatus.innerText = 'تم تحويل الصوت بنجاح!';
-                
-                if (speechToText) {
-                    window.parent.postMessage({
-                        type: 'streamlit:setComponentValue',
-                        value: speechToText
-                    }, '*');
-                }
-            };
-
-            recognition.onerror = function(event) {
-                micBtn.style.backgroundColor = '#667eea';
-                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
-                micStatus.innerText = 'حدث خطأ في التقاط الصوت: ' + event.error;
-            };
-            
-            recognition.onend = function() {
-                micBtn.style.backgroundColor = '#667eea';
-                micBtn.innerText = '🎙️ ابدأ التحدث بالصوت الآن...';
-            };
-        } else {
-            micStatus.innerText = 'عذراً، متصفحك الحالي لا يدعم ميزة التعرف على الصوت.';
-        }
-    </script>
-    """
-    
-    # عرض مكون التقاط الصوت الفوري وتخزين النص الناتج منه
-    audio_text_output = components.html(st_speech_html, height=80)
     
     # مجمع الـ Form الصارم لمنع تصفير القيم وحفظ مدخلات المدير عند الضغط
     with st.form(key="ai_assistant_form"):
