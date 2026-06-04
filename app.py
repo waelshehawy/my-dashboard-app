@@ -1469,25 +1469,91 @@ elif page == "🎙️ المساعد الذكي والتقارير":
 
     # Clean text container instructing the user without manual keyboard hurdles
     st.markdown("### 🗣️ التحدث المباشر مع أبو الخير:")
-    st.info("💡 **طريقة الاستخدام السهلة:** اضغط على أيقونة المايك المدمجة أدناه، قل طلبك بالعامية (مثال: 'عطيني لوحات حلب المتاحة')، ثم أوقف التسجيل ليقوم النظام بتحليله فوراً.")
+    
+    import streamlit.components.v1 as components
+    import io
 
-    # Native Streamlit audio file capture (Completely bypasses browser network translation errors)
-    # This requires streamlt >= 1.38.0. If your cloud instance is older, use standard file uploads or text inputs.
-    try:
-        recorded_audio = st.audio_input("تكلم الآن مع أبو الخير:")
-    except AttributeError:
-        # Fallback if your Streamlit package version on the cloud server is older
-        recorded_audio = st.file_uploader("📥 أو قم برفع ملف صوتي مباشر للأمر:", type=["wav", "mp3", "m4a"])
+    # Pure HTML5/JavaScript Voice Recorder (Compatible with all legacy & modern browsers)
+    recorder_html = """
+    <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 15px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl;">
+        <button id="record-btn" style="background-color: #ef4444; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%;">
+            🎤 اضغط هنا للبدء بالتحدث إلى أبو الخير
+        </button>
+        <p id="record-status" style="color: #94a3b8; font-size: 13px; margin-top: 10px; font-weight: bold;">الميكروفون مغلق</p>
+    </div>
 
-    # Fallback optional manual input box if you just want to type
+    <script>
+        const recordBtn = document.getElementById('record-btn');
+        const recordStatus = document.getElementById('record-status');
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        recordBtn.onclick = function() {
+            if (!isRecording) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        audioChunks = [];
+                        
+                        mediaRecorder.ondataavailable = event => {
+                            audioChunks.push(event.data);
+                        };
+
+                        mediaRecorder.onstop = () => {
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            const reader = new FileReader();
+                            reader.readAsDataURL(audioBlob); 
+                            reader.onloadend = function() {
+                                const base64Audio = reader.result.split(',')[1];
+                                // Send the raw voice binary straight to the Python layer safely
+                                window.parent.postMessage({
+                                    type: 'streamlit:setComponentValue',
+                                    value: base64Audio
+                                }, '*');
+                            };
+                            recordStatus.innerText = "⏳ تم تسجيل صوتك بنجاح! جاري معالجة الطلب...";
+                        };
+
+                        mediaRecorder.start();
+                        isRecording = true;
+                        recordBtn.style.backgroundColor = '#22c55e';
+                        recordBtn.innerText = '🛑 اضغط هنا لتوقيف التسجيل وإرسال الطلب فوراً';
+                        recordStatus.innerText = '🔴 أبو الخير يستمع إليك الآن... تكلم براحتك.';
+                    }).catch(err => {
+                        recordStatus.innerText = "❌ لم يتم تفعيل المايكروفون: " + err;
+                    });
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordBtn.style.backgroundColor = '#ef4444';
+                recordBtn.innerText = '🎤 اضغط هنا للبدء بالتحدث إلى أبو الخير';
+            }
+        };
+    </script>
+    """
+
+    # Render the un-restricted, native embedded audio widget
+    base64_voice_data = components.html(recorder_html, height=110)
+
+    # Initialize dynamic trigger query container
     user_typed_query = st.text_input(
         label="أو اكتب استعلامك يدوياً هنا في أي وقت:",
         placeholder="مثال: فرجيني سجلات دمشق الحالية...",
         key="manual_text_query"
     )
 
-    # Trigger calculation pipeline
-    if recorded_audio is not None or user_typed_query.strip():
+    # Decode audio stream safely if the browser interface populates the base64 register
+    recorded_audio_bytes = None
+    if base64_voice_data:
+        import base64
+        try:
+            recorded_audio_bytes = base64.b64decode(base64_voice_data)
+        except Exception:
+            pass
+
+    # Trigger calculation pipeline using the decoded backend bytes or manual input text
+    if recorded_audio_bytes is not None or user_typed_query.strip():
         api_key = st.secrets.get("GEMINI_API_KEY")
         if api_key and api_key != "ضع_مفتاحك_هنا":
             with st.spinner("🧠 أبو الخير يقوم بتحليل طلبك ومطابقة البيانات السحابية..."):
@@ -1517,18 +1583,16 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     """
                     
                     model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash", # Use standard flash here for multimodal audio capability
+                        model_name="gemini-2.5-flash", 
                         generation_config={"response_mime_type": "application/json"},
                         system_instruction=system_prompt
                     )
                     
-                    # Pack contents dynamically
                     contents = []
-                    if recorded_audio is not None:
-                        audio_data_bytes = recorded_audio.read()
+                    if recorded_audio_bytes is not None:
                         contents.append({
                             "mime_type": "audio/wav",
-                            "data": audio_data_bytes
+                            "data": recorded_audio_bytes
                         })
                     if user_typed_query.strip():
                         contents.append(user_typed_query)
@@ -1543,7 +1607,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         # Execute query inside Supabase
                         cursor = conn.cursor()
                         cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc for desc in cursor.description]
+                        columns = [desc[0] for desc in cursor.description]
                         data = cursor.fetchall()
                         cursor.close()
                         
@@ -1552,7 +1616,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
                             
                             # Play voice response from Abu Al-Khair using standard browser audio rendering
-                            import streamlit.components.v1 as components
                             tts_html = f"""
                             <script>
                                 if ('speechSynthesis' in window) {{
@@ -1567,6 +1630,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             st.rerun()
                 except Exception as e:
                     st.error(f"🚨 خطأ في المعالجة التلقائية لقاعدة البيانات: {e}")
+
 
 
 
