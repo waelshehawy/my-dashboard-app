@@ -1615,11 +1615,22 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
 
     # 3. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
+    # 3. عرض النتيجة التحليلية للمدير وتشغيل الرد الصوتي
     if st.session_state.get('page_ai_sql'):
         st.divider()
-        # عرض الرد المكتوب المعتمد في كودك
+        
+        # 🌟 الإضافة الجديدة: عرض النص الذي سمعه أو استقبله المساعد فوراً لمنع الشك 🌟
+        st.markdown(f"""
+        <div style="background-color: rgba(102, 126, 234, 0.1); border-right: 5px solid #667eea; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 14px; color: #a0a0a0; text-align: right;">📝 الأمر الصوتي المكتشف حالياً:</p>
+            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('page_ai_query', user_query)}"</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # عرض الرد المكتوب والناطق الأصلي الخاص بك (كما هو دون تعديل)
         spoken_text = st.session_state.get('page_ai_spoken', 'تم معالجة الطلب.')
         st.success(spoken_text)
+
         
         # 🌟 حقن كود جافاسكريبت المطور لإجبار المتصفح على النطق بالعربية حصراً 🌟
         if st.session_state.get('should_speak', True):
