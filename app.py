@@ -1460,216 +1460,232 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (صفحة مستقلة بالكامل)
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
-    st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
-    st.markdown("تحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
+    st.title("🎙️ المساعد الذكي (أبو الخير)")
+    st.markdown("نظام إدارة وتحليل اللوحات التفاعلي والمستمر صوتاً بدون أزرار.")
     st.divider()
 
-    # 1. تهيئة حقول الذاكرة المؤقتة لمنع اختفاء النصوص
-    if 'submitted_query' not in st.session_state:
-        st.session_state['submitted_query'] = ""
-    if 'should_speak' not in st.session_state:
-        st.session_state['should_speak'] = False
+    import streamlit.components.v1 as components
+    import google.generativeai as genai
+    import json
 
-    st.markdown("### 🎙️ إملاء الأمر الصوتي الفوري:")
-    st.info("💡 **طريقة استخدام الصوت المضمونة:** اضغط داخل صندوق النص أدناه، ثم اضغط على **زر المايك المدمج في كيبورد جوالك** وتكلم بالعامية؛ سيقوم الجوال بكتابة أمرك فوراً بدقة خارقة!")
+    # --- 🤖 PERSISTENT BACKGROUND VOICE AGENT: ABU AL-KHAIR ---
+    # This JavaScript handles hands-free wake-word detection, multi-state voice input, and automatic browser TTS.
+    abu_al_khair_html = """
+    <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl;">
+        <div id="status-light" style="width: 20px; height: 20px; background-color: #ef4444; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle; box-shadow: 0 0 10px #ef4444;"></div>
+        <span id="agent-status" style="color: #94a3b8; font-weight: bold; font-size: 16px;">أبو الخير في وضع الاستعداد (قل: أبو الخير)...</span>
+        <p id="live-transcript" style="color: #38bdf8; font-size: 14px; margin-top: 10px; font-style: italic;"></p>
+    </div>
 
-    # 2. مجمع الـ Form الصارم لحفظ النص ومنع الجمود والتعليق
-    with st.form(key="ai_assistant_form"):
-        user_query = st.text_input(
-            label="أمر الإدارة الحالي (تكلم عبر مايك الكيبورد):",
-            placeholder="مثال: شف لي اللوحات الفاضية بحلب...",
-            key="page_ai_query"
-        )
-        submit_button = st.form_submit_button(label="🧠 تحليل الطلب ومفاضلة العروض", use_container_width=True)
-
-    # 3. معالجة الطلب فور ضغط زر الـ Form
-    if submit_button:
-        if not user_query.strip():
-            st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
-        else:
-            st.session_state['submitted_query'] = user_query
-            api_key = st.secrets.get("GEMINI_API_KEY")
+    <script>
+        const statusLight = document.getElementById('status-light');
+        const agentStatus = document.getElementById('agent-status');
+        const liveTranscript = document.getElementById('live-transcript');
+        
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
             
-            if not api_key or api_key == "ضع_مفتاحك_هنا":
-                st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
-            else:
-                with st.spinner("🧠 جاري تحليل النص ومطابقة الجداول وسياق الـ ERP..."):
-                    try:
-                        import google.generativeai as genai
-                        import json
-                        genai.configure(api_key=api_key)
-                        
-                        system_prompt = """
-                        أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات (PreView Ads).
-                        مهمتك تحليل طلب المدير وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
-                        
-                        هيكلية قاعدة البيانات المتاحة (PostgreSQL) وأسماء الحقول الحقيقية:
-                        جدول "حجوزات1" يحتوي على الأعمدة التالية بدقة:
-                        "id", "رقم الححز", "اسم الزبون", "رقم الوكيل", "رقم اللوحة", "اجور طباعة", "اجور عرض", "اللوحة", "المحافظة", "رسوم مؤسسة", "شد وتركيب", "عمولات مندوبين", "عمولة مكتب", "فترة الحجز", "العام", "توصيف العمود", "العدد", "اسم الرسم", "الحجم", "user", "اسم اللوحة", "ComputerName", "TimeOfTask", "UserNameOfWin", "الحسم", "اجور مطبعة", "YA", "yyyyy", "logo_path"
-                        
-                        ⚠️ القواعد الصارمة لصياغة شروط الـ SQL (منع الجداول الفارغة):
-                        1. حقل "المحافظة": استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للبحث المرن (مثل: "المحافظة" LIKE '%دمشق%').
-                        2. حقل "الحجم": إذا طلب المدير حجماً معيناً (مثل 2*1)، استخدم البحث المرن LIKE مع علامات النسبة المئوية تفادياً لاختلاف الرموز (مثل: "الحجم" LIKE '%2%1%'). وإذا لم يذكر المدير حجماً في طلبه، لا تضع شرط الحجم في الـ WHERE clause نهائياً لضمان جلب السجلات.
-                        3. حقل "اسم الزبون": اللوحات المتاحة أو المؤقتة قد تحتوي على قيم مثل 'حجز مؤقت 2' أو تكون فارغة.
-                        
-                        قواعد المفاضلة وتحليل النية (Intent Matching):
-                        - get_available: إذا طلب اللوحات المتاحة أو غير المحجوزة (الشرط: "اسم الزبون" LIKE '%مؤقت%' أو "فترة الحجز" LIKE '%مؤقت%' أو "اسم الزبون" IS NULL).
-                        - check_temporary: إذا سأل عن الحجوزات المؤقتة، المعلقة، أو سجلات التجربة (الشرط: "اسم الزبون" LIKE '%مؤقت%' أو "اسم الزبون" LIKE '%تجربة%' أو "فترة الحجز" LIKE '%مؤقت%').
-                        - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
-                        
-                        قاعدة الـ SQL الحتمية: 
-                        1. أسماء الحقول العربية لجدول "حجوزات1" يجب وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون").
-                        2. تأكد من جلب الأعمدة الأساسية دائماً في الـ SELECT وهي: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز".
-                        
-                        يجب أن تطابق المخرجات الهيكل التالي تماماً:
-                        {
-                            "intent": "get_available / check_temporary / create_package",
-                            "confidence": 0.95,
-                            "extracted_sql": "استعلام SQL الصحيح هنا",
-                            "package_details": {"client": "اسم العميل", "governorate": "المحافظة", "discount": 0} أو null إذا لم تكن النية create_package,
-                            "spoken_response": "رد تفاعلي ذكي وموجز جداً بالعامية العربية للمدير يخبره عما وجده في السجلات الحية باختصار"
-                        }
-                        """
-                        
-                        model = genai.GenerativeModel(
-                            model_name="gemini-2.5-flash-lite",
-                            generation_config={"response_mime_type": "application/json"},
-                            system_instruction=system_prompt
-                        )
-                        
-                        response = model.generate_content(user_query)
-                        if response.text:
-                            parsed_data = json.loads(response.text.strip())
-                            st.session_state['page_ai_intent'] = parsed_data.get('intent')
-                            st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
-                            st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
-                            st.session_state['page_ai_package_details'] = parsed_data.get('package_details')
-                            st.session_state['page_ai_executed_data'] = None
-                            st.session_state['should_speak'] = True
-                            st.rerun()
-                        else:
-                            st.error("❌ لم يتمكن الذكاء الاصطناعي من توليد استجابة.")
-                    except Exception as e:
-                        st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
-
-    # 4. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
-    if st.session_state.get('page_ai_sql'):
-        st.divider()
-        
-        st.markdown(f"""
-        <div style="background-color: rgba(102, 126, 234, 0.1); border-right: 5px solid #667eea; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 14px; color: #a0a0a0; text-align: right;">📝 الأمر الصوتي المكتشف حالياً والمثبت بالذاكرة:</p>
-            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('submitted_query')}"</h4>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        spoken_text = st.session_state.get('page_ai_spoken', 'تم معالجة الطلب.')
-        st.success(spoken_text)
-        
-        if st.session_state.get('should_speak', False):
-            import streamlit.components.v1 as components
-            tts_html = f"""
-            <script>
-                if ('speechSynthesis' in window) {{
-                    window.speechSynthesis.cancel(); 
-                    const utterance = new SpeechSynthesisUtterance("{spoken_text}");
-                    utterance.lang = "ar-SA";
-                    window.speechSynthesis.speak(utterance);
-                }}
-            </script>
-            """
-            components.html(tts_html, height=0, width=0)
-            st.session_state['should_speak'] = False
-        
-        with st.expander("🛠️ عرض كود الاستعلام الفني المقترح (SQL)", expanded=False):
-            st.code(st.session_state['page_ai_sql'], language="sql")
+            recognition.lang = 'ar-SY'; 
+            recognition.continuous = true; // Constantly keeps running in meetings or background
+            recognition.interimResults = true;
             
-        col_exec, col_cancel = st.columns(2)
-        
-        with col_exec:
-            if st.button("⚡ تنفيذ الاستعلام وجلب البيانات الفورية", type="secondary", use_container_width=True):
-                with st.spinner("🔄 جاري الاتصال بـ Supabase وجلب السجلات الحية..."):
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc[0] for desc in cursor.description]
-                        data = cursor.fetchall()
-                        cursor.close()
-                        
-                        if data:
-                            import pandas as pd
-                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
-                        else:
-                            st.session_state['page_ai_executed_data'] = "EMPTY"
-                    except Exception as e:
-                        st.error(f"❌ خطأ أثناء تشغيل الـ SQL في قاعدة البيانات: {e}")
-                        st.session_state['page_ai_executed_data'] = None
-        
-        with col_cancel:
-            if st.button("🧹 تفريغ ومسح البحث الحالي", use_container_width=True):
-                st.session_state['page_ai_sql'] = None
-                st.session_state['page_ai_intent'] = None
-                st.session_state['page_ai_spoken'] = None
-                st.session_state['page_ai_executed_data'] = None
-                st.session_state['submitted_query'] = ""
-                st.session_state['should_speak'] = False
-                st.rerun()
+            let isAwake = false;
 
-        executed_res = st.session_state.get('page_ai_executed_data')
-        
-        if executed_res is not None:
-            if isinstance(executed_res, str) and executed_res == "EMPTY":
-                st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
-            elif not executed_res.empty:
-                import pandas as pd
-                st.markdown("### 📊 جدول البيانات المستخرج:")
-                # استكمال عرض الجدول وأزرار التصدير بمحاذاة برمجية صارمة ومضمونة
-                st.dataframe(executed_res, use_container_width=True)
-                st.info(f"💡 تم العثور على {len(executed_res)} لوحة/سجل.")
-                
-                st.markdown("#### 📥 تصدير التقرير الفوري:")
-                col_excel, col_word = st.columns(2)
-                
-                with col_excel:
-                    import io
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                        executed_res.to_excel(writer, index=False, sheet_name='تقرير المساعد الذكي')
-                    excel_data = excel_buffer.getvalue()
-                    st.download_button(
-                        label="📥 تحميل كملف Excel (.xlsx)",
-                        data=excel_data,
-                        file_name="تقرير_لوحات_الاعلان.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                
-                with col_word:
-                    import io
-                    from docx import Document
-                    doc = Document()
-                    table = doc.add_table(rows=1, cols=len(executed_res.columns))
-                    table.style = 'Light Shading Accent 1'
+            // Start listening automatically on page load
+            window.onload = function() {
+                recognition.start();
+            };
+
+            recognition.onstart = function() {
+                if(!isAwake) {
+                    statusLight.style.backgroundColor = '#eab308';
+                    statusLight.style.boxShadow = '0 0 10px #eab308';
+                    agentStatus.innerText = 'أبو الخير يستمع لوجهة النداء... (نادني بـ "أبو الخير")';
+                }
+            };
+
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i].transcript;
+                    } else {
+                        interimTranscript += event.results[i].transcript;
+                    }
+                }
+
+                let speechText = (finalTranscript + interimTranscript).trim().toLowerCase();
+                liveTranscript.innerText = "ما تم سماعه: " + speechText;
+
+                // Scenario A: Wake word detection "أبو الخير"
+                if (!isAwake && (speechText.includes('ابو الخير') || speechText.includes('أبو الخير'))) {
+                    isAwake = true;
+                    statusLight.style.backgroundColor = '#22c55e';
+                    statusLight.style.boxShadow = '0 0 10px #22c55e';
+                    agentStatus.innerText = 'أبو الخير نشط ومستمع لك يا أستاذي...';
                     
-                    hdr_cells = table.rows.cells
-                    for i, col_name in enumerate(executed_res.columns):
-                        hdr_cells[i].text = str(col_name)
+                    // Respond immediately via voice
+                    if ('speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        const wakeUtterance = new SpeechSynthesisUtterance("اطلب مني أي استعلام يا أستاذي");
+                        wakeUtterance.lang = "ar-SA";
+                        window.speechSynthesis.speak(wakeUtterance);
+                    }
+                    
+                    // Clear the transcript buffer to expect the actual query next
+                    speechText = '';
+                }
+                
+                // Scenario B: User is awake and sends the query command
+                if (isAwake && speechText.length > 8 && !speechText.endsWith('ابو الخير') && !speechText.endsWith('أبو الخير')) {
+                    // Send voice text directly to Python layer instantly
+                    window.parent.postMessage({
+                        type: 'streamlit:setComponentValue',
+                        value: speechText
+                    }, '*');
+                    
+                    // Reset agent state automatically after capturing command
+                    isAwake = false;
+                }
+            };
+
+            recognition.onerror = function(event) {
+                if(event.error === 'not-allowed') {
+                    agentStatus.innerText = '❌ يرجى السماح بصلاحية المايكروفون للمتصفح.';
+                }
+            };
+
+            // Keep recognition running infinitely
+            recognition.onend = function() {
+                recognition.start();
+            };
+            
+        } else {
+            agentStatus.innerText = '❌ المتصفح لا يدعم معالجة المايكروفون التلقائية.';
+        }
+    </script>
+    """
+    
+    # Render the background listening component
+    voice_input_capture = components.html(abu_al_khair_html, height=130)
+
+    # Invisible sync mechanism keeping your text variables aligned
+    if voice_input_capture:
+        st.session_state['page_ai_query'] = voice_input_capture
+
+    # Auto-execute calculations if Abu Al-Khair yields an automated verbal task
+    active_query = st.session_state.get('page_ai_query', '')
+
+    if active_query:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if api_key and api_key != "ضع_مفتاحك_هنا":
+            try:
+                genai.configure(api_key=api_key)
+                
+                system_prompt = """
+                أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
+                مهمتك تحليل طلب المدير وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                
+                هيكلية قاعدة البيانات المتاحة (PostgreSQL):
+                جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
+                الأعمدة: "رقم الححز", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                
+                ⚠️ قاعدة صارمة لمنع الجداول الفارغة:
+                1. لا تقم بدمج شروط معقدة للحجم أو الزبائن المتاحة إلا إذا طلبها المدير صراحة.
+                2. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثل: "المحافظة" LIKE '%دمشق%').
+                
+                يجب أن تطابق المخرجات الهيكل التالي تماماً:
+                {
+                    "intent": "get_available / check_temporary / create_package",
+                    "confidence": 0.95,
+                    "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
+                    "package_details": null,
+                    "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك سجلات دمشق الحالية فوراً."
+                }
+                """
+                
+                model = genai.GenerativeModel(
+                    model_name="gemini-2.5-flash-lite",
+                    generation_config={"response_mime_type": "application/json"},
+                    system_instruction=system_prompt
+                )
+                
+                response = model.generate_content(active_query)
+                if response.text:
+                    parsed_data = json.loads(response.text.strip())
+                    st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
+                    st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
+                    st.session_state['page_ai_executed_data'] = None
+                    
+                    # Instantly execute the database lookup silently for the user
+                    cursor = conn.cursor()
+                    cursor.execute(st.session_state['page_ai_sql'])
+                    columns = [desc[0] for desc in cursor.description]
+                    data = cursor.fetchall()
+                    cursor.close()
+                    
+                    if data:
+                        import pandas as pd
+                        st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
                         
-                    for _, row in executed_res.iterrows():
-                        row_cells = table.add_row().cells
-                        for i, val in enumerate(row):
-                            row_cells[i].text = str(val)
-                            
-                    word_buffer = io.BytesIO()
-                    doc.save(word_buffer)
-                    word_data = word_buffer.getvalue()
-                    st.download_button(
-                        label="📝 تحميل كتقرير Word (.docx)",
-                        data=word_data,
-                        file_name="تقرير_المساعد_الذكي.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True
-                    )
+                        # Automated system response read aloud by Abu Al-Khair
+                        if 'speechSynthesis' in window:
+                            tts_html = f"""<script>window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance("{st.session_state['page_ai_spoken']}"); u.lang="ar-SA"; window.speechSynthesis.speak(u);</script>"""
+                            components.html(tts_html, height=0, width=0)
+                    st.session_state['page_ai_query'] = '' # Clear request queue
+            except Exception as e:
+                st.error(f"🚨 خطأ معالجة تلقائي: {e}")
+
+    # --- 4. VIEW RENDER OUTPUT TABLES ---
+    executed_res = st.session_state.get('page_ai_executed_data')
+    if executed_res is not None:
+        st.success(st.session_state.get('page_ai_spoken', 'تم جلب البيانات.'))
+        st.dataframe(executed_res, use_container_width=True)
+        
+        # Immediate Export Layout Options
+        col_excel, col_word = st.columns(2)
+        with col_excel:
+            import io
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                executed_res.to_excel(writer, index=False, sheet_name='Abu Al-Khair Report')
+            st.download_button("📥 تحميل كملف Excel", excel_buffer.getvalue(), "report.xlsx", use_container_width=True)
+        with col_word:
+            from docx import Document
+                # --- المربع البرمجي المكتمل لتصدير ملفات Word بمحاذاة صارمة ونهائية ---
+                from docx import Document
+                import io
+                
+                doc = Document()
+                table = doc.add_table(rows=1, cols=len(executed_res.columns))
+                table.style = 'Light Shading Accent 1'
+                
+                # تعبئة خلايا العناوين الأساسية للجدول
+                hdr_cells = table.rows[0].cells
+                for i, col_name in enumerate(executed_res.columns):
+                    hdr_cells[i].text = str(col_name)
+                    
+                # تعبئة السجلات الحية داخل مستند الوورد سطر بسطر
+                for _, row in executed_res.iterrows():
+                    row_cells = table.add_row().cells
+                    for i, val in enumerate(row):
+                        row_cells[i].text = str(val)
+                        
+                # حفظ الملف وتجهيز زر التحميل الفوري للمدير
+                word_buffer = io.BytesIO()
+                doc.save(word_buffer)
+                
+                st.download_button(
+                    label="📝 تحميل كتقرير Word",
+                    data=word_buffer.getvalue(),
+                    file_name="تقرير_أبو_الخير.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+
 
                     
 
