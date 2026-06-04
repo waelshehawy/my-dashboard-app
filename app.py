@@ -1464,7 +1464,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     st.markdown("تحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
     st.divider()
 
-    # تهيئة حقول الذاكرة المؤقتة لمنع اختفاء النصوص أثناء تحديث المتصفح
+    # 1. تهيئة حقول الذاكرة المؤقتة لمنع اختفاء النصوص
     if 'submitted_query' not in st.session_state:
         st.session_state['submitted_query'] = ""
     if 'should_speak' not in st.session_state:
@@ -1473,7 +1473,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     st.markdown("### 🎙️ إملاء الأمر الصوتي الفوري:")
     st.info("💡 **طريقة استخدام الصوت المضمونة:** اضغط داخل صندوق النص أدناه، ثم اضغط على **زر المايك المدمج في كيبورد جوالك** وتكلم بالعامية؛ سيقوم الجوال بكتابة أمرك فوراً بدقة خارقة!")
 
-    # مجمع الـ Form الصارم الذي يحافظ على النص المكتوب صوتياً بالكامل ويمع التصفير
+    # 2. مجمع الـ Form الصارم لحفظ النص ومنع الجمود والتعليق
     with st.form(key="ai_assistant_form"):
         user_query = st.text_input(
             label="أمر الإدارة الحالي (تكلم عبر مايك الكيبورد):",
@@ -1482,45 +1482,14 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         )
         submit_button = st.form_submit_button(label="🧠 تحليل الطلب ومفاضلة العروض", use_container_width=True)
 
-    # معالجة الطلب فور ضغط زر الـ Form
+    # 3. معالجة الطلب فور ضغط زر الـ Form
     if submit_button:
         if not user_query.strip():
             st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
         else:
-            # تثبيت النص في الـ Session State فوراً لعرضه للمدير ومنع أي شك
             st.session_state['submitted_query'] = user_query
-            
             api_key = st.secrets.get("GEMINI_API_KEY")
-            if not api_key or api_key == "ضع_مفتاحك_هنا":
-                st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
-            else:
-                with st.spinner("🧠 جاري تحليل النص ومطابقة الجداول وسياق الـ ERP..."):
-                    try:
-                        import google.generativeai as genai
-                        import json
-                        genai.configure(api_key=api_key)
-                        
-                        # تم تثبيت الـ system_prompt والـ model_name المستقر بالأسفل تلقائياً...
-
-    
-    # مجمع الـ Form الصارم لمنع تصفير القيم وحفظ مدخلات المدير عند الضغط
-    with st.form(key="ai_assistant_form"):
-        user_query = st.text_input(
-            label="أمر الإدارة الحالي:",
-            placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
-            key="page_ai_query"
-        )
-        submit_button = st.form_submit_button(label="🧠 تحليل الطلب ومفاضلة العروض", use_container_width=True)
-
-    # معالجة الطلب فور ضغط زر الـ Form
-    if submit_button:
-        if not user_query.strip():
-            st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
-        else:
-            # تثبيت النص في الـ Session State فوراً لعرضه للمدير ومنع أي شك
-            st.session_state['submitted_query'] = user_query
             
-            api_key = st.secrets.get("GEMINI_API_KEY")
             if not api_key or api_key == "ضع_مفتاحك_هنا":
                 st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
             else:
@@ -1546,7 +1515,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         قواعد المفاضلة وتحليل النية (Intent Matching):
                         - get_available: إذا طلب اللوحات المتاحة أو غير المحجوزة (الشرط: "اسم الزبون" LIKE '%مؤقت%' أو "فترة الحجز" LIKE '%مؤقت%' أو "اسم الزبون" IS NULL).
                         - check_temporary: إذا سأل عن الحجوزات المؤقتة، المعلقة، أو سجلات التجربة (الشرط: "اسم الزبون" LIKE '%مؤقت%' أو "اسم الزبون" LIKE '%تجربة%' أو "فترة الحجز" LIKE '%مؤقت%').
-                        - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر, باقة، مع حسم، أو في محافظة معينة.
+                        - create_package: إذا طلب تجميع لوحات لزبون، عمل عرض سعر، باقة، مع حسم، أو في محافظة معينة.
                         
                         قاعدة الـ SQL الحتمية: 
                         1. أسماء الحقول العربية لجدول "حجوزات1" يجب وضعها بين علامتي اقتباس مزدوجة "" (مثل: "اسم الزبون").
@@ -1569,10 +1538,8 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         )
                         
                         response = model.generate_content(user_query)
-                        
                         if response.text:
                             parsed_data = json.loads(response.text.strip())
-                            
                             st.session_state['page_ai_intent'] = parsed_data.get('intent')
                             st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
                             st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
@@ -1585,32 +1552,28 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     except Exception as e:
                         st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
 
-    # 3. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
+    # 4. عرض النتيجة التحليلية وتشغيل الرد الصوتي للمدير
     if st.session_state.get('page_ai_sql'):
         st.divider()
         
-        # 🌟 المربع الأزرق الحامي للذاكرة البصرية (يطرد الشك نهائياً)
         st.markdown(f"""
         <div style="background-color: rgba(102, 126, 234, 0.1); border-right: 5px solid #667eea; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 14px; color: #a0a0a0; text-align: right;">📝 الأمر الصوتي المكتشف حالياً والمثبت بالذاكرة السحابية:</p>
+            <p style="margin: 0; font-size: 14px; color: #a0a0a0; text-align: right;">📝 الأمر الصوتي المكتشف حالياً والمثبت بالذاكرة:</p>
             <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('submitted_query')}"</h4>
         </div>
         """, unsafe_allow_html=True)
         
-        # This is where your code successfully resumes inside the editor:
         spoken_text = st.session_state.get('page_ai_spoken', 'تم معالجة الطلب.')
         st.success(spoken_text)
         
-        # حقن كود جافاسكريبت المطور لمنع القراءة الإنجليزية والرد بلكنة عربية ناطقة
         if st.session_state.get('should_speak', False):
+            import streamlit.components.v1 as components
             tts_html = f"""
             <script>
                 if ('speechSynthesis' in window) {{
                     window.speechSynthesis.cancel(); 
                     const utterance = new SpeechSynthesisUtterance("{spoken_text}");
                     utterance.lang = "ar-SA";
-                    utterance.pitch = 1.0;
-                    utterance.rate = 1.0;
                     window.speechSynthesis.speak(utterance);
                 }}
             </script>
@@ -1652,7 +1615,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 st.session_state['should_speak'] = False
                 st.rerun()
 
-        # عرض الجدول وأزرار التصدير بناءً على البيانات المخزنة
         executed_res = st.session_state.get('page_ai_executed_data')
         
         if executed_res is not None:
@@ -1661,6 +1623,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             elif not executed_res.empty:
                 import pandas as pd
                 st.markdown("### 📊 جدول البيانات المستخرج:")
+                # استكمال عرض الجدول وأزرار التصدير بمحاذاة برمجية صارمة ومضمونة
                 st.dataframe(executed_res, use_container_width=True)
                 st.info(f"💡 تم العثور على {len(executed_res)} لوحة/سجل.")
                 
@@ -1673,7 +1636,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                         executed_res.to_excel(writer, index=False, sheet_name='تقرير المساعد الذكي')
                     excel_data = excel_buffer.getvalue()
-                    
                     st.download_button(
                         label="📥 تحميل كملف Excel (.xlsx)",
                         data=excel_data,
@@ -1685,7 +1647,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 with col_word:
                     import io
                     from docx import Document
-                    
                     doc = Document()
                     table = doc.add_table(rows=1, cols=len(executed_res.columns))
                     table.style = 'Light Shading Accent 1'
@@ -1702,7 +1663,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     word_buffer = io.BytesIO()
                     doc.save(word_buffer)
                     word_data = word_buffer.getvalue()
-                    
                     st.download_button(
                         label="📝 تحميل كتقرير Word (.docx)",
                         data=word_data,
@@ -1710,8 +1670,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
                     )
-
-
 
                     
 
