@@ -1461,6 +1461,21 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
+    import psycopg2
+
+# التحقق من وجود الاتصال، وإذا لم يكن موجوداً يتم إنشاؤه فوراً
+if 'conn' not in locals() and 'conn' not in globals():
+    try:
+        conn = psycopg2.connect(
+            dbname=st.secrets["DB_NAME"],
+            user=st.secrets["DB_USER"],
+            password=st.secrets["DB_PASSWORD"],
+            host=st.secrets["DB_HOST"],
+            port=st.secrets["DB_PORT"]
+        )
+    except Exception as e:
+        st.error(f"❌ فشل الاتصال المباشر بقاعدة بيانات Supabase: {e}")
+
 st.markdown("### 🔍 فحص الجدول البديل لبيانات دمشق")
 if st.button("🔬 تشغيل فحص الجدول المباشر", type="secondary"):
     try:
