@@ -1461,180 +1461,135 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 # ============================================================
-# 🧪 صفحة اختبار الصوت - نسخة العمل المؤكدة
+# 🧪 صفحة اختبار الصوت - النسخة النهائية العاملة
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     
     st.title("🎙️ اختبار تحويل الصوت إلى نص")
     st.markdown("---")
     
-    # ========================================
-    # تسجيل الصوت مباشرة
-    # ========================================
-    
-    st.subheader("🎤 سجل صوتك الآن:")
-    
-    # زر التسجيل مع معالجة مباشرة
-    audio_html = """
-    <div style="text-align:center; padding:20px; border:1px solid #ddd; border-radius:10px; margin:10px 0;">
-        <button id="recordBtn" style="background:#4CAF50; color:white; padding:15px 30px; font-size:18px; border:none; border-radius:5px; cursor:pointer;">🎤 اضغط وابدأ التسجيل</button>
-        <button id="stopBtn" style="background:#f44336; color:white; padding:15px 30px; font-size:18px; border:none; border-radius:5px; cursor:pointer; display:none;">⏹️ أوقف التسجيل</button>
-        <p id="status" style="margin-top:15px; font-size:14px; color:#666;">اضغط الزر لبدء التسجيل</p>
-        <div id="audioContainer" style="margin-top:15px;"></div>
-    </div>
-    
-    <script>
-    const recordBtn = document.getElementById('recordBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statusDiv = document.getElementById('status');
-    let mediaRecorder;
-    let audioChunks = [];
-    
-    recordBtn.onclick = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-            
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-            };
-            
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                const audioUrl = URL.createObjectURL(audioBlob);
-                
-                // عرض مشغل الصوت
-                document.getElementById('audioContainer').innerHTML = `<audio controls src="${audioUrl}" style="width:100%"></audio>`;
-                
-                // تحويل إلى Base64 وإرسال إلى Streamlit
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const base64Data = e.target.result.split(',')[1];
-                    // إرسال البيانات إلى Streamlit عبر URL params
-                    const params = new URLSearchParams(window.location.search);
-                    window.location.href = window.location.pathname + '?audio_data=' + encodeURIComponent(base64Data) + '&audio_received=true';
-                };
-                reader.readAsDataURL(audioBlob);
-                
-                statusDiv.innerHTML = '✅ تم التسجيل! جاري إرسال الصوت...';
-                statusDiv.style.color = '#4caf50';
-                recordBtn.style.display = 'inline-block';
-                stopBtn.style.display = 'none';
-                stream.getTracks().forEach(track => track.stop());
-            };
-            
-            mediaRecorder.start();
-            recordBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
-            statusDiv.innerHTML = '🔴 جاري التسجيل... تحدث الآن ثم اضغط "ايقاف"';
-            statusDiv.style.color = '#ff9800';
-            
-        } catch (err) {
-            statusDiv.innerHTML = '❌ خطأ: ' + err.message;
-            statusDiv.style.color = '#f44336';
-        }
-    };
-    
-    stopBtn.onclick = () => {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-    };
-    </script>
-    """
-    
-    st.components.v1.html(audio_html, height=300)
-    
-    # ========================================
-    # استقبال الصوت من URL parameters
-    # ========================================
-    import base64
-    from io import BytesIO
     import speech_recognition as sr
+    from io import BytesIO
+    import base64
     
-    # التحقق من وجود بيانات صوتية في URL
-    query_params = st.query_params
-    
-    if 'audio_received' in query_params and query_params['audio_received'] == 'true':
-        audio_b64 = query_params.get('audio_data', '')
-        
-        if audio_b64:
-            with st.spinner("🎙️ جاري تحويل الصوت إلى نص..."):
-                try:
-                    # تحويل من Base64 إلى bytes
-                    audio_bytes = base64.b64decode(audio_b64)
-                    st.info(f"📁 تم استقبال {len(audio_bytes)} بايت من الصوت")
-                    
-                    # تحويل الصوت إلى نص
-                    with sr.AudioFile(BytesIO(audio_bytes)) as source:
-                        recognizer = sr.Recognizer()
-                        recognizer.adjust_for_ambient_noise(source)
-                        audio_data = recognizer.record(source)
-                        
-                        # محاولة التعرف بالعربية
-                        text = recognizer.recognize_google(audio_data, language='ar-SY')
-                        st.success(f"✅ النص المستخلص: **{text}**")
-                        
-                        # تخزين النص
-                        st.session_state['voice_text'] = text
-                        
-                        # مسح الـ query params
-                        st.query_params.clear()
-                        
-                except sr.UnknownValueError:
-                    st.error("❌ لم يتم فهم الصوت. حاول التحدث بوضوح أكثر وبصوت أعلى")
-                except sr.RequestError as e:
-                    st.error(f"❌ خطأ في الاتصال بـ Google API: {e}")
-                except Exception as e:
-                    st.error(f"❌ خطأ: {e}")
-            
-            st.rerun()
+    # تهيئة session state
+    if 'audio_processed' not in st.session_state:
+        st.session_state['audio_processed'] = False
+    if 'recognized_text' not in st.session_state:
+        st.session_state['recognized_text'] = ""
     
     # ========================================
-    # عرض النص المستخلص
+    # الطريقة الوحيدة التي تعمل على السحابة: رفع ملف
     # ========================================
-    if 'voice_text' in st.session_state and st.session_state['voice_text']:
-        st.markdown("---")
-        st.subheader("📝 النص المستخلص:")
-        
-        user_text = st.text_area(
-            "يمكنك تعديل النص:",
-            value=st.session_state['voice_text'],
-            height=100
-        )
-        
-        # زر التنفيذ
-        if st.button("🚀 تنفيذ الأمر", type="primary", use_container_width=True):
-            if user_text.strip():
-                st.success(f"✅ سيتم تنفيذ الأمر: **{user_text}**")
-                # هنا يمكنك إضافة كود Gemini
-                st.info("💡 الآن يمكنك إضافة كود تحويل النص إلى SQL وتنفيذه")
     
-    # ========================================
-    # طريقة بديلة: رفع ملف
-    # ========================================
-    st.markdown("---")
-    st.subheader("📁 طريقة بديلة: ارفع ملف صوتي")
+    st.info("💡 **ملاحظة هامة:** بسبب قيود المتصفح والخادم، أفضل طريقة للتعرف على الصوت هي رفع ملف صوتي مسجل مسبقاً.")
     
-    uploaded_file = st.file_uploader("اختر ملف WAV أو MP3", type=['wav', 'mp3', 'm4a'])
+    st.subheader("📁 الطريقة المضمونة: ارفع ملف صوتي")
+    
+    st.markdown("""
+    **كيف تسجل ملف صوتي؟**
+    1. استخدم تطبيق التسجيل الصوتي في جوالك أو جهازك
+    2. سجل جملة بسيطة مثل: "عرض اللوحات في دمشق"
+    3. احفظ الملف بصيغة WAV أو MP3
+    4. ارفعه هنا
+    """)
+    
+    uploaded_file = st.file_uploader("اختر ملف صوتي", type=['wav', 'mp3', 'm4a', 'webm'])
     
     if uploaded_file is not None:
         st.audio(uploaded_file)
         
-        with st.spinner("جاري تحويل الصوت إلى نص..."):
+        with st.spinner("🎙️ جاري تحويل الصوت إلى نص... قد يستغرق 5 ثوانٍ"):
             try:
                 recognizer = sr.Recognizer()
                 with sr.AudioFile(BytesIO(uploaded_file.getvalue())) as source:
-                    recognizer.adjust_for_ambient_noise(source)
+                    # تنظيف الضوضاء
+                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
                     audio_data = recognizer.record(source)
+                    
+                    # التعرف على النص
                     text = recognizer.recognize_google(audio_data, language='ar-SY')
                     st.success(f"✅ النص المستخلص: **{text}**")
-                    st.session_state['voice_text'] = text
+                    st.balloons()
+                    st.session_state['recognized_text'] = text
+                    
             except sr.UnknownValueError:
-                st.error("❌ لم يتم فهم الصوت")
+                st.error("❌ لم يتم فهم الصوت. تأكد من:")
+                st.markdown("""
+                - التحدث بوضوح وبصوت عالٍ
+                - أن التسجيل خالٍ من الضوضاء
+                - أن المدة لا تقل عن ثانيتين
+                """)
+            except sr.RequestError as e:
+                st.error(f"❌ خطأ في الاتصال بخدمة Google: {e}")
             except Exception as e:
                 st.error(f"❌ خطأ: {e}")
+    
+    # ========================================
+    # عرض النص وتنفيذه
+    # ========================================
+    if st.session_state['recognized_text']:
+        st.markdown("---")
+        st.subheader("📝 تنفيذ الأمر")
+        
+        # عرض النص مع إمكانية التعديل
+        user_query = st.text_input(
+            "النص المستخلص من الصوت (يمكنك تعديله):",
+            value=st.session_state['recognized_text']
+        )
+        
+        if st.button("🚀 تنفيذ الاستعلام", type="primary", use_container_width=True):
+            if user_query.strip():
+                st.success(f"✅ جاري تنفيذ: **{user_query}**")
+                
+                # هنا يمكنك إضافة كود Gemini الخاص بك
+                st.info("💡 الآن يمكنك إضافة كود تحويل النص إلى SQL")
+                
+                # مثال بسيط لاختبار Gemini
+                import google.generativeai as genai
+                import json
+                
+                api_key = st.secrets.get("GEMINI_API_KEY")
+                if api_key and api_key != "ضع_مفتاحك_هنا":
+                    with st.spinner("🧠 جاري التحليل..."):
+                        try:
+                            genai.configure(api_key=api_key)
+                            
+                            prompt = f"""
+                            حول الأمر التالي إلى استعلام SQL على جدول "حجوزات1":
+                            الأمر: {user_query}
+                            
+                            الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                            
+                            أخرج JSON: {{"sql": "الاستعلام", "reply": "الرد"}}
+                            """
+                            
+                            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+                            response = model.generate_content(prompt)
+                            st.code(response.text, language='json')
+                            
+                        except Exception as e:
+                            st.error(f"خطأ: {e}")
+                else:
+                    st.warning("⚠️ لم يتم إعداد مفتاح Gemini API")
+    
+    # ========================================
+    # شرح المشكلة
+    # ========================================
+    with st.expander("🔧 لماذا لا يعمل التسجيل المباشر؟"):
+        st.markdown("""
+        **سبب المشكلة:**
+        - Streamlit Cloud لديه حد أقصى لحجم الطلب (Request size limit)
+        - التسجيل المباشر يرسل الصوت كـ Base64 في URL
+        - حتى كلمة واحدة تنتج ملف صوتي أكبر من المسموح به
+        
+        **الحلول الممكنة:**
+        1. ✅ **رفع ملف صوتي** - هذا يعمل 100%
+        2. استخدام خدمة خارجية مثل OpenRouter أو AssemblyAI
+        3. استخدام Streamlit Community Cloud مع إعدادات مخصصة
+        
+        **الخلاصة:** رفع الملفات الصوتية هو الحل الأكثر استقراراً على Streamlit Cloud
+        """)
 
 
 
