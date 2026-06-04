@@ -1458,19 +1458,20 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 
 
 # ============================================================
-# 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة النهائية
+# 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
-    st.markdown("نظام إدارة وتحليل اللوحات التفاعلي المستند إلى التقاط المايك المباشر من السيرفر.")
+    st.markdown("نظام إدارة وتحليل اللوحات التفاعلي المستند إلى التقاط المايك من المتصفح.")
     st.divider()
 
     import google.generativeai as genai
     import json
     import pandas as pd
     import speech_recognition as sr
+    from io import BytesIO
 
-    # تهيئة معاملات الجلسة في الـ Session لمنع اختفاء الجداول عند التحديث
+    # تهيئة معاملات الجلسة
     if 'page_ai_sql' not in st.session_state:
         st.session_state['page_ai_sql'] = None
     if 'page_ai_spoken' not in st.session_state:
@@ -1479,27 +1480,43 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.session_state['page_ai_executed_data'] = None
     if 'text_captured' not in st.session_state:
         st.session_state['text_captured'] = ""
+    if 'audio_bytes' not in st.session_state:
+        st.session_state['audio_bytes'] = None
 
     st.markdown("### 🗣️ التحدث المباشر مع أبو الخير:")
     st.caption("اضغط على زر التسجيل أدناه، وتكلم بالعامية، وسيقوم النظام بترجمة صوتك وتنفيذ الاستعلام فوراً.")
 
-    # تشغيل محرك المايك المحلي الخاص بك بنظام الـ Form لضمان الاستقرار
-    with sr.Microphone() as source:
-        if st.button("🎤 اضغط هنا وابدأ التسجيل الصوتي الآن", type="primary", use_container_width=True):
-            with st.spinner("🎙️ أبو الخير يستمع إليك الآن... تكلم بالعامية براحتك..."):
-                r = sr.Recognizer()
-                try:
-                    # التقاط الصوت من المايك المحلي المباشر
-                    audio = r.listen(source, timeout=8, phrase_time_limit=10)
-                    # تحويل الصوت لنص عربي عبر محرك جوجل السيرفري
-                    detected_text = r.recognize_google(audio, language='ar-SY')
+    # ============================================
+    # الحل السحابي: استخدام audio_input من المتصفح
+    # ============================================
+    audio_value = st.audio_input("🎤 اضغط هنا للتسجيل (من متصفحك مباشرة)")
+    
+    if audio_value:
+        with st.spinner("🎙️ أبو الخير يستمع إليك الآن... تكلم بالعامية براحتك..."):
+            try:
+                # تحويل الصوت من المتصفح إلى كائن يمكن لـ SpeechRecognition قراءته
+                audio_bytes = audio_value.getvalue()
+                st.session_state['audio_bytes'] = audio_bytes
+                
+                # استخدام BytesIO بدلاً من ملف حقيقي
+                with sr.AudioFile(BytesIO(audio_bytes)) as source:
+                    recognizer = sr.Recognizer()
+                    # تسجيل الصوت من الملف الوهمي
+                    audio_data = recognizer.record(source)
+                    
+                    # تحويل الصوت إلى نص عربي
+                    detected_text = recognizer.recognize_google(audio_data, language='ar-SY')
                     st.session_state['text_captured'] = detected_text
-                except sr.WaitTimeoutError:
-                    st.error("❌ انتهى الوقت ولم يتم رصد أي صوت، يرجى المحاولة مجدداً.")
-                except Exception:
-                    st.error("❌ لم أفهم الصوت أو المايكروفون مشغول، حاول مرة أخرى.")
+                    st.success(f"✅ تم التعرف على: {detected_text}")
+                    
+            except sr.UnknownValueError:
+                st.error("❌ لم أستطع فهم الصوت، حاول التحدث بوضوح أكثر")
+            except sr.RequestError as e:
+                st.error(f"❌ خطأ في الاتصال بخدمة جوجل: {e}")
+            except Exception as e:
+                st.error(f"❌ حدث خطأ: {e}")
 
-    # صندوق نصي اختياري يعرض ما تم فهمه صوتاً ويسمح لك بالتعديل عليه أو الكتابة بيدك
+    # صندوق نصي اختياري يعرض ما تم فهمه
     user_query = st.text_input(
         label="الأمر الصوتي المكتشف (يمكنك تعديله بيدك أو الضغط على إنتر للتنفيذ):",
         value=st.session_state['text_captured'],
@@ -1507,7 +1524,11 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         key="abu_khair_input_field"
     )
 
-    # انطلاق معالجة الذكاء الاصطناعي وقاعدة البيانات فور توفر النص المكتشف
+    # تخزين الأمر الأصلي للعرض
+    if user_query.strip():
+        st.session_state['page_ai_query'] = user_query
+
+    # انطلاق معالجة الذكاء الاصطناعي
     if user_query.strip() and st.session_state['text_captured'] == user_query:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if api_key and api_key != "ضع_مفتاحك_هنا":
@@ -1550,7 +1571,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                         st.session_state['page_ai_executed_data'] = None
                         
-                        # تنفيذ استعلام الـ SQL المكتشف فوراً في قاعدة بيانات Supabase
+                        # تنفيذ استعلام SQL في Supabase
                         cursor = conn.cursor()
                         cursor.execute(st.session_state['page_ai_sql'])
                         columns = [desc[0] for desc in cursor.description]
@@ -1562,28 +1583,21 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         else:
                             st.session_state['page_ai_executed_data'] = "EMPTY"
                         
-                        # تصفير النص المؤقت لمنع الدخول في حلقة تكرار لانهائية عند الـ Rerun
+                        # تصفير النص المؤقت لمنع الحلقات اللانهائية
                         st.session_state['text_captured'] = ""
+                        st.session_state['audio_bytes'] = None
                         st.rerun()
                 except Exception as e:
                     st.error(f"🚨 خطأ معالجة تلقائي: {e}")
                     st.session_state['text_captured'] = ""
 
-    # --- 3. عرض المخرجات الحية وجداول التصدير للـ Excel والـ Word ---
+    # عرض المخرجات
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
         st.divider()
         
         current_spoken = st.session_state.get('page_ai_spoken', 'تم جلب السجلات')
         st.success(f"🤖 رد أبو الخير: {current_spoken}")
-        
-        # عرض مربع إظهار الأمر المكتوب لتأكيد القراءة ومنع الشك
-        st.markdown(f"""
-        <div style="background-color: rgba(102, 126, 234, 0.1); border-right: 5px solid #667eea; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 13px; color: #a0a0a0; text-align: right;">الأمر المستلم في الذاكرة الحية:</p>
-            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">"{st.session_state.get('page_ai_query', user_query)}"</h4>
-        </div>
-        """, unsafe_allow_html=True)
         
         if isinstance(executed_res, str) and executed_res == "EMPTY":
             st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
@@ -1613,7 +1627,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 table = doc.add_table(rows=1, cols=len(executed_res.columns))
                 table.style = 'Light Shading Accent 1'
                 
-                hdr_cells = table.rows.cells
+                hdr_cells = table.rows[0].cells
                 for i, col_name in enumerate(executed_res.columns): 
                     hdr_cells[i].text = str(col_name)
                     
@@ -1630,7 +1644,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     file_name="تقرير_أبو_الخير.docx", 
                     use_container_width=True
                 )
-
                     
 
 
