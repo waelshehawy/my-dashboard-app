@@ -14,3 +14,4 @@ google-generativeai
 xlsxwriter
 SpeechRecognition
 streamlit-mic-recorder
+pydub
