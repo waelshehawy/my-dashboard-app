@@ -1665,17 +1665,17 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         # 1. Pull the raw text cleanly to prevent string escaping crashes
         current_spoken = st.session_state.get('page_ai_spoken', 'تم جلب السجلات')
         
-        # 2. Render the visual card container safely
+        # 2. Render the safe plain-text visual container (No emojis to prevent encoding errors)
         st.markdown(f"""
         <div style="background-color: rgba(34, 197, 94, 0.1); border-right: 5px solid #22c55e; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 13px; color: #a0a0a0; text-align: right;">🎤 النص الصوتي المستلم والمخزن بالذاكرة الحية:</p>
+            <p style="margin: 0; font-size: 13px; color: #a0a0a0; text-align: right;">النص الصوتي المستلم والمخزن بالذاكرة الحية:</p>
             <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">{current_spoken}</h4>
         </div>
         """, unsafe_allow_html=True)
         
         # 3. Render the dynamic dataframe results block
         st.dataframe(executed_res, use_container_width=True)
-        st.info(f"💡 تم العثور على {len(executed_res)} سجل يطابق طلب الإدارة.")
+        st.info("💡 تم العثور على السجلات التي تطابق طلب الإدارة بنجاح.")
         
         # 4. Render the twin layout columns for instantaneous file export
         col_excel, col_word = st.columns(2)
@@ -1718,6 +1718,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 file_name="تقرير_أبو_الخير.docx", 
                 use_container_width=True
             )
+
 
 
 
