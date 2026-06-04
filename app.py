@@ -1688,7 +1688,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True
             )
--
 
 
 
