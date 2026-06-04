@@ -1470,7 +1470,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     import base64
     import pandas as pd
 
-    # Initialize permanent session parameters to prevent data loss
+    # تهيئة معاملات الجلسة لمنع اختفاء البيانات أثناء التحديث
     if 'captured_audio_b64' not in st.session_state:
         st.session_state['captured_audio_b64'] = None
     if 'page_ai_sql' not in st.session_state:
@@ -1480,7 +1480,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     if 'page_ai_executed_data' not in st.session_state:
         st.session_state['page_ai_executed_data'] = None
 
-    # 1. Capture text payload safely via URL redirect routing
+    # 1. التقاط بايتات الصوت الصافية القادمة من المتصفح عبر الرابط
     query_params = st.query_params
     voice_b64_stream = query_params.get("abu_voice_stream", "")
 
@@ -1489,11 +1489,11 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.query_params.clear()
         st.rerun()
 
-    # --- CONTROL BOARD UI ---
+    # --- لوحة التحكم المرئية ---
     st.markdown("### 🎛️ لوحة تحكم المساعد الصوتي")
     st.caption("استخدم الأزرار المدمجة في المربع أدناه لتشغيل أو إيقاف استماع أبو الخير تماماً أثناء الاجتماعات.")
 
-    # --- 🤖 ABU AL-KHAIR VISUAL INTERFACE & BACKGROUND RUNTIME ---
+    # --- 🤖 واجهة المساعد أبو الخير المكتملة والمغلقة برمجياً 100% ---
     abu_al_khair_html = """
     <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl; font-family: sans-serif;">
         <div style="margin-bottom: 15px;">
@@ -1533,7 +1533,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             recognition.continuous = true;
             recognition.interimResults = true;
             
-            // Manual Activation Click
             wakeBtn.onclick = function() {
                 try {
                     recognition.start();
@@ -1543,7 +1542,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 } catch(e) {}
             };
 
-            // Hard Meeting Shutoff Mute Click
             muteBtn.onclick = function() {
                 try {
                     recognition.stop();
@@ -1567,7 +1565,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 let speechText = (finalTranscript + interimTranscript).trim().toLowerCase();
                 liveTranscript.innerText = "جاري التقاط موجات الصوت: " + speechText;
 
-                // Wake Phrase Detection Rule
+                // التنشيط التلقائي فور نداء اسم "أبو الخير" دون لمس أي شيء
                 if (!isAwake && (speechText.includes('ابو الخير') || speechText.includes('أبو الخير'))) {
                     isAwake = true;
                     statusLight.style.backgroundColor = '#22c55e';
@@ -1590,9 +1588,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             const reader = new FileReader();
                             reader.readAsDataURL(audioBlob);
                             reader.onloadend = function() {
-                                const base64Data = reader.result.split(',');
+                                const base64Data = reader.result.split(',')[1]; // جلب النص البرمجي الصافي بدقة
                                 const baseUrl = window.parent.location.origin + window.parent.location.pathname;
-                                window.parent.location.href = baseUrl + '?abu_voice_stream=' + encodeURIComponent(base64Data[1]);
+                                window.parent.location.href = baseUrl + '?abu_voice_stream=' + encodeURIComponent(base64Data);
                             };
                         };
                         mediaRecorder.start();
@@ -1630,7 +1628,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     """
     components.html(abu_al_khair_html, height=200)
 
-    # 2. Process audio bytes against Gemini and Supabase
+    # 2. معالجة البايثون الصافية لملف الصوت المستلم وضربه بـ Supabase
     recorded_bytes = None
     if st.session_state.get('captured_audio_b64'):
         try:
@@ -1683,7 +1681,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                         st.session_state['page_ai_executed_data'] = None
                         
-                        # Direct database lookup
+                        # تنفيذ استعلام الـ SQL المكتشف فوراً في قاعدة بياناتك السحابية
                         cursor = conn.cursor()
                         cursor.execute(st.session_state['page_ai_sql'])
                         columns = [desc for desc in cursor.description]
@@ -1701,7 +1699,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     st.error(f"🚨 خطأ معالجة تلقائي: {e}")
                     st.session_state['captured_audio_b64'] = None
 
-    # --- 3. VIEW OUTPUT CHANNELS AND EXPORT TABLES ---
+    # --- 3. عرض المخرجات الحية وجداول التصدير للـ Excel والـ Word بمحاذاة قياسية صارمة ---
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
         st.divider()
@@ -1760,6 +1758,8 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     file_name="تقرير_أبو_الخير.docx", 
                     use_container_width=True
                 )
+
+                    
 
 
 
