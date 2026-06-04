@@ -1466,9 +1466,13 @@ elif page == "🎙️ المساعد الذكي والتقارير":
 
     import google.generativeai as genai
     import json
+    import streamlit.components.v1 as components
+    import base64
     import pandas as pd
 
-    # تهيئة الـ Session لمنع تصفير البيانات
+    # Initialize permanent session parameters to prevent data loss
+    if 'captured_audio_b64' not in st.session_state:
+        st.session_state['captured_audio_b64'] = None
     if 'page_ai_sql' not in st.session_state:
         st.session_state['page_ai_sql'] = None
     if 'page_ai_spoken' not in st.session_state:
@@ -1476,31 +1480,174 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     if 'page_ai_executed_data' not in st.session_state:
         st.session_state['page_ai_executed_data'] = None
 
-    st.markdown("### 🗣️ تحدث مباشرة مع أبو الخير:")
-    st.caption("اضغط على المايك أدناه، قل طلبك بالعامية (مثل: فرجيني لوحات حلب)، ثم أوقف التسجيل ليقوم النظام بالتنفيذ فوراً.")
+    # 1. Capture text payload safely via URL redirect routing
+    query_params = st.query_params
+    voice_b64_stream = query_params.get("abu_voice_stream", "")
 
-    # 🌟 أداة تسجيل الصوت السحابية الآمنة من Streamlit (تعمل على كل الأجهزة والنسخ القديمة والحديثة)
-    try:
-        # إذا كانت نسخة Streamlit حديثة ستظهر هذه الأداة تلقائياً
-        recorded_audio = st.audio_input("تكلم الآن مع أبو الخير:")
-    except AttributeError:
-        # إذا كانت النسخة قديمة، يظهر لك حقل لرفع الملف الصوتي مباشرة من موبايلك أو جهازك دون تعليق
-        recorded_audio = st.file_uploader("📥 قم برفع أو تسجيل ملف صوتي للأمر:", type=["wav", "mp3", "m4a"])
+    if voice_b64_stream:
+        st.session_state['captured_audio_b64'] = voice_b64_stream
+        st.query_params.clear()
+        st.rerun()
 
-    # صندوق نصي احتياطي للمستقبل إذا أردت الكتابة
-    user_typed_query = st.text_input(label="أو اكتب استعلامك يدوياً هنا:", placeholder="مثال: فرجيني سجلات دمشق الحالية...")
+    # --- CONTROL BOARD UI ---
+    st.markdown("### 🎛️ لوحة تحكم المساعد الصوتي")
+    st.caption("استخدم الأزرار المدمجة في المربع أدناه لتشغيل أو إيقاف استماع أبو الخير تماماً أثناء الاجتماعات.")
 
-    # تفعيل المعالجة فور توفر الصوت أو النص
-    if recorded_audio is not None or user_typed_query.strip():
+    # --- 🤖 ABU AL-KHAIR VISUAL INTERFACE & BACKGROUND RUNTIME ---
+    abu_al_khair_html = """
+    <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl; font-family: sans-serif;">
+        <div style="margin-bottom: 15px;">
+            <div id="status-light" style="width: 15px; height: 15px; background-color: #ef4444; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle; box-shadow: 0 0 10px #ef4444;"></div>
+            <span id="agent-status" style="color: #e2e8f0; font-weight: bold; font-size: 15px;">أبو الخير في وضع الاستعداد... نادني بـ (أبو الخير)</span>
+        </div>
+        
+        <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+            <button id="wake-btn" style="background-color: #22c55e; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: bold;">تشغيل المايك والربط</button>
+            <button id="mute-btn" style="background-color: #ef4444; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: bold;">إيقاف الاستماع (كتم للاجتماع)</button>
+        </div>
+
+        <button id="finish-btn" style="background-color: #3b82f6; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; display: none; margin-top: 10px;">
+            ⏹️ اضغط هنا عند الانتهاء من طلبك ليعالج أبو الخير البيانات فوراً
+        </button>
+        
+        <p id="live-transcript" style="color: #38bdf8; font-size: 13px; margin-top: 12px; font-style: italic; min-height: 20px;"></p>
+    </div>
+
+    <script>
+        const statusLight = document.getElementById('status-light');
+        const agentStatus = document.getElementById('agent-status');
+        const liveTranscript = document.getElementById('live-transcript');
+        const wakeBtn = document.getElementById('wake-btn');
+        const muteBtn = document.getElementById('mute-btn');
+        const finishBtn = document.getElementById('finish-btn');
+        
+        let mediaRecorder;
+        let audioChunks = [];
+        let isAwake = false;
+        let recognition;
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ar-SY'; 
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            
+            // Manual Activation Click
+            wakeBtn.onclick = function() {
+                try {
+                    recognition.start();
+                    statusLight.style.backgroundColor = '#eab308';
+                    statusLight.style.boxShadow = '0 0 10px #eab308';
+                    agentStatus.innerText = 'أبو الخير يستمع بانتظار نداءك... (نادني بـ "أبو الخير")';
+                } catch(e) {}
+            };
+
+            // Hard Meeting Shutoff Mute Click
+            muteBtn.onclick = function() {
+                try {
+                    recognition.stop();
+                    if(mediaRecorder) mediaRecorder.stop();
+                    isAwake = false;
+                    finishBtn.style.display = 'none';
+                    statusLight.style.backgroundColor = '#ef4444';
+                    statusLight.style.boxShadow = '0 0 10px #ef4444';
+                    agentStatus.innerText = 'تم إيقاف المايكروفون تماماً (وضع الكتم للاجتماع نشط)';
+                    liveTranscript.innerText = '';
+                } catch(e) {}
+            };
+
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) finalTranscript += event.results[i].transcript;
+                    else interimTranscript += event.results[i].transcript;
+                }
+                let speechText = (finalTranscript + interimTranscript).trim().toLowerCase();
+                liveTranscript.innerText = "جاري التقاط موجات الصوت: " + speechText;
+
+                // Wake Phrase Detection Rule
+                if (!isAwake && (speechText.includes('ابو الخير') || speechText.includes('أبو الخير'))) {
+                    isAwake = true;
+                    statusLight.style.backgroundColor = '#22c55e';
+                    statusLight.style.boxShadow = '0 0 10px #22c55e';
+                    agentStatus.innerText = 'أبو الخير: حاضر معلم، اطلب عيوني ليك...';
+                    
+                    if ('speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        const wakeUtterance = new SpeechSynthesisUtterance("حاضر معلم اطلب عيوني ليك");
+                        wakeUtterance.lang = "ar-SA";
+                        window.speechSynthesis.speak(wakeUtterance);
+                    }
+
+                    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        audioChunks = [];
+                        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                        mediaRecorder.onstop = () => {
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            const reader = new FileReader();
+                            reader.readAsDataURL(audioBlob);
+                            reader.onloadend = function() {
+                                const base64Data = reader.result.split(',');
+                                const baseUrl = window.parent.location.origin + window.parent.location.pathname;
+                                window.parent.location.href = baseUrl + '?abu_voice_stream=' + encodeURIComponent(base64Data[1]);
+                            };
+                        };
+                        mediaRecorder.start();
+                        finishBtn.style.display = 'block'; 
+                    });
+                }
+            };
+
+            finishBtn.onclick = function() {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                    recognition.stop();
+                    finishBtn.style.display = 'none';
+                    statusLight.style.backgroundColor = '#667eea';
+                    agentStatus.innerText = 'جاري تحليل نبرة الصوت واستخراج جداول السحابة...';
+                    
+                    if ('speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        const finishUtterance = new SpeechSynthesisUtterance("فهمت طلبك يا أستاذي وجاري التنفيذ الفوري حالا");
+                        finishUtterance.lang = "ar-SA";
+                        window.speechSynthesis.speak(finishUtterance);
+                    }
+                }
+            };
+            
+            recognition.onend = function() {
+                if(statusLight.style.backgroundColor !== 'rgb(239, 68, 68)') {
+                    try { recognition.start(); } catch(e) {}
+                }
+            };
+        } else {
+            agentStatus.innerText = '❌ المتصفح لا يدعم محرك المايك.';
+        }
+    </script>
+    """
+    components.html(abu_al_khair_html, height=200)
+
+    # 2. Process audio bytes against Gemini and Supabase
+    recorded_bytes = None
+    if st.session_state.get('captured_audio_b64'):
+        try:
+            recorded_bytes = base64.b64decode(st.session_state['captured_audio_b64'])
+        except Exception:
+            pass
+
+    if recorded_bytes is not None:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if api_key and api_key != "ضع_مفتاحك_هنا":
-            with st.spinner("🧠 أبو الخير يقوم بتحليل طلبك ومطابقة البيانات السحابية..."):
+            with st.spinner("🧠 أبو الخير يتصل بـ Supabase لجلب جداول البيانات..."):
                 try:
                     genai.configure(api_key=api_key)
                     
                     system_prompt = """
                     أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
-                    مهمتك تحويل أمر المدير (سواء قاله صوتاً أو كتبه نصاً) إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                    مهمتك تحويل أمر المدير الصوتي المرفق إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
                     
                     هيكلية قاعدة البيانات المتاحة (PostgreSQL):
                     جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
@@ -1516,38 +1663,30 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         "confidence": 0.95,
                         "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
                         "package_details": null,
-                        "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك سجلات دمشق الحالية فوراً من السحابة."
+                        "spoken_response": "أبشر يا أستاذي، لقيتلك السجلات المطلوبة فوراً وعرضتها على الشاشة."
                     }
                     """
                     
                     model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash", # الفلاش القياسي يدعم معالجة الصوت والملفات مباشرة
+                        model_name="gemini-2.5-flash", 
                         generation_config={"response_mime_type": "application/json"},
                         system_instruction=system_prompt
                     )
                     
-                    contents = []
-                    # إذا تم تسجيل الصوت، نقرأ البايتات الصافية ونحقنها لـ Gemini فوراً ليفهم لهجتك السورية!
-                    if recorded_audio is not None:
-                        audio_data_bytes = recorded_audio.read()
-                        contents.append({
-                            "mime_type": "audio/wav",
-                            "data": audio_data_bytes
-                        })
-                    if user_typed_query.strip():
-                        contents.append(user_typed_query)
-
-                    response = model.generate_content(contents)
+                    response = model.generate_content([
+                        {"mime_type": "audio/wav", "data": recorded_bytes}
+                    ])
+                    
                     if response.text:
                         parsed_data = json.loads(response.text.strip())
                         st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
                         st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
                         st.session_state['page_ai_executed_data'] = None
                         
-                        # تنفيذ استعلام الـ SQL المستخرج فوراً بشكل آمن في Supabase
+                        # Direct database lookup
                         cursor = conn.cursor()
                         cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc[0] for desc in cursor.description]
+                        columns = [desc for desc in cursor.description]
                         data = cursor.fetchall()
                         cursor.close()
                         
@@ -1555,26 +1694,33 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
                         else:
                             st.session_state['page_ai_executed_data'] = "EMPTY"
-                            
+                        
+                        st.session_state['captured_audio_b64'] = None
                         st.rerun()
                 except Exception as e:
                     st.error(f"🚨 خطأ معالجة تلقائي: {e}")
+                    st.session_state['captured_audio_b64'] = None
 
-    # --- 3. عرض المخرجات الحية وجداول التصدير للـ Excel والـ Word ---
+    # --- 3. VIEW OUTPUT CHANNELS AND EXPORT TABLES ---
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
         st.divider()
         
         current_spoken = st.session_state.get('page_ai_spoken', 'تم جلب السجلات')
-        st.success(f"🤖 رد أبو الخير: {current_spoken}")
+        
+        st.markdown(f"""
+        <div style="background-color: rgba(34, 197, 94, 0.1); border-right: 5px solid #22c55e; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 13px; color: #a0a0a0; text-align: right;">النص الصوتي المستلم والمخزن بالذاكرة الحية:</p>
+            <h4 style="margin: 5px 0 0 0; color: white; text-align: right; font-weight: bold;">{current_spoken}</h4>
+        </div>
+        """, unsafe_allow_html=True)
         
         if isinstance(executed_res, str) and executed_res == "EMPTY":
             st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
         else:
             st.dataframe(executed_res, use_container_width=True)
-            st.info("💡 تم العثور على السجلات وتجهيز ملفات التحميل بنجاح.")
+            st.info("💡 تم العثور على السجلات التي تطابق طلب الإدارة بنجاح.")
             
-            # أزرار التصدير الفوري لملفات Excel و Word بمحاذاة صارمة ومستقرة
             col_excel, col_word = st.columns(2)
             
             with col_excel:
@@ -1582,25 +1728,12 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 excel_buffer = io.BytesIO()
                 with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                     executed_res.to_excel(writer, index=False, sheet_name='Abu Al-Khair')
-                st.download_button("📥 تحميل كملف Excel", excel_buffer.getvalue(), "report.xlsx", use_container_width=True)
-                
-            with col_word:
-                from docx import Document
-                import io
-                doc = Document()
-                table = doc.add_table(rows=1, cols=len(executed_res.columns))
-                table.style = 'Light Shading Accent 1'
-                hdr_cells = table.rows.cells
-                for i, col_name in enumerate(executed_res.columns): 
-                    hdr_cells[i].text = str(col_name)
-                for _, row in executed_res.iterrows():
-                    row_cells = table.add_row().cells
-                    for i, val in enumerate(row): 
-                        row_cells[i].text = str(val)
-                word_buffer = io.BytesIO()
-                doc.save(word_buffer)
-                st.download_button("📝 تحميل كتقرير Word", word_buffer.getvalue(), "report.docx", use_container_width=True)
-
+                st.download_button(
+                    label="📥 تحميل كملف Excel", 
+                    data=excel_buffer.getvalue(), 
+                    file_name="تقرير_أبو_الخير.xlsx", 
+                    use_container_width=True
+                )
                 
             with col_word:
                 from docx import Document
@@ -1628,32 +1761,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     use_container_width=True
                 )
 
-                
-            with col_word:
-                from docx import Document
-                import io
-                
-                doc = Document()
-                table = doc.add_table(rows=1, cols=len(executed_res.columns))
-                table.style = 'Light Shading Accent 1'
-                
-                hdr_cells = table.rows.cells
-                for i, col_name in enumerate(executed_res.columns): 
-                    hdr_cells[i].text = str(col_name)
-                    
-                for _, row in executed_res.iterrows():
-                    row_cells = table.add_row().cells
-                    for i, val in enumerate(row): 
-                        row_cells[i].text = str(val)
-                        
-                word_buffer = io.BytesIO()
-                doc.save(word_buffer)
-                st.download_button(
-                    label="📝 تحميل كتقرير Word", 
-                    data=word_buffer.getvalue(), 
-                    file_name="تقرير_أبو_الخير.docx", 
-                    use_container_width=True
-                )
 
 
 
