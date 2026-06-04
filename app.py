@@ -1642,49 +1642,54 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     # --- 4. VIEW RENDER OUTPUT TABLES ---
     executed_res = st.session_state.get('page_ai_executed_data')
     if executed_res is not None:
-        st.success(st.session_state.get('page_ai_spoken', 'تم جلب البيانات.'))
+        # جدول البيانات المستخرج وأزرار التصدير بمحاذاة هندسية صارمة
         st.dataframe(executed_res, use_container_width=True)
+        st.info(f"💡 تم العثور على {len(executed_res)} سجل.")
         
-        # Immediate Export Layout Options
+        st.markdown("#### 📥 تصدير التقرير الفوري:")
         col_excel, col_word = st.columns(2)
+        
         with col_excel:
             import io
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                 executed_res.to_excel(writer, index=False, sheet_name='Abu Al-Khair Report')
-            st.download_button("📥 تحميل كملف Excel", excel_buffer.getvalue(), "report.xlsx", use_container_width=True)
+            st.download_button(
+                label="📥 تحميل كملف Excel", 
+                data=excel_buffer.getvalue(), 
+                file_name="تقرير_أبو_الخير.xlsx", 
+                use_container_width=True
+            )
+            
         with col_word:
             from docx import Document
-                # --- المربع البرمجي المكتمل لتصدير ملفات Word بمحاذاة صارمة ونهائية ---
-                from docx import Document
-                import io
+            import io
+            
+            doc = Document()
+            table = doc.add_table(rows=1, cols=len(executed_res.columns))
+            table.style = 'Light Shading Accent 1'
+            
+            hdr_cells = table.rows.cells
+            for i, col_name in enumerate(executed_res.columns):
+                hdr_cells[i].text = str(col_name)
                 
-                doc = Document()
-                table = doc.add_table(rows=1, cols=len(executed_res.columns))
-                table.style = 'Light Shading Accent 1'
-                
-                # تعبئة خلايا العناوين الأساسية للجدول
-                hdr_cells = table.rows[0].cells
-                for i, col_name in enumerate(executed_res.columns):
-                    hdr_cells[i].text = str(col_name)
+            for _, row in executed_res.iterrows():
+                row_cells = table.add_row().cells
+                for i, val in enumerate(row):
+                    row_cells[i].text = str(val)
                     
-                # تعبئة السجلات الحية داخل مستند الوورد سطر بسطر
-                for _, row in executed_res.iterrows():
-                    row_cells = table.add_row().cells
-                    for i, val in enumerate(row):
-                        row_cells[i].text = str(val)
-                        
-                # حفظ الملف وتجهيز زر التحميل الفوري للمدير
-                word_buffer = io.BytesIO()
-                doc.save(word_buffer)
-                
-                st.download_button(
-                    label="📝 تحميل كتقرير Word",
-                    data=word_buffer.getvalue(),
-                    file_name="تقرير_أبو_الخير.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
+            word_buffer = io.BytesIO()
+            doc.save(word_buffer)
+            
+            st.download_button(
+                label="📝 تحميل كتقرير Word",
+                data=word_buffer.getvalue(),
+                file_name="تقرير_أبو_الخير.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+-
+
 
 
                     
