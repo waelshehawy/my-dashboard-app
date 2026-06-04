@@ -1460,137 +1460,45 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
-# ============================================================
-# 🧪 صفحة اختبار الصوت - النسخة النهائية العاملة
-# ============================================================
-elif page == "🎙️ المساعد الذكي والتقارير":
-    
-    st.title("🎙️ اختبار تحويل الصوت إلى نص")
-    st.markdown("---")
-    
-    import speech_recognition as sr
-    from io import BytesIO
-    import base64
-    
-    # تهيئة session state
-    if 'audio_processed' not in st.session_state:
-        st.session_state['audio_processed'] = False
-    if 'recognized_text' not in st.session_state:
-        st.session_state['recognized_text'] = ""
-    
-    # ========================================
-    # الطريقة الوحيدة التي تعمل على السحابة: رفع ملف
-    # ========================================
-    
-    st.info("💡 **ملاحظة هامة:** بسبب قيود المتصفح والخادم، أفضل طريقة للتعرف على الصوت هي رفع ملف صوتي مسجل مسبقاً.")
-    
-    st.subheader("📁 الطريقة المضمونة: ارفع ملف صوتي")
-    
-    st.markdown("""
-    **كيف تسجل ملف صوتي؟**
-    1. استخدم تطبيق التسجيل الصوتي في جوالك أو جهازك
-    2. سجل جملة بسيطة مثل: "عرض اللوحات في دمشق"
-    3. احفظ الملف بصيغة WAV أو MP3
-    4. ارفعه هنا
-    """)
-    
-    uploaded_file = st.file_uploader("اختر ملف صوتي", type=['wav', 'mp3', 'm4a', 'webm'])
-    
-    if uploaded_file is not None:
-        st.audio(uploaded_file)
-        
-        with st.spinner("🎙️ جاري تحويل الصوت إلى نص... قد يستغرق 5 ثوانٍ"):
-            try:
-                recognizer = sr.Recognizer()
-                with sr.AudioFile(BytesIO(uploaded_file.getvalue())) as source:
-                    # تنظيف الضوضاء
-                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    audio_data = recognizer.record(source)
-                    
-                    # التعرف على النص
-                    text = recognizer.recognize_google(audio_data, language='ar-SY')
-                    st.success(f"✅ النص المستخلص: **{text}**")
-                    st.balloons()
-                    st.session_state['recognized_text'] = text
-                    
-            except sr.UnknownValueError:
-                st.error("❌ لم يتم فهم الصوت. تأكد من:")
-                st.markdown("""
-                - التحدث بوضوح وبصوت عالٍ
-                - أن التسجيل خالٍ من الضوضاء
-                - أن المدة لا تقل عن ثانيتين
-                """)
-            except sr.RequestError as e:
-                st.error(f"❌ خطأ في الاتصال بخدمة Google: {e}")
-            except Exception as e:
-                st.error(f"❌ خطأ: {e}")
-    
-    # ========================================
-    # عرض النص وتنفيذه
-    # ========================================
-    if st.session_state['recognized_text']:
-        st.markdown("---")
-        st.subheader("📝 تنفيذ الأمر")
-        
-        # عرض النص مع إمكانية التعديل
-        user_query = st.text_input(
-            "النص المستخلص من الصوت (يمكنك تعديله):",
-            value=st.session_state['recognized_text']
-        )
-        
-        if st.button("🚀 تنفيذ الاستعلام", type="primary", use_container_width=True):
-            if user_query.strip():
-                st.success(f"✅ جاري تنفيذ: **{user_query}**")
-                
-                # هنا يمكنك إضافة كود Gemini الخاص بك
-                st.info("💡 الآن يمكنك إضافة كود تحويل النص إلى SQL")
-                
-                # مثال بسيط لاختبار Gemini
-                import google.generativeai as genai
-                import json
-                
-                api_key = st.secrets.get("GEMINI_API_KEY")
-                if api_key and api_key != "ضع_مفتاحك_هنا":
-                    with st.spinner("🧠 جاري التحليل..."):
-                        try:
-                            genai.configure(api_key=api_key)
-                            
-                            prompt = f"""
-                            حول الأمر التالي إلى استعلام SQL على جدول "حجوزات1":
-                            الأمر: {user_query}
-                            
-                            الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
-                            
-                            أخرج JSON: {{"sql": "الاستعلام", "reply": "الرد"}}
-                            """
-                            
-                            model = genai.GenerativeModel("gemini-2.5-flash-lite")
-                            response = model.generate_content(prompt)
-                            st.code(response.text, language='json')
-                            
-                        except Exception as e:
-                            st.error(f"خطأ: {e}")
-                else:
-                    st.warning("⚠️ لم يتم إعداد مفتاح Gemini API")
-    
-    # ========================================
-    # شرح المشكلة
-    # ========================================
-    with st.expander("🔧 لماذا لا يعمل التسجيل المباشر؟"):
-        st.markdown("""
-        **سبب المشكلة:**
-        - Streamlit Cloud لديه حد أقصى لحجم الطلب (Request size limit)
-        - التسجيل المباشر يرسل الصوت كـ Base64 في URL
-        - حتى كلمة واحدة تنتج ملف صوتي أكبر من المسموح به
-        
-        **الحلول الممكنة:**
-        1. ✅ **رفع ملف صوتي** - هذا يعمل 100%
-        2. استخدام خدمة خارجية مثل OpenRouter أو AssemblyAI
-        3. استخدام Streamlit Community Cloud مع إعدادات مخصصة
-        
-        **الخلاصة:** رفع الملفات الصوتية هو الحل الأكثر استقراراً على Streamlit Cloud
-        """)
+import streamlit as st
+import speech_recognition as sr
+from io import BytesIO
+from pydub import AudioSegment
 
+st.subheader("🎤 ارفع ملف صوتي (MP3 أو WAV)")
+
+uploaded_audio = st.file_uploader("اختر ملف صوتي", type=['wav', 'mp3', 'm4a'])
+
+if uploaded_audio is not None:
+    st.audio(uploaded_audio)
+    
+    with st.spinner("جاري تحويل الصوت إلى نص..."):
+        try:
+            # قراءة الملف
+            audio_bytes = BytesIO(uploaded_audio.getvalue())
+            
+            # إذا كان MP3، حوله إلى WAV
+            if uploaded_audio.type == "audio/mpeg" or uploaded_audio.name.endswith('.mp3'):
+                st.info("🔄 جاري تحويل MP3 إلى WAV...")
+                audio = AudioSegment.from_mp3(audio_bytes)
+                wav_bytes = BytesIO()
+                audio.export(wav_bytes, format="wav")
+                wav_bytes.seek(0)
+                audio_source = wav_bytes
+            else:
+                audio_source = audio_bytes
+            
+            # تحويل الصوت إلى نص
+            recognizer = sr.Recognizer()
+            with sr.AudioFile(audio_source) as source:
+                recognizer.adjust_for_ambient_noise(source)
+                audio_data = recognizer.record(source)
+                text = recognizer.recognize_google(audio_data, language='ar-SY')
+                st.success(f"✅ النص المستخلص: **{text}**")
+                
+        except Exception as e:
+            st.error(f"❌ خطأ: {e}")
+            st.info("💡 نصيحة: استخدم ملفات WAV للحصول على أفضل نتيجة")
 
 
                     
