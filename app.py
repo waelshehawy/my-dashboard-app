@@ -1461,124 +1461,113 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
-    st.markdown("نظام إدارة وتحليل اللوحات التفاعلي والمستمر صوتاً بدون أزرار.")
+    st.markdown("نظام إدارة وتحليل اللوحات التفاعلي المستقر.")
     st.divider()
 
     import google.generativeai as genai
     import json
-    import streamlit.components.v1 as components
 
-    # 1. الاستماع الآمن للرابط وجلب النص الصافي المنطوق من جافاسكريبت
-    query_params = st.query_params
-    voice_raw_text = query_params.get("abu_voice", "")
+    # Clean text container instructing the user without manual keyboard hurdles
+    st.markdown("### 🗣️ التحدث المباشر مع أبو الخير:")
+    st.info("💡 **طريقة الاستخدام السهلة:** اضغط على أيقونة المايك المدمجة أدناه، قل طلبك بالعامية (مثال: 'عطيني لوحات حلب المتاحة')، ثم أوقف التسجيل ليقوم النظام بتحليله فوراً.")
 
-    if voice_raw_text:
-        st.session_state['page_ai_query'] = voice_raw_text
-        st.query_params.clear()
-        st.rerun()
+    # Native Streamlit audio file capture (Completely bypasses browser network translation errors)
+    # This requires streamlt >= 1.38.0. If your cloud instance is older, use standard file uploads or text inputs.
+    try:
+        recorded_audio = st.audio_input("تكلم الآن مع أبو الخير:")
+    except AttributeError:
+        # Fallback if your Streamlit package version on the cloud server is older
+        recorded_audio = st.file_uploader("📥 أو قم برفع ملف صوتي مباشر للأمر:", type=["wav", "mp3", "m4a"])
 
-    # --- 🤖 مجمع الخلفية الصوتي المطور والمحمي ضد الحجب ---
-    abu_al_khair_html = """
-    <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; direction: rtl;">
-        <div id="status-light" style="width: 20px; height: 20px; background-color: #ef4444; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle; box-shadow: 0 0 10px #ef4444;"></div>
-        <span id="agent-status" style="color: #94a3b8; font-weight: bold; font-size: 16px;">المايك بانتظار تفعيل الصلاحية...</span>
-        <br/><br/>
-        <button id="start-session-btn" style="background-color: #22c55e; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            🟢 تفعيل وتشغيل المساعد أبو الخير
-        </button>
-        <p id="live-transcript" style="color: #38bdf8; font-size: 14px; margin-top: 15px; font-style: italic;"></p>
-    </div>
+    # Fallback optional manual input box if you just want to type
+    user_typed_query = st.text_input(
+        label="أو اكتب استعلامك يدوياً هنا في أي وقت:",
+        placeholder="مثال: فرجيني سجلات دمشق الحالية...",
+        key="manual_text_query"
+    )
 
-    <script>
-        const statusLight = document.getElementById('status-light');
-        const agentStatus = document.getElementById('agent-status');
-        const liveTranscript = document.getElementById('live-transcript');
-        const startBtn = document.getElementById('start-session-btn');
-        
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            const recognition = new SpeechRecognition();
-            
-            recognition.lang = 'ar-SY'; 
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            
-            let isAwake = false;
-
-            // تفعيل المايك وفك حجب المتصفح عند ضغط الزر الأخضر صراحة
-            startBtn.onclick = function() {
-                try {
-                    recognition.start();
-                    startBtn.style.display = 'none'; // إخفاء الزر بعد التفعيل لتنظيف الواجهة
-                    statusLight.style.backgroundColor = '#eab308';
-                    statusLight.style.boxShadow = '0 0 10px #eab308';
-                    agentStatus.innerText = 'أبو الخير يستمع في الخلفية... نادني بـ "أبو الخير"';
-                } catch(e) {
-                    agentStatus.innerText = 'المايك يعمل بالفعل ويستمع لك...';
-                }
-            };
-
-            recognition.onresult = function(event) {
-                let interimTranscript = '';
-                let finalTranscript = '';
-
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i].transcript;
-                    } else {
-                        interimTranscript += event.results[i].transcript;
-                    }
-                }
-
-                let speechText = (finalTranscript + interimTranscript).trim().toLowerCase();
-                liveTranscript.innerText = "ما تم سماعه لحظياً: " + speechText;
-
-                // رصد كلمة الاستيقاظ "أبو الخير"
-                if (!isAwake && (speechText.includes('ابو الخير') || speechText.includes('أبو الخير'))) {
-                    isAwake = true;
-                    statusLight.style.backgroundColor = '#22c55e';
-                    statusLight.style.boxShadow = '0 0 10px #22c55e';
-                    agentStatus.innerText = 'أبو الخير نشط ومستمع لك يا أستاذي...';
+    # Trigger calculation pipeline
+    if recorded_audio is not None or user_typed_query.strip():
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if api_key and api_key != "ضع_مفتاحك_هنا":
+            with st.spinner("🧠 أبو الخير يقوم بتحليل طلبك ومطابقة البيانات السحابية..."):
+                try:
+                    genai.configure(api_key=api_key)
                     
-                    if ('speechSynthesis' in window) {
-                        window.speechSynthesis.cancel();
-                        const wakeUtterance = new SpeechSynthesisUtterance("اطلب مني أي استعلام يا أستاذي");
-                        wakeUtterance.lang = "ar-SA";
-                        window.speechSynthesis.speak(wakeUtterance);
+                    system_prompt = """
+                    أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات واسمك (أبو الخير).
+                    مهمتك تحويل أمر المدير (سواء قاله صوتاً أو كتبه نصاً) إلى استعلام SQL صحيح وإرجاع رد بصيغة JSON نقي فقط، بدون علامات تعقيب أو هوامش (لا تضع ```json).
+                    
+                    هيكلية قاعدة البيانات المتاحة (PostgreSQL):
+                    جدول "حجوزات1" (يجب كتابته دائماً بين علامات اقتباس مزدوجة كـ "حجوزات1" وإلا سيفشل الاستعلام).
+                    الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                    
+                    ⚠️ قواعد صارمة لمنع الجداول الفارغة:
+                    1. استخدم دائماً عامل التشغيل LIKE مع علامات النسبة المئوية (%) للمحافظات (مثال: "المحافظة" LIKE '%دمشق%').
+                    2. لا تضع شروطاً صارمة للأحجام أو العملاء إلا إذا طلبها المدير صراحة بوضوح في صوته.
+                    
+                    يجب أن تطابق المخرجات الهيكل التالي تماماً:
+                    {
+                        "intent": "get_available / check_temporary / create_package",
+                        "confidence": 0.95,
+                        "extracted_sql": "SELECT \\"رقم اللوحة\\", \\"اسم الزبون\\", \\"المحافظة\\", \\"الحجم\\", \\"فترة الحجز\\" FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%'",
+                        "package_details": null,
+                        "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك سجلات دمشق الحالية فوراً من السحابة."
                     }
-                    speechText = '';
-                }
-                
-                // استقبال الطلب الفعلي بعد التنشيط
-                if (isAwake && speechText.length > 5 && !speechText.endsWith('ابو الخير') && !speechText.endsWith('أبو الخير')) {
-                    isAwake = false;
-                    const baseUrl = window.parent.location.origin + window.parent.location.pathname;
-                    window.parent.location.href = baseUrl + '?abu_voice=' + encodeURIComponent(speechText);
-                }
-            };
+                    """
+                    
+                    model = genai.GenerativeModel(
+                        model_name="gemini-2.5-flash", # Use standard flash here for multimodal audio capability
+                        generation_config={"response_mime_type": "application/json"},
+                        system_instruction=system_prompt
+                    )
+                    
+                    # Pack contents dynamically
+                    contents = []
+                    if recorded_audio is not None:
+                        audio_data_bytes = recorded_audio.read()
+                        contents.append({
+                            "mime_type": "audio/wav",
+                            "data": audio_data_bytes
+                        })
+                    if user_typed_query.strip():
+                        contents.append(user_typed_query)
 
-            recognition.onerror = function(event) {
-                statusLight.style.backgroundColor = '#ef4444';
-                if(event.error === 'not-allowed') {
-                    agentStatus.innerText = '❌ خطأ: المايك محجوب. يرجى الضغط على علامة القفل بجانب رابط الموقع وفك الحجب.';
-                } else {
-                    agentStatus.innerText = 'خطأ في التقاط الصوت: ' + event.error;
-                }
-            };
+                    response = model.generate_content(contents)
+                    if response.text:
+                        parsed_data = json.loads(response.text.strip())
+                        st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
+                        st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
+                        st.session_state['page_ai_executed_data'] = None
+                        
+                        # Execute query inside Supabase
+                        cursor = conn.cursor()
+                        cursor.execute(st.session_state['page_ai_sql'])
+                        columns = [desc for desc in cursor.description]
+                        data = cursor.fetchall()
+                        cursor.close()
+                        
+                        if data:
+                            import pandas as pd
+                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
+                            
+                            # Play voice response from Abu Al-Khair using standard browser audio rendering
+                            import streamlit.components.v1 as components
+                            tts_html = f"""
+                            <script>
+                                if ('speechSynthesis' in window) {{
+                                    window.speechSynthesis.cancel();
+                                    const u = new SpeechSynthesisUtterance("{st.session_state['page_ai_spoken']}");
+                                    u.lang = "ar-SA";
+                                    window.speechSynthesis.speak(u);
+                                }}
+                            </script>
+                            """
+                            components.html(tts_html, height=0, width=0)
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"🚨 خطأ في المعالجة التلقائية لقاعدة البيانات: {e}")
 
-            recognition.onend = function() {
-                // الحفاظ على استمرارية الاستماع بشكل دائم
-                try { recognition.start(); } catch(e) {}
-            };
-            
-        } else {
-            agentStatus.innerText = '❌ المتصفح الحالي لا يدعم محرك التقاط الصوت.';
-            startBtn.style.display = 'none';
-        }
-    </script>
-    """
-    
-    components.html(abu_al_khair_html, height=160)
 
 
     # 2. بدء المعالجة التلقائية السحابية فور توفر نص مسموع حقيقي في الذاكرة
