@@ -1461,7 +1461,7 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
 # ============================================================
-# 🎙️ صفحة المساعد الذكي (أبو الخير) - نسخة mic-recorder
+# 🎙️ صفحة المساعد الذكي (أبو الخير) - النسخة المصححة
 # ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
@@ -1480,48 +1480,78 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.session_state['text_captured'] = ""
     if 'result_df' not in st.session_state:
         st.session_state['result_df'] = None
-    if 'waiting_for_query' not in st.session_state:
-        st.session_state['waiting_for_query'] = False
+    if 'processing' not in st.session_state:
+        st.session_state['processing'] = False
 
     # ========================================
-    # زر التسجيل الصوتي - يعمل بشكل مضمون
+    # زر التسجيل الصوتي
     # ========================================
     st.markdown("### 🗣️ اضغط على الميكروفون وتكلم:")
     
-    # تسجيل الصوت مباشرة
+    # تسجيل الصوت
     audio = mic_recorder(
         start_prompt="🎤 اضغط للتسجيل",
         stop_prompt="⏹️ اضغط للإيقاف",
         just_once=True,
         use_container_width=True,
-        format="webm",
+        key="mic_recorder"
     )
     
     # معالجة الصوت المسجل
-    if audio:
-        st.audio(audio, format="audio/webm")  # تشغيل التسجيل للمستخدم
+    if audio and not st.session_state['processing']:
+        st.session_state['processing'] = True
         
-        with st.spinner("🎙️ جاري تحليل الصوت وتحويله إلى نص..."):
+        # عرض معلومات عن الصوت المسجل
+        st.info(f"📁 تم تسجيل {len(audio)} بايت من الصوت")
+        
+        # محاولة تشغيل الصوت (إذا كان الصيغة مدعومة)
+        try:
+            # بعض الإصدارات تحتاج إلى base64
+            import base64
+            audio_b64 = base64.b64encode(audio).decode()
+            st.markdown(f'<audio controls src="data:audio/wav;base64,{audio_b64}"></audio>', unsafe_allow_html=True)
+        except:
+            st.write("🎵 تم تسجيل الصوت بنجاح")
+        
+        with st.spinner("🎙️ جاري تحليل الصوت وتحويله إلى نص... قد يستغرق 5-10 ثوانٍ"):
             try:
-                # تحويل الصوت إلى نص
+                # تحويل الصوت إلى نص باستخدام SpeechRecognition
                 with sr.AudioFile(BytesIO(audio)) as source:
                     recognizer = sr.Recognizer()
-                    recognizer.adjust_for_ambient_noise(source)
+                    # ضبط حساسية الميكروفون
+                    recognizer.dynamic_energy_threshold = True
+                    recognizer.energy_threshold = 300
+                    recognizer.pause_threshold = 0.8
+                    
+                    # تسجيل الصوت من الملف
                     audio_data = recognizer.record(source)
                     
-                    # التعرف على النص بالعربية
-                    detected_text = recognizer.recognize_google(audio_data, language='ar-SY')
-                    st.session_state['text_captured'] = detected_text
-                    st.success(f"✅ تم التعرف على: **{detected_text}**")
-                    st.balloons()
+                    # التعرف على النص بالعربية (محاولة بأكثر من لهجة)
+                    try:
+                        detected_text = recognizer.recognize_google(audio_data, language='ar-AR')
+                    except:
+                        try:
+                            detected_text = recognizer.recognize_google(audio_data, language='ar-SY')
+                        except:
+                            detected_text = recognizer.recognize_google(audio_data, language='ar')
                     
+                    if detected_text and detected_text.strip():
+                        st.session_state['text_captured'] = detected_text
+                        st.success(f"✅ تم التعرف على: **{detected_text}**")
+                        st.balloons()
+                    else:
+                        st.error("❌ لم يتم التعرف على أي نص، حاول التحدث بوضوح أكثر")
+                        
             except sr.UnknownValueError:
                 st.error("❌ لم يتم فهم الصوت! حاول التحدث بوضوح أكثر وبصوت أعلى")
                 st.info("💡 نصائح: تحدث ببطء، اجعل الميكروفون قريباً من فمك، وتجنب الضوضاء")
             except sr.RequestError as e:
-                st.error(f"❌ خطأ في الاتصال: {e}")
+                st.error(f"❌ خطأ في الاتصال بخدمة Google: {e}")
             except Exception as e:
-                st.error(f"❌ خطأ: {e}")
+                st.error(f"❌ خطأ غير متوقع: {str(e)[:100]}")
+        
+        st.session_state['processing'] = False
+        st.rerun()
 
     # ========================================
     # عرض النص المستخلص
@@ -1532,7 +1562,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.markdown(f"""
         <div style="background-color: #1e1e2f; padding: 15px; border-radius: 10px; border-right: 5px solid #4caf50; margin: 10px 0;">
             <p style="margin: 0; color: #aaa; font-size: 12px;">📝 النص المستخلص من صوتك:</p>
-            <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: white;">"{st.session_state['text_captured']}"</p>
+            <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #4caf50;">"{st.session_state['text_captured']}"</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -1542,6 +1572,10 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         value=st.session_state['text_captured'],
         placeholder="مثال: اعرض لي اللوحات في حلب"
     )
+
+    # تحديث النص إذا تم تعديله
+    if user_query != st.session_state['text_captured']:
+        st.session_state['text_captured'] = user_query
 
     # ========================================
     # زر تنفيذ الاستعلام
@@ -1558,16 +1592,21 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             genai.configure(api_key=api_key)
                             
                             system_prompt = """
-                            أنت مساعد لتحويل أوامر المستخدم إلى SQL.
-                            الجدول اسمه "حجوزات1" والأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+                            أنت مساعد SQL محترف. حول أمر المستخدم بالعامية إلى استعلام SQL صحيح.
                             
-                            أخرج JSON بهذا الشكل:
-                            {"sql": "استعلام SQL", "reply": "رد مختصر بالعربية"}
+                            الجدول: "حجوزات1"
+                            الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
                             
-                            مثال: "اعرض لي اللوحات في حلب"
-                            {"sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%حلب%'", "reply": "تم جلب اللوحات في محافظة حلب"}
+                            قواعد مهمة:
+                            1. استخدم علامات اقتباس مزدوجة للأسماء: "حجوزات1"
+                            2. استخدم LIKE مع % للبحث الجزئي في المحافظة
+                            3. إذا ذكر المحافظة، استخدم WHERE "المحافظة" LIKE '%المدينة%'
                             
-                            ملاحظة: استخدم LIKE مع % للبحث الجزئي في المحافظة
+                            أخرج JSON فقط:
+                            {"sql": "الاستعلام", "reply": "رد بالعربية مختصر"}
+                            
+                            مثال: "عرض اللوحات في حلب"
+                            {"sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%حلب%'", "reply": "تم جلب اللوحات في حلب"}
                             """
                             
                             model = genai.GenerativeModel(
@@ -1579,27 +1618,34 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                             response = model.generate_content(user_query)
                             result = json.loads(response.text)
                             
-                            # عرض الاستعلام المنفذ
+                            # عرض الاستعلام للمستخدم
                             with st.expander("🔍 عرض استعلام SQL المنفذ"):
-                                st.code(result.get('sql', ''), language='sql')
+                                st.code(result.get('sql', '-- لا يوجد استعلام'), language='sql')
                             
                             # تنفيذ الاستعلام
-                            cursor = conn.cursor()
-                            cursor.execute(result.get('sql', ''))
-                            columns = [desc[0] for desc in cursor.description]
-                            data = cursor.fetchall()
-                            cursor.close()
-                            
-                            if data:
-                                st.session_state['result_df'] = pd.DataFrame(data, columns=columns)
-                                st.success(f"🤖 {result.get('reply', 'تم تنفيذ الاستعلام بنجاح')}")
-                                st.balloons()
-                            else:
-                                st.warning("📭 لا توجد نتائج تطابق طلبك")
-                                st.session_state['result_df'] = None
+                            if result.get('sql'):
+                                cursor = conn.cursor()
+                                cursor.execute(result.get('sql'))
                                 
+                                # جلب أسماء الأعمدة
+                                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                                data = cursor.fetchall()
+                                cursor.close()
+                                
+                                if data and columns:
+                                    st.session_state['result_df'] = pd.DataFrame(data, columns=columns)
+                                    st.success(f"🤖 {result.get('reply', 'تم تنفيذ الاستعلام بنجاح')}")
+                                    st.balloons()
+                                else:
+                                    st.warning("📭 لا توجد نتائج تطابق طلبك")
+                                    st.session_state['result_df'] = None
+                            else:
+                                st.error("لم يتم إنشاء استعلام SQL صحيح")
+                                
+                        except json.JSONDecodeError:
+                            st.error("❌ خطأ في تحليل رد الذكاء الاصطناعي")
                         except Exception as e:
-                            st.error(f"🚨 خطأ: {e}")
+                            st.error(f"🚨 خطأ: {str(e)[:200]}")
                 else:
                     st.error("❌ لم يتم إعداد مفتاح API لـ Google Gemini")
             else:
@@ -1613,29 +1659,50 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.subheader("📊 النتائج:")
         st.dataframe(st.session_state['result_df'], use_container_width=True)
         
+        # إحصائيات سريعة
+        st.caption(f"📈 عدد السجلات: {len(st.session_state['result_df'])}")
+        
         # أزرار التحميل
         col1, col2 = st.columns(2)
         with col1:
             buffer = BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                st.session_state['result_df'].to_excel(writer, index=False)
-            st.download_button("📥 تحميل Excel", buffer.getvalue(), "تقرير_أبو_الخير.xlsx", use_container_width=True)
+                st.session_state['result_df'].to_excel(writer, index=False, sheet_name='تقرير')
+            st.download_button(
+                label="📥 تحميل Excel", 
+                data=buffer.getvalue(), 
+                file_name="تقرير_أبو_الخير.xlsx", 
+                use_container_width=True
+            )
         
         with col2:
             from docx import Document
             doc = Document()
             doc.add_heading('تقرير أبو الخير', 0)
+            doc.add_paragraph(f'تاريخ التقرير: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}')
+            doc.add_paragraph(f'عدد السجلات: {len(st.session_state["result_df"])}')
+            
             table = doc.add_table(rows=1, cols=len(st.session_state['result_df'].columns))
+            table.style = 'Light Grid Accent 1'
+            
+            # إضافة رؤوس الأعمدة
             for i, col in enumerate(st.session_state['result_df'].columns):
                 table.rows[0].cells[i].text = str(col)
+            
+            # إضافة البيانات
             for _, row in st.session_state['result_df'].iterrows():
                 cells = table.add_row().cells
                 for i, val in enumerate(row):
                     cells[i].text = str(val)
+            
             word_buffer = BytesIO()
             doc.save(word_buffer)
-            st.download_button("📝 تحميل Word", word_buffer.getvalue(), "تقرير_أبو_الخير.docx", use_container_width=True)
-
+            st.download_button(
+                label="📝 تحميل Word", 
+                data=word_buffer.getvalue(), 
+                file_name="تقرير_أبو_الخير.docx", 
+                use_container_width=True
+            )
                     
 
 
