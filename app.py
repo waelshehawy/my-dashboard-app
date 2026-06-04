@@ -1460,6 +1460,9 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 # 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
 # ============================================================
+# ============================================================
+# 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - نسخة السحابة مع المكتبة البديلة
+# ============================================================
 elif page == "🎙️ المساعد الذكي والتقارير":
     st.title("🎙️ المساعد الذكي (أبو الخير)")
     st.markdown("نظام إدارة وتحليل اللوحات التفاعلي المستند إلى التقاط المايك من المتصفح.")
@@ -1470,38 +1473,29 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     import pandas as pd
     import speech_recognition as sr
     from io import BytesIO
+    from st_audiorec import st_audiorec # <-- استيراد المكتبة الجديدة
 
-    # تهيئة معاملات الجلسة
-    if 'page_ai_sql' not in st.session_state:
-        st.session_state['page_ai_sql'] = None
-    if 'page_ai_spoken' not in st.session_state:
-        st.session_state['page_ai_spoken'] = ""
-    if 'page_ai_executed_data' not in st.session_state:
-        st.session_state['page_ai_executed_data'] = None
-    if 'text_captured' not in st.session_state:
-        st.session_state['text_captured'] = ""
-    if 'audio_bytes' not in st.session_state:
-        st.session_state['audio_bytes'] = None
+    # ... (باقي عمليات تهيئة session_state تبقى كما هي دون تغيير) ...
 
     st.markdown("### 🗣️ التحدث المباشر مع أبو الخير:")
     st.caption("اضغط على زر التسجيل أدناه، وتكلم بالعامية، وسيقوم النظام بترجمة صوتك وتنفيذ الاستعلام فوراً.")
 
     # ============================================
-    # الحل السحابي: استخدام audio_input من المتصفح
+    # الحل السحابي: استخدام st_audiorec من المتصفح
     # ============================================
-    audio_value = st.audio_input("🎤 اضغط هنا للتسجيل (من متصفحك مباشرة)")
+    # استدعاء أداة التسجيل. الدالة ترجع البيانات بصيغة WAV.
+    wav_audio_data = st_audiorec()
     
-    if audio_value:
+    if wav_audio_data is not None:
         with st.spinner("🎙️ أبو الخير يستمع إليك الآن... تكلم بالعامية براحتك..."):
             try:
-                # تحويل الصوت من المتصفح إلى كائن يمكن لـ SpeechRecognition قراءته
-                audio_bytes = audio_value.getvalue()
-                st.session_state['audio_bytes'] = audio_bytes
+                # البيانات التي نأخذها من st_audiorec هي من نوع bytes، جاهزة تمامًا للاستخدام
+                audio_bytes = wav_audio_data
                 
-                # استخدام BytesIO بدلاً من ملف حقيقي
+                # استخدام BytesIO لتحويل البيانات إلى كائن ملف يمكن لـ SpeechRecognition قراءته
                 with sr.AudioFile(BytesIO(audio_bytes)) as source:
                     recognizer = sr.Recognizer()
-                    # تسجيل الصوت من الملف الوهمي
+                    # تسجيل الصوت من هذا الملف الوهمي
                     audio_data = recognizer.record(source)
                     
                     # تحويل الصوت إلى نص عربي
@@ -1514,7 +1508,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             except sr.RequestError as e:
                 st.error(f"❌ خطأ في الاتصال بخدمة جوجل: {e}")
             except Exception as e:
-                st.error(f"❌ حدث خطأ: {e}")
+                st.error(f"❌ حدث خطأ غير متوقع: {e}")
+
+    # ... (باقي الكود الخاص بصندوق النص ومعالجة الذكاء الاصطناعي وعرض البيانات يبقى كما هو دون تغيير) ...
 
     # صندوق نصي اختياري يعرض ما تم فهمه
     user_query = st.text_input(
