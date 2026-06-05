@@ -1644,7 +1644,33 @@ if user_query:
         st.error(
             f"خطأ أثناء فهم الطلب: {e}"
         )
+# ========================================================
+# تأكيد المدير
+# ========================================================
 
+col_yes, col_no = st.columns(2)
+
+with col_yes:
+
+    if st.button(
+        "✅ نعم نفذ",
+        use_container_width=True
+    ):
+
+        st.session_state[
+            "approved_for_sql"
+        ] = True
+
+with col_no:
+
+    if st.button(
+        "✏️ تعديل الطلب",
+        use_container_width=True
+    ):
+
+        st.session_state[
+            "approved_for_sql"
+        ] = False
 
 
 
