@@ -1531,11 +1531,7 @@ if audio_file:
         with st.spinner("🎙️ أبو الخير يستمع..."):
 
             audio_bytes = audio_file["bytes"]
-if audio_file:
 
-    st.success("تم استلام الصوت بنجاح")
-
-    st.write(audio_file.keys())
             speech_model = genai.GenerativeModel(
                 "gemini-2.5-flash"
             )
