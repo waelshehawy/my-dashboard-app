@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import psycopg2
 from psycopg2.extras import RealDictCursor
-
+from streamlit_mic_recorder import mic_recorder
 # ============================================================
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
@@ -1497,11 +1497,16 @@ elif page == "🎙️ المساعد الذكي والتقارير":
 # واجهة أبو الخير
 # ========================================================
 
-st.subheader("🎤 تحدث مع أبو الخير")
+st.subheader("🎙️ تحدث مع أبو الخير")
 
-audio_file = st.audio_input(
-    "اضغط على الميكروفون وتحدث"
+audio_file = mic_recorder(
+    start_prompt="🎤 ابدأ الحديث",
+    stop_prompt="⏹️ إنهاء التسجيل",
+    just_once=True,
+    use_container_width=True,
+    key="abu_alkhair_mic"
 )
+
 
 manual_text = st.text_input(
     "أو اكتب طلبك يدوياً",
@@ -1525,8 +1530,12 @@ if audio_file:
 
         with st.spinner("🎙️ أبو الخير يستمع..."):
 
-            audio_bytes = audio_file.read()
+            audio_bytes = audio_file["bytes"]
+if audio_file:
 
+    st.success("تم استلام الصوت بنجاح")
+
+    st.write(audio_file.keys())
             speech_model = genai.GenerativeModel(
                 "gemini-2.5-flash"
             )
