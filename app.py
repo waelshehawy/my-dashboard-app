@@ -1568,7 +1568,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                     try:
                         cursor = conn.cursor()
                         cursor.execute(st.session_state['page_ai_sql'])
-                        columns = [desc for desc in cursor.description]
+                       # 🌟 التعديل السليم لمنع خطأ الـ TypeError والأعمدة المكررة 🌟
+                        columns = [desc[0] for desc in cursor.description]
+
                         data = cursor.fetchall()
                         cursor.close()
                         
