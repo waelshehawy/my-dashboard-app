@@ -1579,7 +1579,71 @@ elif manual_text:
 
     user_query = manual_text
 
+# ========================================================
+# فهم الطلب وإعادة صياغته
+# ========================================================
 
+if user_query:
+
+    api_key = st.secrets.get("GEMINI_API_KEY")
+
+    try:
+
+        genai.configure(api_key=api_key)
+
+        understand_model = genai.GenerativeModel(
+            "gemini-2.5-flash-lite"
+        )
+
+        understanding_prompt = f"""
+        أنت المساعد الذكي أبو الخير.
+
+        المطلوب:
+        فهم ما يريده المدير فقط.
+
+        أعد النتيجة بصيغة JSON فقط.
+
+        مثال:
+
+        {{
+          "understood_request": "البحث عن اللوحات المتاحة في دمشق بحجم 2×1",
+          "confirmation_message": "فهمت أنك تريد البحث عن اللوحات المتاحة في دمشق بحجم 2×1. هل تريد تنفيذ البحث الآن؟"
+        }}
+
+        كلام المدير:
+
+        {user_query}
+        """
+
+        understanding_response = understand_model.generate_content(
+            understanding_prompt
+        )
+
+        import json
+
+        understood_data = json.loads(
+            understanding_response.text.strip()
+        )
+
+        st.session_state["confirmed_text"] = (
+            understood_data.get(
+                "understood_request",
+                ""
+            )
+        )
+
+        st.info(
+            understood_data.get(
+                "confirmation_message",
+                "هل تريد التنفيذ؟"
+            )
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"خطأ أثناء فهم الطلب: {e}"
+        )
 
 
 
