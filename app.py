@@ -1668,8 +1668,8 @@ with col_no:
         use_container_width=True
     ):
 
-        st.session_state[
-            "approved_for_sql"
+    st.session_state[
+        "approved_for_sql"
         ] = False
 
 
