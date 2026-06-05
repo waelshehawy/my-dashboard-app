@@ -1673,12 +1673,12 @@ with col_no:
             "approved_for_sql"
         ] = False
 
-
     except Exception as e:
 
         st.error(
             f"خطأ أثناء فهم الطلب: {e}"
         )
+
 
 elif page == "⚙️ الإعدادات":
     if not is_admin():
