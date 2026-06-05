@@ -1628,6 +1628,7 @@ elif current_page == "🎙️ المساعد الذكي والتقارير":
                         row_cells = table.add_row().cells
                         for i, val in enumerate(row):
                     # تعبئة القيم المتبقية داخل حلقة تكرار الجدول
+                    # تعبئة القيم المتبقية داخل حلقة تكرار الجدول
                     row_cells[i].text = str(val)
                     
                 # حفظ مستند الوورد المولد في الذاكرة لتجهيزه للتحميل
@@ -1643,9 +1644,6 @@ elif current_page == "🎙️ المساعد الذكي والتقارير":
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True
                 )
-
-
-                    
 
 
 elif page == "⚙️ الإعدادات":
