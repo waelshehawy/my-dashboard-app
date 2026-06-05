@@ -1461,7 +1461,7 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # 🎙️ أبو الخير - النسخة الصوتية الذكية
 # ============================================================
 # ============================================================
-# 🎙️ أبو الخير - النسخة الصوتية الذكية (المصححة)
+# 🎙️ أبو الخير - النسخة الصوتية الذكية المتكاملة
 # ============================================================
 
 elif page == "🎙️ المساعد الذكي والتقارير":
@@ -1471,12 +1471,14 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     from streamlit_mic_recorder import mic_recorder
     import json
     import re
+    import pandas as pd
+    from io import BytesIO
 
     st.title("🎙️ أبو الخير - مساعد الإدارة الذكي")
 
     st.markdown("""
     تحدث مع أبو الخير بالصوت أو اكتب طلبك يدوياً.
-    سيرد عليك بما فهمه أولاً قبل تنفيذ أي استعلام داخل قاعدة البيانات.
+    سيفهم طلبك، يحوله إلى استعلام SQL، ثم ينفذه ويعرض النتائج.
     """)
 
     st.divider()
@@ -1489,11 +1491,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         "voice_text": "",
         "confirmed_text": "",
         "approved_for_sql": False,
-        "page_ai_sql": None,
-        "page_ai_intent": None,
-        "page_ai_spoken": None,
-        "page_ai_package_details": None,
-        "page_ai_executed_data": None
+        "sql_query": None,
+        "query_result_df": None,
+        "query_reply": ""
     }
 
     for k, v in defaults.items():
@@ -1501,24 +1501,97 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             st.session_state[k] = v
 
     # ========================================================
-    # دالة مساعدة لاستخراج JSON من النص
+    # دالة لاستخراج JSON من النص
     # ========================================================
     
     def extract_json_from_text(text):
         """استخراج JSON من أي نص قد يحتوي على شرح إضافي"""
-        # محاولة العثور على JSON بين { و }
         match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
         if match:
             try:
                 return json.loads(match.group())
             except:
                 pass
-        
-        # إذا لم ينجح، حاول قراءة النص كاملاً
         try:
             return json.loads(text)
         except:
             return None
+
+    # ========================================================
+    # دالة تحويل الطلب إلى SQL
+    # ========================================================
+    
+    def text_to_sql(user_request):
+        """تحويل الطلب النصي إلى استعلام SQL"""
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        
+        if not api_key:
+            return None, "مفتاح Gemini غير موجود"
+        
+        genai.configure(api_key=api_key)
+        
+        sql_prompt = f"""
+        أنت خبير SQL. حول طلب المستخدم إلى استعلام SQL صحيح.
+
+        قاعدة البيانات:
+        الجدول: "حجوزات1"
+        الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+
+        قواعد مهمة جداً:
+        1. استخدم علامات اقتباس مزدوجة للأسماء: "حجوزات1", "رقم اللوحة"
+        2. استخدم LIKE مع % للبحث النصي في المحافظة
+        3. إذا ذكر المستخدم قياساً مثل "2 ضرب 1"، ابحث في عمود "الحجم"
+        4. أخرج JSON فقط بالصيغة التالية:
+
+        {{
+            "sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%' AND \\"الحجم\\" = '2×1'",
+            "reply": "تم البحث عن اللوحات في دمشق بقياس 2×1"
+        }}
+
+        طلب المستخدم: {user_request}
+        """
+        
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content(sql_prompt)
+            result = extract_json_from_text(response.text.strip())
+            
+            if result:
+                return result.get("sql"), result.get("reply", "تم تنفيذ الاستعلام")
+            else:
+                return None, "لم أستطع تحويل الطلب إلى استعلام SQL"
+        except Exception as e:
+            return None, f"خطأ: {e}"
+
+    # ========================================================
+    # دالة تنفيذ الاستعلام
+    # ========================================================
+    
+    def execute_sql_query(sql_query):
+        """تنفيذ الاستعلام على قاعدة البيانات"""
+        if not sql_query:
+            return None, "لا يوجد استعلام للتنفيذ"
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql_query)
+            
+            if cursor.description:
+                columns = [desc[0] for desc in cursor.description]
+                data = cursor.fetchall()
+                cursor.close()
+                
+                if data:
+                    df = pd.DataFrame(data, columns=columns)
+                    return df, f"✅ تم العثور على {len(df)} سجل"
+                else:
+                    return None, "📭 لا توجد نتائج مطابقة لطلبك"
+            else:
+                cursor.close()
+                return None, "ℹ️ الاستعلام تم تنفيذه بنجاح ولكن لا توجد بيانات للعرض"
+                
+        except Exception as e:
+            return None, f"❌ خطأ في تنفيذ الاستعلام: {str(e)}"
 
     # ========================================================
     # واجهة أبو الخير
@@ -1536,7 +1609,8 @@ elif page == "🎙️ المساعد الذكي والتقارير":
 
     manual_text = st.text_input(
         "أو اكتب طلبك يدوياً",
-        key="manual_query"
+        key="manual_query",
+        placeholder="مثال: بدي الأعمدة المتاحة في دمشق قياس 2 ضرب 1"
     )
 
     # ========================================================
@@ -1563,7 +1637,6 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                         """
                         حول الصوت العربي إلى نص عربي فقط.
                         لا تضف أي شرح.
-                        لا تضف أي تعليق.
                         أعد النص كما نطقه المستخدم.
                         """,
                         {
@@ -1590,7 +1663,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         st.text_area(
             "النص المستخرج",
             value=st.session_state["voice_text"],
-            height=120,
+            height=80,
             key="transcript_display"
         )
         user_query = st.session_state["voice_text"]
@@ -1611,44 +1684,30 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 understand_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
                 understanding_prompt = f"""
-                أنت المساعد الذكي أبو الخير.
+                فهم طلب المستخدم وأعد صياغته.
 
-                المطلوب:
-                فهم ما يريده المدير فقط.
+                طلب المستخدم: {user_query}
 
-                IMPORTANT: أخرج JSON فقط بدون أي كلمات إضافية أو تفسير.
-                لا تضع ```json قبل JSON.
-                لا تضع أي شرح بعد JSON.
-
-                مثال على المخرج الصحيح:
-                {{"understood_request": "البحث عن اللوحات المتاحة في دمشق", "confirmation_message": "فهمت أنك تريد البحث عن اللوحات في دمشق. هل تريد التنفيذ؟"}}
-
-                كلام المدير: {user_query}
+                أخرج JSON فقط:
+                {{"understood_request": "الصيغة المفهومة للطلب", "confirmation_message": "رسالة تأكيد قصيرة"}}
                 """
 
                 understanding_response = understand_model.generate_content(understanding_prompt)
-                raw_response = understanding_response.text.strip()
-                
-                # محاولة استخراج JSON من الرد
-                understood_data = extract_json_from_text(raw_response)
+                understood_data = extract_json_from_text(understanding_response.text.strip())
                 
                 if understood_data:
                     st.session_state["confirmed_text"] = understood_data.get("understood_request", user_query)
-                    st.info(understood_data.get("confirmation_message", f"فهمت: {user_query} هل تريد التنفيذ؟"))
+                    st.info(understood_data.get("confirmation_message", f"📝 فهمت: {user_query}"))
                 else:
-                    # إذا فشل استخراج JSON، استخدم النص الأصلي
                     st.session_state["confirmed_text"] = user_query
-                    st.info(f"فهمت: {user_query} هل تريد تنفيذ هذا الطلب؟")
-                    st.caption(f"⚠️ الرد الخام من النموذج: {raw_response[:200]}")
+                    st.info(f"📝 فهمت: {user_query}")
 
             except Exception as e:
-                st.error(f"خطأ أثناء فهم الطلب: {e}")
-                # في حالة الخطأ، استخدم النص الأصلي مباشرة
                 st.session_state["confirmed_text"] = user_query
-                st.info(f"هل تريد تنفيذ: {user_query}؟")
+                st.info(f"📝 فهمت: {user_query}")
 
     # ========================================================
-    # تأكيد المدير
+    # تأكيد المدير وتحويل إلى SQL وتنفيذ
     # ========================================================
 
     if st.session_state.get("confirmed_text"):
@@ -1656,28 +1715,77 @@ elif page == "🎙️ المساعد الذكي والتقارير":
 
         with col_yes:
             if st.button("✅ نعم نفذ", use_container_width=True):
-                st.session_state["approved_for_sql"] = True
-                st.rerun()
+                with st.spinner("🔍 جاري تحويل الطلب إلى SQL وتنفيذه..."):
+                    # الخطوة 1: تحويل النص إلى SQL
+                    sql_query, reply = text_to_sql(st.session_state["confirmed_text"])
+                    
+                    if sql_query:
+                        st.session_state["sql_query"] = sql_query
+                        st.info(f"📝 استعلام SQL: `{sql_query}`")
+                        
+                        # الخطوة 2: تنفيذ SQL
+                        df, result_msg = execute_sql_query(sql_query)
+                        
+                        if df is not None:
+                            st.session_state["query_result_df"] = df
+                            st.success(f"✅ {result_msg}")
+                        else:
+                            st.warning(result_msg)
+                            st.session_state["query_result_df"] = None
+                    else:
+                        st.error(f"❌ {reply}")
 
         with col_no:
             if st.button("✏️ تعديل الطلب", use_container_width=True):
                 st.session_state["approved_for_sql"] = False
                 st.session_state["voice_text"] = ""
                 st.session_state["confirmed_text"] = ""
+                st.session_state["sql_query"] = None
+                st.session_state["query_result_df"] = None
                 st.rerun()
 
     # ========================================================
-    # تنفيذ الاستعلام
+    # عرض النتائج
     # ========================================================
 
-    if st.session_state.get("approved_for_sql") and st.session_state.get("confirmed_text"):
-        st.success(f"🚀 جاري تنفيذ: {st.session_state['confirmed_text']}")
+    if st.session_state.get("query_result_df") is not None:
+        st.divider()
+        st.subheader("📊 النتائج:")
+        st.dataframe(st.session_state["query_result_df"], use_container_width=True)
         
-        # هنا ضع كود تحويل confirmed_text إلى SQL وتنفيذه
-        # ... الكود الخاص بك ...
+        # أزرار التحميل
+        col1, col2 = st.columns(2)
         
-        # إعادة تعيين الحالة بعد التنفيذ (اختياري)
-        # st.session_state["approved_for_sql"] = False
+        with col1:
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                st.session_state["query_result_df"].to_excel(writer, index=False, sheet_name='تقرير')
+            st.download_button(
+                label="📥 تحميل Excel",
+                data=buffer.getvalue(),
+                file_name="تقرير_أبو_الخير.xlsx",
+                use_container_width=True
+            )
+        
+        with col2:
+            from docx import Document
+            doc = Document()
+            doc.add_heading('تقرير أبو الخير', 0)
+            table = doc.add_table(rows=1, cols=len(st.session_state["query_result_df"].columns))
+            for i, col in enumerate(st.session_state["query_result_df"].columns):
+                table.rows[0].cells[i].text = str(col)
+            for _, row in st.session_state["query_result_df"].iterrows():
+                cells = table.add_row().cells
+                for i, val in enumerate(row):
+                    cells[i].text = str(val)
+            word_buffer = BytesIO()
+            doc.save(word_buffer)
+            st.download_button(
+                label="📝 تحميل Word",
+                data=word_buffer.getvalue(),
+                file_name="تقرير_أبو_الخير.docx",
+                use_container_width=True
+            )
 
 
 elif page == "⚙️ الإعدادات":
