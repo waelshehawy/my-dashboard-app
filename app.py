@@ -1458,215 +1458,125 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 
 
 # ============================================================
-# 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
+# 🎙️ أبو الخير - النسخة الصوتية الذكية
 # ============================================================
+
 elif page == "🎙️ المساعد الذكي والتقارير":
-    st.title("🎙️ المساعد الذكي لإدارة وتحليل اللوحات")
-    st.markdown("تحدث أو اكتب بالعامية لتحليل البيانات، جلب اللوحات المتاحة، وإنشاء التقارير وتصديرها فوراً.")
+
+    import streamlit as st
+    import google.generativeai as genai
+
+    st.title("🎙️ أبو الخير - مساعد الإدارة الذكي")
+
+    st.markdown("""
+    تحدث مع أبو الخير بالصوت أو اكتب طلبك يدوياً.
+
+    سيرد عليك بما فهمه أولاً قبل تنفيذ أي استعلام داخل قاعدة البيانات.
+    """)
+
     st.divider()
 
-    # صندوق إدخال الأمر للمدير
-    user_query = st.text_input(
-        label="أدخل أمر الإدارة هنا (يدعم الإملاء الصوتي من الجوال):",
-        placeholder="مثال: شف لي اللوحات الفاضية بدمشق واللي حجمها 2*1...",
-        key="page_ai_query"
+    # ========================================================
+    # Session State
+    # ========================================================
+
+    defaults = {
+        "voice_text": "",
+        "confirmed_text": "",
+        "page_ai_sql": None,
+        "page_ai_intent": None,
+        "page_ai_spoken": None,
+        "page_ai_package_details": None,
+        "page_ai_executed_data": None
+    }
+
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+# ========================================================
+# واجهة أبو الخير
+# ========================================================
+
+st.subheader("🎤 تحدث مع أبو الخير")
+
+audio_file = st.audio_input(
+    "اضغط على الميكروفون وتحدث"
+)
+
+manual_text = st.text_input(
+    "أو اكتب طلبك يدوياً",
+    key="manual_query"
+)
+# ========================================================
+# تحويل الصوت إلى نص
+# ========================================================
+
+if audio_file:
+
+    api_key = st.secrets.get("GEMINI_API_KEY")
+
+    if not api_key:
+        st.error("لم يتم العثور على مفتاح Gemini")
+        st.stop()
+
+    try:
+
+        genai.configure(api_key=api_key)
+
+        with st.spinner("🎙️ أبو الخير يستمع..."):
+
+            audio_bytes = audio_file.read()
+
+            speech_model = genai.GenerativeModel(
+                "gemini-2.5-flash"
+            )
+
+            speech_response = speech_model.generate_content(
+                [
+                    """
+                    حول الصوت العربي إلى نص عربي فقط.
+
+                    لا تضف أي شرح.
+                    لا تضف أي تعليق.
+                    أعد النص كما نطقه المستخدم.
+                    """,
+                    {
+                        "mime_type": "audio/wav",
+                        "data": audio_bytes
+                    }
+                ]
+            )
+
+            transcript = speech_response.text.strip()
+
+            st.session_state["voice_text"] = transcript
+
+    except Exception as e:
+
+        st.error(
+            f"خطأ في معالجة الصوت: {e}"
+        )
+user_query = ""
+
+if st.session_state["voice_text"]:
+
+    st.success("🎤 ما سمعه أبو الخير:")
+
+    st.text_area(
+        "النص المستخرج",
+        value=st.session_state["voice_text"],
+        height=120
     )
 
-    # زر بدء معالجة الذكاء الاصطناعي لفهم النص وتوليد الـ SQL
-    if st.button("🧠 تحليل الطلب ومفاضلة العروض", type="primary", use_container_width=True):
-        if not user_query:
-            st.warning("⚠️ الرجاء كتابة أو إملاء الأمر أولاً قبل الضغط على الزر.")
-        else:
-            api_key = st.secrets.get("GEMINI_API_KEY")
-            if not api_key or api_key == "ضع_مفتاحك_هنا":
-                st.error("🔑 خطأ: لم يتم العثور على GEMINI_API_KEY في ملف secrets.toml")
-            else:
-                with st.spinner("🧠 جاري تحليل النص ومطابقة الجداول وسياق الـ ERP..."):
-                    try:
-                        import google.generativeai as genai
-                        genai.configure(api_key=api_key)
-                        
-                        system_prompt = """
-                        أنت مساعد ذكي مدمج في نظام ERP لادارة لوحات الإعلانات (PreView Ads) واسمك (أبو الخير).
-                        مهمتك الرئيسية هي تحويل طلب المدير بالعامية إلى استعلام SQL سليم وصحيح متوافق مع PostgreSQL وإرجاع الرد بصيغة JSON نقي فقط، وبدون أي علامات تعقيب أو هوامش (لا تضع نهائياً علامات ```json).
-                        
-                        تاريخ اليوم الحالي بدقة هو: 2026-06-05 (5 حزيران 2026). استخدم هذا التاريخ دائماً للمقارنة.
-                        
-                        هيكلية الجداول المتاحة في قاعدة بيانات Supabase والعلاقات المالية بينها:
-                        1. جدول "اعمدة انارة" (المخزن الرئيسي لجميع المواقع واللوحات الفيزيائية):
-                           الحقول الدقيقة: "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد"
-                        
-                        2. جدول "حجوزات1" (سجل حركة الحجوزات النشطة والتواريخ المالية):
-                           الحقول الدقيقة: "رقم اللوحة", "فترة الحجز", "العام", "اجور عرض", "شد وتركيب", "TimeOfTask", "اسم الرسم"
-                        
-                        3. جدول "اسماء الرسم" (مصفوفة التسعير وباقات تكلفة الطباعة لكل حجم ورسم):
-                           الحقول الدقيقة: "الحجم", "اسم الرسم", "اجرة الرسم" -> (تمثل القيمة المالية المباشرة لأجور الطباعة والتصميم).
-                        
-                        ⚠️ القواعد الصارمة والقطعية لصياغة استعلام الـ SQL (تطبيقها إجباري):
-                        1. قاعدة الإتاحة والجداول الثلاثية (3-Table JOIN): لجلب اللوحات المتاحة وأجورها الصحيحة، قم بعمل الروابط التالية:
-                           - اربط جدول "اعمدة انارة" (a) مع جدول "حجوزات1" (h) عبر علاقة LEFT JOIN بناءً على حقل "رقم اللوحة".
-                           - اربط جدول "حجوزات1" (h) مع جدول "اسماء الرسم" (r) عبر علاقة LEFT JOIN بناءً على مطابقة حقلين معاً وهما: (a."الحجم" = r."الحجم" AND h."اسم الرسم" = r."اسم الرسم").
-                        2. شرط الإتاحة الزمني الصارم: اللوحة متاحة وشاغرة إذا لم يكن لها حجز مستقبلي نشط يغطي تاريخ اليوم (2026-06-05). السجل يُعتبر متاحاً إذا كان تاريخ الحجز القديم أقل من تاريخ اليوم (h."TimeOfTask" < '2026-06-05') أو إذا كان سجل الحجز غير موجود بالأساس (أي حقول جدول حجوزات تعود بـ IS NULL).
-                        3. حقل الحجم الفضفاض: إذا لم يحدد المدير حجماً معيناً في طلبه، لا تضع شرط الحجم في الـ WHERE clause نهائياً. وإذا حدده، اكتبه بشكل متصل بدون مسافات عشوائية (مثال: a."الحجم" LIKE '%2%1%').
-                        4. حقل اسم الزبون: مستبعد تماماً من شروط الفلترة ولا علاقة له بمعادلة الإتاحة.
-                        
-                        قاعدة صياغة الـ SQL الحتمية لمنع تكرار أسماء الأعمدة (TypeError):
-                        - أسماء الجداول العربية والحقول يجب حتماً وضعها بين علامتي اقتباس مزدوجة "" (مثل: FROM "اعمدة انارة" a LEFT JOIN "حجوزات1" h).
-                        - يجب تجميع المخرجات وإعطاء تسمية بديلة فريدة (Alias) لكل عمود مالي وتصديري كالتالي تماماً لمنع انهيار الواجهة:
-                          SELECT 
-                              a."اسم العمود" AS "اسم اللوحة", 
-                              a."العدد" AS "عدد اللوحات", 
-                              a."الحجم" AS "حجم اللوحة", 
-                              COALESCE(r."اجرة الرسم", 0) AS "اجور الطباعة", 
-                              COALESCE(h."شد وتركيب", 0) AS "اجور التركيب", 
-                              COALESCE(h."اجور عرض", 0) AS "اجور العرض الفعلي"
-                        
-                        يجب أن تطابق المخرجات الهيكل التنفيذي التالي تماماً:
-                        {
-                            "intent": "get_available / check_temporary / create_package",
-                            "confidence": 0.95,
-                            "extracted_sql": "استعلام SQL المالي الثلاثي الصحيح والمكتمل بناءً على القواعد الفوقية تماماً",
-                            "package_details": null,
-                            "spoken_response": "تكرم عينك يا أستاذي، عم جيبلك اللوحات المتاحة وحساب أجور الطباعة والعرض الفعلي إلكترونياً حالا."
-                        }
-                        """
+    user_query = st.session_state["voice_text"]
+
+elif manual_text:
+
+    user_query = manual_text
 
 
 
 
-
-                        
-                        model = genai.GenerativeModel(
-                            model_name="gemini-2.5-flash",
-                            generation_config={"response_mime_type": "application/json"},
-                            system_instruction=system_prompt
-                        )
-                        
-                        response = model.generate_content(user_query)
-                        
-                        if response.text:
-                            import json
-                            parsed_data = json.loads(response.text.strip())
-                            
-                            st.session_state['page_ai_intent'] = parsed_data.get('intent')
-                            st.session_state['page_ai_sql'] = parsed_data.get('extracted_sql')
-                            st.session_state['page_ai_spoken'] = parsed_data.get('spoken_response')
-                            st.session_state['page_ai_package_details'] = parsed_data.get('package_details')
-                            
-                            st.session_state['page_ai_executed_data'] = None
-                            st.rerun()
-                        else:
-                            st.error("❌ لم يتمكن الذكاء الاصطناعي من توليد استجابة.")
-                    except Exception as e:
-                        st.error(f"⚠️ خطأ أثناء توليد الاستعلام: {e}")
-
-    # عرض النتيجة التحليلية للمدير والأزرار والتصدير
-    if st.session_state.get('page_ai_sql'):
-        st.divider()
-        st.success(st.session_state.get('page_ai_spoken', 'تم تحليل الطلب بنجاح.'))
-        
-        with st.expander("🛠️ عرض كود الاستعلام الفني المقترح (SQL)", expanded=False):
-            st.code(st.session_state['page_ai_sql'], language="sql")
-            
-        col_exec, col_cancel = st.columns(2)
-        with col_exec:
-            if st.button("⚡ تنفيذ الاستعلام وجلب البيانات الفورية", type="secondary", use_container_width=True):
-                with st.spinner("🔄 جاري الاتصال بـ Supabase وجلب السجلات الحية..."):
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute(st.session_state['page_ai_sql'])
-                       # 🌟 التعديل السليم لمنع خطأ الـ TypeError والأعمدة المكررة 🌟
-                        columns = [desc[0] for desc in cursor.description]
-
-                        data = cursor.fetchall()
-                        cursor.close()
-                        
-                        if data:
-                            import pandas as pd
-                            st.session_state['page_ai_executed_data'] = pd.DataFrame(data, columns=columns)
-                        else:
-                            st.session_state['page_ai_executed_data'] = "EMPTY"
-                    except Exception as e:
-                        st.error(f"❌ خطأ أثناء تشغيل الـ SQL في قاعدة البيانات: {e}")
-                        st.session_state['page_ai_executed_data'] = None
-        
-        with col_cancel:
-            if st.button("🧹 تفريغ ومسح البحث الحالي", use_container_width=True):
-                st.session_state['page_ai_sql'] = None
-                st.session_state['page_ai_intent'] = None
-                st.session_state['page_ai_spoken'] = None
-                st.session_state['page_ai_executed_data'] = None
-                st.rerun()
-
-        executed_res = st.session_state.get('page_ai_executed_data')
-        
-        if executed_res is not None:
-            if isinstance(executed_res, str) and executed_res == "EMPTY":
-                st.warning("📭 لا توجد سجلات مطابقة حالياً داخل قاعدة البيانات.")
-            elif not executed_res.empty:
-                import pandas as pd
-                st.markdown("### 📊 جدول البيانات المستخرج:")
-                st.dataframe(executed_res, use_container_width=True)
-                st.info(f"💡 تم العثور على {len(executed_res)} لوحة/سجل.")
-                
-                st.markdown("#### 📥 تصدير التقرير الفوري:")
-                col_excel, col_word = st.columns(2)
-                
-                with col_excel:
-                    import io
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                        executed_res.to_excel(writer, index=False, sheet_name='تقرير المساعد الذكي')
-                    excel_data = excel_buffer.getvalue()
-                    
-                    st.download_button(
-                        label="📥 تحميل كملف Excel (.xlsx)",
-                        data=excel_data,
-                        file_name="تقرير_لوحات_الاعلان.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                
-                with col_word:
-                    import io
-                    from docx import Document
-                    from docx.shared import Inches, Pt
-                    from docx.enum.text import WD_ALIGN_PARAGRAPH
-                    
-                    doc = Document()
-                    title = doc.add_paragraph()
-                    title_run = title.add_run("تقرير نظام PreView Ads المولد ذكياً")
-                    title_run.font.size = Pt(18)
-                    title_run.font.bold = True
-                    title.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                    
-                    doc.add_paragraph(f"الأمر الموجه: {user_query}").alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                    
-                    table = doc.add_table(rows=1, cols=len(executed_res.columns))
-                    table.style = 'Light Shading Accent 1'
-                    
-                # 1. Fill table headers in a safe single line
-                hdr_cells = table.rows.cells
-                [hdr_cells[i].setAttribute('text', str(col_name)) for i, col_name in enumerate(executed_res.columns) if i < len(hdr_cells)]
-
-                # 2. Extract and populate rows on an un-nested flat tree
-                for _, row in executed_res.iterrows():
-                    row_cells = table.add_row().cells
-                    # Flat loop structure to completely bypass nested IndentationErrors
-                    [row_cells[i].setAttribute('text', str(val)) for i, val in enumerate(row) if i < len(row_cells)]
-
-                # 3. Save file document memory buffers
-                word_buffer = io.BytesIO()
-                doc.save(word_buffer)
-                word_data = word_buffer.getvalue()
-
-                st.download_button(
-                    label="📝 تحميل كتقرير Word (.docx)",
-                    data=word_data,
-                    file_name="تقرير_المساعد_الذكي.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
 
 
 
