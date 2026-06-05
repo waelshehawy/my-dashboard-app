@@ -1460,6 +1460,9 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
 # ============================================================
 # 🎙️ أبو الخير - النسخة الصوتية الذكية
 # ============================================================
+# ============================================================
+# 🎙️ أبو الخير - النسخة الصوتية الذكية (المصححة)
+# ============================================================
 
 elif page == "🎙️ المساعد الذكي والتقارير":
 
@@ -1467,6 +1470,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     import google.generativeai as genai
     from streamlit_mic_recorder import mic_recorder
     import json
+    import re
 
     st.title("🎙️ أبو الخير - مساعد الإدارة الذكي")
 
@@ -1495,6 +1499,26 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+
+    # ========================================================
+    # دالة مساعدة لاستخراج JSON من النص
+    # ========================================================
+    
+    def extract_json_from_text(text):
+        """استخراج JSON من أي نص قد يحتوي على شرح إضافي"""
+        # محاولة العثور على JSON بين { و }
+        match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except:
+                pass
+        
+        # إذا لم ينجح، حاول قراءة النص كاملاً
+        try:
+            return json.loads(text)
+        except:
+            return None
 
     # ========================================================
     # واجهة أبو الخير
@@ -1592,30 +1616,36 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 المطلوب:
                 فهم ما يريده المدير فقط.
 
-                أعد النتيجة بصيغة JSON فقط.
+                IMPORTANT: أخرج JSON فقط بدون أي كلمات إضافية أو تفسير.
+                لا تضع ```json قبل JSON.
+                لا تضع أي شرح بعد JSON.
 
-                مثال:
+                مثال على المخرج الصحيح:
+                {{"understood_request": "البحث عن اللوحات المتاحة في دمشق", "confirmation_message": "فهمت أنك تريد البحث عن اللوحات في دمشق. هل تريد التنفيذ؟"}}
 
-                {{
-                  "understood_request": "البحث عن اللوحات المتاحة في دمشق بحجم 2×1",
-                  "confirmation_message": "فهمت أنك تريد البحث عن اللوحات المتاحة في دمشق بحجم 2×1. هل تريد تنفيذ البحث الآن؟"
-                }}
-
-                كلام المدير:
-
-                {user_query}
+                كلام المدير: {user_query}
                 """
 
                 understanding_response = understand_model.generate_content(understanding_prompt)
-
-                understood_data = json.loads(understanding_response.text.strip())
-
-                st.session_state["confirmed_text"] = understood_data.get("understood_request", "")
-
-                st.info(understood_data.get("confirmation_message", "هل تريد التنفيذ؟"))
+                raw_response = understanding_response.text.strip()
+                
+                # محاولة استخراج JSON من الرد
+                understood_data = extract_json_from_text(raw_response)
+                
+                if understood_data:
+                    st.session_state["confirmed_text"] = understood_data.get("understood_request", user_query)
+                    st.info(understood_data.get("confirmation_message", f"فهمت: {user_query} هل تريد التنفيذ؟"))
+                else:
+                    # إذا فشل استخراج JSON، استخدم النص الأصلي
+                    st.session_state["confirmed_text"] = user_query
+                    st.info(f"فهمت: {user_query} هل تريد تنفيذ هذا الطلب؟")
+                    st.caption(f"⚠️ الرد الخام من النموذج: {raw_response[:200]}")
 
             except Exception as e:
                 st.error(f"خطأ أثناء فهم الطلب: {e}")
+                # في حالة الخطأ، استخدم النص الأصلي مباشرة
+                st.session_state["confirmed_text"] = user_query
+                st.info(f"هل تريد تنفيذ: {user_query}؟")
 
     # ========================================================
     # تأكيد المدير
@@ -1637,7 +1667,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 st.rerun()
 
     # ========================================================
-    # تنفيذ الاستعلام (يمكنك إضافة الكود الخاص بك هنا)
+    # تنفيذ الاستعلام
     # ========================================================
 
     if st.session_state.get("approved_for_sql") and st.session_state.get("confirmed_text"):
@@ -1646,7 +1676,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         # هنا ضع كود تحويل confirmed_text إلى SQL وتنفيذه
         # ... الكود الخاص بك ...
         
-        # إعادة تعيين الحالة بعد التنفيذ
+        # إعادة تعيين الحالة بعد التنفيذ (اختياري)
         # st.session_state["approved_for_sql"] = False
 
 
