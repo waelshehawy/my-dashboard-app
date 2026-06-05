@@ -1620,23 +1620,21 @@ elif current_page == "🎙️ المساعد الذكي والتقارير":
                     table = doc.add_table(rows=1, cols=len(executed_res.columns))
                     table.style = 'Light Shading Accent 1'
                     
-                    hdr_cells = table.rows.cells
-                    for i, col_name in enumerate(executed_res.columns):
-                        hdr_cells[i].text = str(col_name)
-                        
-                    for _, row in executed_res.iterrows():
-                        row_cells = table.add_row().cells
-                        for i, val in enumerate(row):
-                    # تعبئة القيم المتبقية داخل حلقة تكرار الجدول
-                    # تعبئة القيم المتبقية داخل حلقة تكرار الجدول
-                    row_cells[i].text = str(val)
-                    
-                # حفظ مستند الوورد المولد في الذاكرة لتجهيزه للتحميل
+                # 1. Fill table headers in a safe single line
+                hdr_cells = table.rows.cells
+                [hdr_cells[i].setAttribute('text', str(col_name)) for i, col_name in enumerate(executed_res.columns) if i < len(hdr_cells)]
+
+                # 2. Extract and populate rows on an un-nested flat tree
+                for _, row in executed_res.iterrows():
+                    row_cells = table.add_row().cells
+                    # Flat loop structure to completely bypass nested IndentationErrors
+                    [row_cells[i].setAttribute('text', str(val)) for i, val in enumerate(row) if i < len(row_cells)]
+
+                # 3. Save file document memory buffers
                 word_buffer = io.BytesIO()
                 doc.save(word_buffer)
                 word_data = word_buffer.getvalue()
-                
-                # زر التصدير والتحميل المباشر لتقرير الوورد
+
                 st.download_button(
                     label="📝 تحميل كتقرير Word (.docx)",
                     data=word_data,
@@ -1644,6 +1642,7 @@ elif current_page == "🎙️ المساعد الذكي والتقارير":
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True
                 )
+
 
 
 elif page == "⚙️ الإعدادات":
