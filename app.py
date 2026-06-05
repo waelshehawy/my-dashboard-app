@@ -1465,12 +1465,13 @@ elif page == "🎙️ المساعد الذكي والتقارير":
 
     import streamlit as st
     import google.generativeai as genai
+    from streamlit_mic_recorder import mic_recorder
+    import json
 
     st.title("🎙️ أبو الخير - مساعد الإدارة الذكي")
 
     st.markdown("""
     تحدث مع أبو الخير بالصوت أو اكتب طلبك يدوياً.
-
     سيرد عليك بما فهمه أولاً قبل تنفيذ أي استعلام داخل قاعدة البيانات.
     """)
 
@@ -1483,6 +1484,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     defaults = {
         "voice_text": "",
         "confirmed_text": "",
+        "approved_for_sql": False,
         "page_ai_sql": None,
         "page_ai_intent": None,
         "page_ai_spoken": None,
@@ -1493,191 +1495,159 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
-# ========================================================
-# واجهة أبو الخير
-# ========================================================
 
-st.subheader("🎙️ تحدث مع أبو الخير")
+    # ========================================================
+    # واجهة أبو الخير
+    # ========================================================
 
-audio_file = mic_recorder(
-    start_prompt="🎤 ابدأ الحديث",
-    stop_prompt="⏹️ إنهاء التسجيل",
-    just_once=True,
-    use_container_width=True,
-    key="abu_alkhair_mic"
-)
+    st.subheader("🎙️ تحدث مع أبو الخير")
 
-
-manual_text = st.text_input(
-    "أو اكتب طلبك يدوياً",
-    key="manual_query"
-)
-# ========================================================
-# تحويل الصوت إلى نص
-# ========================================================
-
-if audio_file:
-
-    api_key = st.secrets.get("GEMINI_API_KEY")
-
-    if not api_key:
-        st.error("لم يتم العثور على مفتاح Gemini")
-        st.stop()
-
-    try:
-
-        genai.configure(api_key=api_key)
-
-        with st.spinner("🎙️ أبو الخير يستمع..."):
-
-            audio_bytes = audio_file["bytes"]
-
-            speech_model = genai.GenerativeModel(
-    "gemini-2.5-flash-lite"
-)
-
-            speech_response = speech_model.generate_content(
-                [
-                    """
-                    حول الصوت العربي إلى نص عربي فقط.
-
-                    لا تضف أي شرح.
-                    لا تضف أي تعليق.
-                    أعد النص كما نطقه المستخدم.
-                    """,
-                    {
-                        "mime_type": "audio/wav",
-                        "data": audio_bytes
-                    }
-                ]
-            )
-
-            transcript = speech_response.text.strip()
-
-            st.session_state["voice_text"] = transcript
-
-    except Exception as e:
-
-        st.error(
-            f"خطأ في معالجة الصوت: {e}"
-        )
-user_query = ""
-
-if st.session_state["voice_text"]:
-
-    st.success("🎤 ما سمعه أبو الخير:")
-
-    st.text_area(
-        "النص المستخرج",
-        value=st.session_state["voice_text"],
-        height=120
+    audio_file = mic_recorder(
+        start_prompt="🎤 ابدأ الحديث",
+        stop_prompt="⏹️ إنهاء التسجيل",
+        just_once=True,
+        use_container_width=True,
+        key="abu_alkhair_mic"
     )
 
-    user_query = st.session_state["voice_text"]
+    manual_text = st.text_input(
+        "أو اكتب طلبك يدوياً",
+        key="manual_query"
+    )
 
-elif manual_text:
+    # ========================================================
+    # تحويل الصوت إلى نص
+    # ========================================================
 
-    user_query = manual_text
+    if audio_file:
+        api_key = st.secrets.get("GEMINI_API_KEY")
 
-# ========================================================
-# فهم الطلب وإعادة صياغته
-# ========================================================
+        if not api_key:
+            st.error("لم يتم العثور على مفتاح Gemini")
+            st.stop()
 
-if user_query:
+        try:
+            genai.configure(api_key=api_key)
 
-    api_key = st.secrets.get("GEMINI_API_KEY")
+            with st.spinner("🎙️ أبو الخير يستمع..."):
+                audio_bytes = audio_file["bytes"]
 
-    try:
+                speech_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
-        genai.configure(api_key=api_key)
+                speech_response = speech_model.generate_content(
+                    [
+                        """
+                        حول الصوت العربي إلى نص عربي فقط.
+                        لا تضف أي شرح.
+                        لا تضف أي تعليق.
+                        أعد النص كما نطقه المستخدم.
+                        """,
+                        {
+                            "mime_type": "audio/wav",
+                            "data": audio_bytes
+                        }
+                    ]
+                )
 
-        understand_model = genai.GenerativeModel(
-            "gemini-2.5-flash-lite"
+                transcript = speech_response.text.strip()
+                st.session_state["voice_text"] = transcript
+
+        except Exception as e:
+            st.error(f"خطأ في معالجة الصوت: {e}")
+
+    # ========================================================
+    # تحديد مصدر الطلب
+    # ========================================================
+
+    user_query = ""
+
+    if st.session_state["voice_text"]:
+        st.success("🎤 ما سمعه أبو الخير:")
+        st.text_area(
+            "النص المستخرج",
+            value=st.session_state["voice_text"],
+            height=120,
+            key="transcript_display"
         )
+        user_query = st.session_state["voice_text"]
+    elif manual_text:
+        user_query = manual_text
 
-        understanding_prompt = f"""
-        أنت المساعد الذكي أبو الخير.
+    # ========================================================
+    # فهم الطلب وإعادة صياغته
+    # ========================================================
 
-        المطلوب:
-        فهم ما يريده المدير فقط.
+    if user_query and not st.session_state.get("approved_for_sql", False):
+        api_key = st.secrets.get("GEMINI_API_KEY")
 
-        أعد النتيجة بصيغة JSON فقط.
+        if api_key:
+            try:
+                genai.configure(api_key=api_key)
 
-        مثال:
+                understand_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
-        {{
-          "understood_request": "البحث عن اللوحات المتاحة في دمشق بحجم 2×1",
-          "confirmation_message": "فهمت أنك تريد البحث عن اللوحات المتاحة في دمشق بحجم 2×1. هل تريد تنفيذ البحث الآن؟"
-        }}
+                understanding_prompt = f"""
+                أنت المساعد الذكي أبو الخير.
 
-        كلام المدير:
+                المطلوب:
+                فهم ما يريده المدير فقط.
 
-        {user_query}
-        """
+                أعد النتيجة بصيغة JSON فقط.
 
-        understanding_response = understand_model.generate_content(
-            understanding_prompt
-        )
+                مثال:
 
-        import json
+                {{
+                  "understood_request": "البحث عن اللوحات المتاحة في دمشق بحجم 2×1",
+                  "confirmation_message": "فهمت أنك تريد البحث عن اللوحات المتاحة في دمشق بحجم 2×1. هل تريد تنفيذ البحث الآن؟"
+                }}
 
-        understood_data = json.loads(
-            understanding_response.text.strip()
-        )
+                كلام المدير:
 
-        st.session_state["confirmed_text"] = (
-            understood_data.get(
-                "understood_request",
-                ""
-            )
-        )
+                {user_query}
+                """
 
-        st.info(
-            understood_data.get(
-                "confirmation_message",
-                "هل تريد التنفيذ؟"
-            )
-        )
+                understanding_response = understand_model.generate_content(understanding_prompt)
 
-    except Exception as e:
+                understood_data = json.loads(understanding_response.text.strip())
 
-        st.error(
-            f"خطأ أثناء فهم الطلب: {e}"
-        )
-# ========================================================
-# تأكيد المدير
-# ========================================================
+                st.session_state["confirmed_text"] = understood_data.get("understood_request", "")
 
-col_yes, col_no = st.columns(2)
+                st.info(understood_data.get("confirmation_message", "هل تريد التنفيذ؟"))
 
-with col_yes:
+            except Exception as e:
+                st.error(f"خطأ أثناء فهم الطلب: {e}")
 
-    if st.button(
-        "✅ نعم نفذ",
-        use_container_width=True
-    ):
+    # ========================================================
+    # تأكيد المدير
+    # ========================================================
 
-        st.session_state[
-            "approved_for_sql"
-        ] = True
+    if st.session_state.get("confirmed_text"):
+        col_yes, col_no = st.columns(2)
 
-with col_no:
+        with col_yes:
+            if st.button("✅ نعم نفذ", use_container_width=True):
+                st.session_state["approved_for_sql"] = True
+                st.rerun()
 
-    if st.button(
-        "✏️ تعديل الطلب",
-        use_container_width=True
-    ):
+        with col_no:
+            if st.button("✏️ تعديل الطلب", use_container_width=True):
+                st.session_state["approved_for_sql"] = False
+                st.session_state["voice_text"] = ""
+                st.session_state["confirmed_text"] = ""
+                st.rerun()
 
+    # ========================================================
+    # تنفيذ الاستعلام (يمكنك إضافة الكود الخاص بك هنا)
+    # ========================================================
 
-        st.session_state[
-            "approved_for_sql"
-        ] = False
-
-    except Exception as e:
-
-        st.error(
-            f"خطأ أثناء فهم الطلب: {e}"
-        )
+    if st.session_state.get("approved_for_sql") and st.session_state.get("confirmed_text"):
+        st.success(f"🚀 جاري تنفيذ: {st.session_state['confirmed_text']}")
+        
+        # هنا ضع كود تحويل confirmed_text إلى SQL وتنفيذه
+        # ... الكود الخاص بك ...
+        
+        # إعادة تعيين الحالة بعد التنفيذ
+        # st.session_state["approved_for_sql"] = False
 
 
 elif page == "⚙️ الإعدادات":
