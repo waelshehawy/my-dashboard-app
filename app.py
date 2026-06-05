@@ -1668,12 +1668,17 @@ with col_no:
         use_container_width=True
     ):
 
-    st.session_state[
-        "approved_for_sql"
+
+        st.session_state[
+            "approved_for_sql"
         ] = False
 
 
+    except Exception as e:
 
+        st.error(
+            f"خطأ أثناء فهم الطلب: {e}"
+        )
 
 elif page == "⚙️ الإعدادات":
     if not is_admin():
