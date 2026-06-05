@@ -1533,8 +1533,8 @@ if audio_file:
             audio_bytes = audio_file["bytes"]
 
             speech_model = genai.GenerativeModel(
-                "gemini-2.5-flash"
-            )
+    "gemini-2.5-flash-lite"
+)
 
             speech_response = speech_model.generate_content(
                 [
