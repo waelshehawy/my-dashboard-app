@@ -250,7 +250,204 @@ if "cart" not in st.session_state:
     st.session_state.cart = {}
 if "temp_cust" not in st.session_state:
     st.session_state.temp_cust = ""
+# ========================================================
+# منطق "اللوحات المتاحة" حسب تعريف العمل
+# ========================================================
 
+def get_available_boards_query(city_name=None, size=None):
+    """
+    بناء استعلام SQL لاستخراج اللوحات المتاحة حسب المنطق:
+    1. لا يوجد حجز للوحة في هذا العام
+    2. أو آخر حجز انتهى قبل تاريخ اليوم
+    """
+    
+    today_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+    current_year = pd.Timestamp.now().year
+    
+    # بناء شرط المدينة
+    city_condition = ""
+    if city_name and city_name.strip():
+        city_condition = f'AND "المحافظة" LIKE \'%{city_name}%\''
+    
+    # بناء شرط القياس
+    size_condition = ""
+    if size and size.strip():
+        # توحيد صيغة القياس (2x1, 2×1, 2 ضرب 1)
+        size_normalized = size.replace('ض', '×').replace('x', '×')
+        size_condition = f'AND "الحجم" = \'{size_normalized}\''
+    
+    sql = f"""
+    WITH board_analysis AS (
+        SELECT 
+            "رقم اللوحة",
+            "المحافظة",
+            "الحجم",
+            MAX("فترة الحجز"::DATE) as last_booking_date,
+            COUNT(CASE WHEN EXTRACT(YEAR FROM "فترة الحجز"::DATE) = {current_year} THEN 1 END) as bookings_this_year
+        FROM "حجوزات1"
+        WHERE 1=1
+        {city_condition}
+        {size_condition}
+        GROUP BY "رقم اللوحة", "المحافظة", "الحجم"
+    ),
+    available_boards AS (
+        SELECT 
+            "رقم اللوحة",
+            "المحافظة",
+            "الحجم",
+            last_booking_date,
+            CASE 
+                WHEN bookings_this_year = 0 THEN 'لا توجد حجوزات هذا العام'
+                WHEN last_booking_date < '{today_date}'::DATE THEN 'انتهى آخر حجز'
+                ELSE 'محجوزة'
+            END as status
+        FROM board_analysis
+        WHERE bookings_this_year = 0 
+           OR last_booking_date < '{today_date}'::DATE
+    )
+    SELECT 
+        "رقم اللوحة",
+        "المحافظة",
+        "الحجم",
+        last_booking_date as "آخر تاريخ حجز",
+        status as "الحالة"
+    FROM available_boards
+    ORDER BY "رقم اللوحة"
+    """
+    
+    return sql
+
+
+def get_all_boards_summary(city_name=None):
+    """
+    الحصول على ملخص لجميع اللوحات مع حالتها (متاحة/محجوزة)
+    """
+    today_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+    current_year = pd.Timestamp.now().year
+    
+    city_condition = ""
+    if city_name and city_name.strip():
+        city_condition = f'WHERE "المحافظة" LIKE \'%{city_name}%\''
+    
+    sql = f"""
+    WITH board_analysis AS (
+        SELECT 
+            "رقم اللوحة",
+            "المحافظة",
+            "الحجم",
+            COUNT(*) as total_bookings,
+            MAX("فترة الحجز"::DATE) as last_booking_date,
+            COUNT(CASE WHEN EXTRACT(YEAR FROM "فترة الحجز"::DATE) = {current_year} THEN 1 END) as bookings_this_year,
+            STRING_AGG(DISTINCT "اسم الزبون", ', ') as all_customers
+        FROM "حجوزات1"
+        {city_condition.replace('WHERE', '') if city_condition else ''}
+        GROUP BY "رقم اللوحة", "المحافظة", "الحجم"
+    )
+    SELECT 
+        "رقم اللوحة",
+        "المحافظة",
+        "الحجم",
+        total_bookings as "عدد الحجوزات الكلي",
+        last_booking_date as "آخر تاريخ حجز",
+        CASE 
+            WHEN bookings_this_year = 0 THEN '✅ متاحة (لا حجوزات هذا العام)'
+            WHEN last_booking_date < '{today_date}'::DATE THEN '✅ متاحة (انتهى الحجز)'
+            ELSE '❌ محجوزة'
+        END as "حالة التوفر",
+        all_customers as "العملاء السابقون"
+    FROM board_analysis
+    ORDER BY 
+        CASE 
+            WHEN bookings_this_year = 0 THEN 1
+            WHEN last_booking_date < '{today_date}'::DATE THEN 2
+            ELSE 3
+        END,
+        "رقم اللوحة"
+    """
+    
+    return sql
+
+
+def text_to_sql_advanced(user_request):
+    """
+    تحويل الطلب إلى SQL مع فهم كامل للمنطق التجاري
+    """
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    
+    if not api_key:
+        return None, "مفتاح Gemini غير موجود"
+    
+    genai.configure(api_key=api_key)
+    
+    # تعريف المصطلحات التجارية بوضوح
+    business_rules = """
+    تعريف المصطلحات في نظام إدارة اللوحات:
+
+    "اللوحات المتاحة" تعني اللوحات التي تستوفي أحد الشرطين:
+    1. لا يوجد أي حجز للوحة في هذا العام الحالي
+    2. آخر حجز للوحة انتهى قبل تاريخ اليوم
+    
+    "اللوحات المحجوزة" تعني اللوحات التي لديها حجز نشط في هذا العام ولم ينته بعد.
+
+    الجدول الرئيسي: "حجوزات1"
+    الأعمدة المهمة:
+    - "رقم اللوحة": معرف اللوحة
+    - "المحافظة": موقع اللوحة
+    - "الحجم": قياس اللوحة (مثل 2×1)
+    - "اسم الزبون": اسم العميل الذي حجز
+    - "فترة الحجز": تاريخ الحجز (نص، يحول إلى DATE)
+    """
+    
+    sql_prompt = f"""
+    {business_rules}
+
+    طلب المستخدم: {user_request}
+
+    المطلوب:
+    قم بتحويل طلب المستخدم إلى استعلام SQL صحيح.
+
+    إذا طلب المستخدم "اللوحات المتاحة" في مدينة معينة، استخدم هذا الهيكل:
+
+    WITH board_analysis AS (
+        SELECT 
+            "رقم اللوحة",
+            "المحافظة",
+            "الحجم",
+            MAX("فترة الحجز"::DATE) as last_booking_date,
+            COUNT(CASE WHEN EXTRACT(YEAR FROM "فترة الحجز"::DATE) = EXTRACT(YEAR FROM CURRENT_DATE) THEN 1 END) as bookings_this_year
+        FROM "حجوزات1"
+        WHERE "المحافظة" LIKE '%[اسم المدينة]%'
+        GROUP BY "رقم اللوحة", "المحافظة", "الحجم"
+    )
+    SELECT 
+        "رقم اللوحة",
+        "المحافظة",
+        "الحجم",
+        last_booking_date as "آخر حجز",
+        CASE 
+            WHEN bookings_this_year = 0 OR last_booking_date < CURRENT_DATE 
+            THEN 'متاحة' 
+            ELSE 'محجوزة' 
+        END as "الحالة"
+    FROM board_analysis
+    WHERE bookings_this_year = 0 OR last_booking_date < CURRENT_DATE
+
+    أخرج JSON فقط بهذا التنسيق:
+    {{"sql": "الاستعلام الكامل", "reply": "رد مختصر وبسيط للمستخدم"}}
+    """
+    
+    try:
+        model = genai.GenerativeModel("gemini-2.5-flash-lite")
+        response = model.generate_content(sql_prompt)
+        result = extract_json_from_text(response.text.strip())
+        
+        if result:
+            return result.get("sql"), result.get("reply", "تم تنفيذ الاستعلام")
+        else:
+            return None, "لم أستطع تحويل الطلب إلى استعلام SQL"
+            
+    except Exception as e:
+        return None, f"خطأ: {e}"
 # ============================================================
 # صفحة تسجيل الدخول
 # ============================================================
@@ -1521,47 +1718,31 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     # دالة تحويل الطلب إلى SQL
     # ========================================================
     
-    def text_to_sql(user_request):
-        """تحويل الطلب النصي إلى استعلام SQL"""
-        api_key = st.secrets.get("GEMINI_API_KEY")
+def text_to_sql(user_request):
+    """تحويل الطلب النصي إلى استعلام SQL مع فهم منطق اللوحات المتاحة"""
+    
+    # إذا كان الطلب يتضمن "لوحات متاحة" أو كلمات مشابهة
+    available_keywords = ["لوحات متاحة", "متاحة", "غير محجوزة", "فاضية", "شاغرة"]
+    
+    if any(keyword in user_request for keyword in available_keywords):
+        # استخراج اسم المدينة من الطلب (مثال: "في دمشق")
+        import re
+        city_match = re.search(r'في\s+([^\s]+)', user_request)
+        city_name = city_match.group(1) if city_match else ""
         
-        if not api_key:
-            return None, "مفتاح Gemini غير موجود"
+        # استخراج القياس إذا وجد
+        size_match = re.search(r'(\d+\s*[×xض]\s*\d+)', user_request)
+        board_size = size_match.group(1).replace('ض', '×') if size_match else None
         
-        genai.configure(api_key=api_key)
-        
-        sql_prompt = f"""
-        أنت خبير SQL. حول طلب المستخدم إلى استعلام SQL صحيح.
-
-        قاعدة البيانات:
-        الجدول: "حجوزات1"
-        الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
-
-        قواعد مهمة جداً:
-        1. استخدم علامات اقتباس مزدوجة للأسماء: "حجوزات1", "رقم اللوحة"
-        2. استخدم LIKE مع % للبحث النصي في المحافظة
-        3. إذا ذكر المستخدم قياساً مثل "2 ضرب 1"، ابحث في عمود "الحجم"
-        4. أخرج JSON فقط بالصيغة التالية:
-
-        {{
-            "sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%' AND \\"الحجم\\" = '2×1'",
-            "reply": "تم البحث عن اللوحات في دمشق بقياس 2×1"
-        }}
-
-        طلب المستخدم: {user_request}
-        """
-        
-        try:
-            model = genai.GenerativeModel("gemini-2.5-flash-lite")
-            response = model.generate_content(sql_prompt)
-            result = extract_json_from_text(response.text.strip())
-            
-            if result:
-                return result.get("sql"), result.get("reply", "تم تنفيذ الاستعلام")
-            else:
-                return None, "لم أستطع تحويل الطلب إلى استعلام SQL"
-        except Exception as e:
-            return None, f"خطأ: {e}"
+        if city_name:
+            sql = get_boards_by_city_and_size(city_name, board_size)
+            reply = f"جاري البحث عن اللوحات المتاحة في {city_name}"
+            if board_size:
+                reply += f" بقياس {board_size}"
+            return sql, reply
+    
+    # إذا لم يكن طلب "لوحات متاحة"، استخدم المنطق العادي
+    return text_to_sql_standard(user_request)
 
     # ========================================================
     # دالة تنفيذ الاستعلام
@@ -1786,6 +1967,9 @@ elif page == "🎙️ المساعد الذكي والتقارير":
                 file_name="تقرير_أبو_الخير.docx",
                 use_container_width=True
             )
+
+
+
 
 
 elif page == "⚙️ الإعدادات":
