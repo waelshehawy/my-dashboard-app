@@ -437,7 +437,7 @@ def text_to_sql_advanced(user_request):
     """
     
     try:
-        model = genai.GenerativeModel("gemini-2.5-flash-lite")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(sql_prompt)
         result = extract_json_from_text(response.text.strip())
         
@@ -1749,7 +1749,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
         """
         
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content(sql_prompt)
             result = extract_json_from_text(response.text.strip())
             
@@ -1827,7 +1827,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             with st.spinner("🎙️ أبو الخير يستمع..."):
                 audio_bytes = audio_file["bytes"]
 
-                speech_model = genai.GenerativeModel("gemini-2.5-flash-lite")
+                speech_model = genai.GenerativeModel("gemini-2.5-flash")
 
                 speech_response = speech_model.generate_content(
                     [
@@ -1878,7 +1878,7 @@ elif page == "🎙️ المساعد الذكي والتقارير":
             try:
                 genai.configure(api_key=api_key)
 
-                understand_model = genai.GenerativeModel("gemini-2.5-flash-lite")
+                understand_model = genai.GenerativeModel("gemini-2.5-flash")
 
                 understanding_prompt = f"""
                 فهم طلب المستخدم وأعد صياغته.
