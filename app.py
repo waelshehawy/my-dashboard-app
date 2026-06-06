@@ -1718,31 +1718,47 @@ elif page == "🎙️ المساعد الذكي والتقارير":
     # دالة تحويل الطلب إلى SQL
     # ========================================================
     
-def text_to_sql(user_request):
-    """تحويل الطلب النصي إلى استعلام SQL مع فهم منطق اللوحات المتاحة"""
-    
-    # إذا كان الطلب يتضمن "لوحات متاحة" أو كلمات مشابهة
-    available_keywords = ["لوحات متاحة", "متاحة", "غير محجوزة", "فاضية", "شاغرة"]
-    
-    if any(keyword in user_request for keyword in available_keywords):
-        # استخراج اسم المدينة من الطلب (مثال: "في دمشق")
-        import re
-        city_match = re.search(r'في\s+([^\s]+)', user_request)
-        city_name = city_match.group(1) if city_match else ""
+    def text_to_sql(user_request):
+        """تحويل الطلب النصي إلى استعلام SQL"""
+        api_key = st.secrets.get("GEMINI_API_KEY")
         
-        # استخراج القياس إذا وجد
-        size_match = re.search(r'(\d+\s*[×xض]\s*\d+)', user_request)
-        board_size = size_match.group(1).replace('ض', '×') if size_match else None
+        if not api_key:
+            return None, "مفتاح Gemini غير موجود"
         
-        if city_name:
-            sql = get_boards_by_city_and_size(city_name, board_size)
-            reply = f"جاري البحث عن اللوحات المتاحة في {city_name}"
-            if board_size:
-                reply += f" بقياس {board_size}"
-            return sql, reply
-    
-    # إذا لم يكن طلب "لوحات متاحة"، استخدم المنطق العادي
-    return text_to_sql_standard(user_request)
+        genai.configure(api_key=api_key)
+        
+        sql_prompt = f"""
+        أنت خبير SQL. حول طلب المستخدم إلى استعلام SQL صحيح.
+
+        قاعدة البيانات:
+        الجدول: "حجوزات1"
+        الأعمدة: "رقم اللوحة", "اسم الزبون", "المحافظة", "الحجم", "فترة الحجز"
+
+        قواعد مهمة جداً:
+        1. استخدم علامات اقتباس مزدوجة للأسماء: "حجوزات1", "رقم اللوحة"
+        2. استخدم LIKE مع % للبحث النصي في المحافظة
+        3. إذا ذكر المستخدم قياساً مثل "2 ضرب 1"، ابحث في عمود "الحجم"
+        4. أخرج JSON فقط بالصيغة التالية:
+
+        {{
+            "sql": "SELECT * FROM \\"حجوزات1\\" WHERE \\"المحافظة\\" LIKE '%دمشق%' AND \\"الحجم\\" = '2×1'",
+            "reply": "تم البحث عن اللوحات في دمشق بقياس 2×1"
+        }}
+
+        طلب المستخدم: {user_request}
+        """
+        
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content(sql_prompt)
+            result = extract_json_from_text(response.text.strip())
+            
+            if result:
+                return result.get("sql"), result.get("reply", "تم تنفيذ الاستعلام")
+            else:
+                return None, "لم أستطع تحويل الطلب إلى استعلام SQL"
+        except Exception as e:
+            return None, f"خطأ: {e}"
 
     # ========================================================
     # دالة تنفيذ الاستعلام
@@ -1967,9 +1983,6 @@ def text_to_sql(user_request):
                 file_name="تقرير_أبو_الخير.docx",
                 use_container_width=True
             )
-
-
-
 
 
 elif page == "⚙️ الإعدادات":
