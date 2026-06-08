@@ -1455,54 +1455,6 @@ elif page == "📐 تقرير تجميعي حسب الحجوم":
     st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"grouped_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 
-
-# ============================================================
-# 🎙️ صفحة المساعد الذكي المطور (أبو الخير) - النسخة السحابية
-# ============================================================
-import streamlit as st
-import speech_recognition as sr
-from io import BytesIO
-from pydub import AudioSegment
-
-st.subheader("🎤 ارفع ملف صوتي (MP3 أو WAV)")
-
-uploaded_audio = st.file_uploader("اختر ملف صوتي", type=['wav', 'mp3', 'm4a'])
-
-if uploaded_audio is not None:
-    st.audio(uploaded_audio)
-    
-    with st.spinner("جاري تحويل الصوت إلى نص..."):
-        try:
-            # قراءة الملف
-            audio_bytes = BytesIO(uploaded_audio.getvalue())
-            
-            # إذا كان MP3، حوله إلى WAV
-            if uploaded_audio.type == "audio/mpeg" or uploaded_audio.name.endswith('.mp3'):
-                st.info("🔄 جاري تحويل MP3 إلى WAV...")
-                audio = AudioSegment.from_mp3(audio_bytes)
-                wav_bytes = BytesIO()
-                audio.export(wav_bytes, format="wav")
-                wav_bytes.seek(0)
-                audio_source = wav_bytes
-            else:
-                audio_source = audio_bytes
-            
-            # تحويل الصوت إلى نص
-            recognizer = sr.Recognizer()
-            with sr.AudioFile(audio_source) as source:
-                recognizer.adjust_for_ambient_noise(source)
-                audio_data = recognizer.record(source)
-                text = recognizer.recognize_google(audio_data, language='ar-SY')
-                st.success(f"✅ النص المستخلص: **{text}**")
-                
-        except Exception as e:
-            st.error(f"❌ خطأ: {e}")
-            st.info("💡 نصيحة: استخدم ملفات WAV للحصول على أفضل نتيجة")
-
-
-                    
-
-
 elif page == "⚙️ الإعدادات":
     if not is_admin():
         st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
