@@ -897,96 +897,71 @@ elif page == "📍 الأعمدة المتاحة":
         # تقرير: اللوحات التي ستصبح متاحة في أول الشهر القادم
         # ============================================================
         
+        # ============================================================
+        # تقرير: اللوحات التي ستصبح متاحة بعد التاريخ المحدد
+        # ============================================================
+        
         st.divider()
-        st.subheader("📅 اللوحات التي ستصبح متاحة قريباً")
+        st.subheader("📅 اللوحات التي ستصبح متاحة بعد التاريخ المحدد")
         
-        # حساب أول يوم من الشهر القادم
-        if start_date.month == 12:
-            next_month_start = date(start_date.year + 1, 1, 1)
-        else:
-            next_month_start = date(start_date.year, start_date.month + 1, 1)
+        # جلب جميع الحجوزات
+        conn_temp = get_connection()
+        all_bookings = pd.read_sql_query('SELECT * FROM "حجوزات1"', conn_temp)
+        conn_temp.close()
         
-        next_month_period = get_period_from_date(next_month_start)
-        next_month_year = next_month_start.year
-        
-        # جلب الحجوزات التي تنتهي قبل أول الشهر القادم
-        conn_upcoming = get_connection()
-        upcoming_query = f'''
-            SELECT DISTINCT 
-                CAST(h."رقم اللوحة" AS TEXT) as "رقم اللوحة",
-                h."اسم الزبون",
-                b."اسم العمود",
-                b."المحافظة",
-                b."الشبكة",
-                b."الحجم",
-                b."العدد",
-                b."Latitude",
-                b."Longitude"
-            FROM "حجوزات1" h
-            INNER JOIN "اعمدة انارة" b ON CAST(h."رقم اللوحة" AS TEXT) = CAST(b."رقم اللوحة" AS TEXT)
-            WHERE (h."العام" < {next_month_year})
-               OR (h."العام" = {next_month_year} AND h."فترة الحجز" < '{next_month_period}')
-        '''
-        
-        upcoming_df = pd.read_sql_query(upcoming_query, conn_upcoming)
-        conn_upcoming.close()
-        
-        if not upcoming_df.empty:
-            # استبعاد الأعمدة التي لا تزال محجوزة
-            still_booked = set(booked_boards)
-            future_available = upcoming_df[~upcoming_df['رقم اللوحة'].isin(still_booked)]
+        if not all_bookings.empty:
+            # إضافة رقم الفترة لكل حجز
+            all_bookings['period_number'] = all_bookings['فترة الحجز'].apply(get_period_number)
             
-            if not future_available.empty:
-                total_future = len(future_available)
-                total_boards_future = int(future_available['العدد'].sum())
-                unique_cities_future = future_available['المحافظة'].nunique()
+            # تجميع حسب رقم اللوحة للحصول على آخر فترة
+            last_period_per_board = all_bookings.groupby('رقم اللوحة').agg({
+                'period_number': 'max',
+                'فترة الحجز': 'last'
+            }).reset_index()
+            
+            # إضافة أرقام الفترات للمقارنة
+            current_period = get_period_from_date(start_date)
+            
+            # تصفية اللوحات التي آخر فترة لها أقل من الفترة الحالية (انتهت)
+            expired_boards = last_period_per_board[
+                last_period_per_board['period_number'] < current_period
+            ]
+            
+            if not expired_boards.empty:
+                # جلب تفاصيل الأعمدة
+                conn_details = get_connection()
+                columns_details = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn_details)
+                conn_details.close()
                 
-                st.success(f"📊 {total_boards_future} لوحة ستصبح متاحة في أول الشهر القادم (في {unique_cities_future} محافظة - {total_future} موقع)")
+                # دمج البيانات
+                future_available = expired_boards.merge(
+                    columns_details, 
+                    on='رقم اللوحة', 
+                    how='left'
+                )
                 
-                with st.expander(f"🏙️ جميع المحافظات - {total_boards_future} لوحة قادمة", expanded=False):
-                    # ملخص حسب المحافظة
-                    city_summary = future_available.groupby('المحافظة').agg({
-                        'رقم اللوحة': 'count',
-                        'العدد': 'sum'
-                    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
-                    st.dataframe(city_summary, use_container_width=True)
+                # استبعاد الأعمدة التي لا تزال محجوزة حالياً
+                still_booked = set(booked_boards)
+                future_available = future_available[~future_available['رقم اللوحة'].isin(still_booked)]
+                
+                if not future_available.empty:
+                    total_future = len(future_available)
+                    total_boards_future = int(future_available['العدد'].sum())
+                    unique_cities_future = future_available['المحافظة'].nunique()
                     
-                    # خريطة المتاح قريباً
-                    valid_coords_future = future_available[
-                        future_available['Latitude'].notna() & 
-                        (future_available['Latitude'] != 0)
-                    ]
-                    if not valid_coords_future.empty:
-                        st.subheader("🗺️ خريطة المواقع التي ستصبح متاحة")
-                        m_future = folium.Map(location=[34.8, 38.9], zoom_start=7)
-                        for _, row in valid_coords_future.iterrows():
-                            folium.Marker(
-                                [row['Latitude'], row['Longitude']],
-                                popup=f"<b>{row['اسم العمود']}</b><br>{row['المحافظة']}<br>{row['الحجم']}",
-                                icon=folium.Icon(color='orange', icon='info-sign')
-                            ).add_to(m_future)
-                        st_folium(m_future, width="100%", height=400)
+                    st.success(f"📊 {total_boards_future} لوحة ستصبح متاحة (آخر فترة لها انتهت)")
                     
-                    # جدول المتاح قريباً
-                    st.subheader("📋 قائمة اللوحات التي ستصبح متاحة")
-                    st.dataframe(
-                        future_available[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'اسم الزبون']],
-                        use_container_width=True
-                    )
-                    
-                    # زر تصدير
-                    csv_future = future_available.to_csv(index=False, encoding='utf-8-sig')
-                    st.download_button(
-                        "📥 تحميل تقرير المتاح قريباً (CSV)",
-                        csv_future,
-                        f"upcoming_boards_{next_month_start.strftime('%Y%m')}.csv",
-                        "text/csv",
-                        use_container_width=True
-                    )
+                    with st.expander(f"🏙️ جميع المحافظات - {total_boards_future} لوحة", expanded=False):
+                        st.dataframe(
+                            future_available[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'فترة الحجز']],
+                            use_container_width=True
+                        )
+                else:
+                    st.info("ℹ️ لا توجد لوحات جديدة ستصبح متاحة")
             else:
-                st.info("ℹ️ لا توجد لوحات جديدة ستصبح متاحة في الشهر القادم")
+                st.info("ℹ️ لا توجد لوحات انتهت فتراتها")
         else:
-            st.info("ℹ️ لا توجد حجوزات سابقة في النظام")
+            st.info("ℹ️ لا توجد حجوزات في النظام")
 
 elif page == "📊 Dashboard":
     st.markdown("""
