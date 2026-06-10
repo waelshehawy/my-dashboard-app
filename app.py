@@ -767,39 +767,50 @@ def get_available_with_date_filter(start_date, include_future):
         # تقرير: اللوحات التي ستصبح متاحة في أول الشهر القادم
         # ============================================================
         
+        # ============================================================
+        # تقرير: اللوحات التي ستصبح متاحة في أول الشهر القادم
+        # ============================================================
+        
         st.divider()
         st.subheader("📅 اللوحات التي ستصبح متاحة قريباً")
         
         # حساب أول يوم من الشهر القادم
-# حساب أول يوم من الشهر القادم
-today = date.today()
-if today.month == 12:
-    next_month = date(today.year + 1, 1, 1)
-else:
-    next_month = date(today.year, today.month + 1, 1)
-
-# استخدام نفس منطق حساب تاريخ النهاية
-bookings_with_end['تاريخ_النهاية'] = pd.to_datetime(bookings_with_end['تاريخ_النهاية'])
-
-upcoming = bookings_with_end[
-    (bookings_with_end['تاريخ_النهاية'] < pd.Timestamp(next_month)) &
-    (bookings_with_end['تاريخ_النهاية'] >= pd.Timestamp(today))
-]
-
-if not upcoming.empty:
-    # جلب معلومات الأعمدة
-    conn = get_connection()
-    columns_info = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
-    conn.close()
-    
-    upcoming_boards = upcoming.merge(columns_info, on='رقم اللوحة', how='left')
-    # ... باقي الكود كما هو ...
+        today = date.today()
+        if today.month == 12:
+            next_month = date(today.year + 1, 1, 1)
+        else:
+            next_month = date(today.year, today.month + 1, 1)
+        
+        # جلب الحجوزات التي ستنتهي قبل أول الشهر القادم
+        conn = get_connection()
+        upcoming_query = f'''
+            SELECT DISTINCT 
+                h."رقم اللوحة",
+                h."اسم الزبون",
+                h."العام",
+                h."فترة الحجز",
+                b."اسم العمود",
+                b."المحافظة",
+                b."الشبكة",
+                b."الحجم",
+                b."العدد",
+                b."Latitude",
+                b."Longitude"
+            FROM "حجوزات1" h
+            INNER JOIN "اعمدة انارة" b ON CAST(h."رقم اللوحة" AS TEXT) = CAST(b."رقم اللوحة" AS TEXT)
+            ORDER BY h."العام", h."فترة الحجز"
+        '''
+        
+        upcoming_boards = pd.read_sql_query(upcoming_query, conn)
+        conn.close()
+        
+        if not upcoming_boards.empty:
+            total_upcoming = len(upcoming_boards)
+            unique_cities = upcoming_boards['المحافظة'].nunique()
             
             st.success(f"📊 {total_upcoming} لوحة ستصبح متاحة في أول الشهر القادم (في {unique_cities} محافظة)")
             
-            # أيقونة المحافظات (جميع المحافظات)
             with st.expander(f"🏙️ جميع المحافظات - {total_upcoming} لوحة قادمة", expanded=False):
-                
                 # عرض ملخص حسب المحافظة
                 city_summary = upcoming_boards.groupby('المحافظة').agg({
                     'رقم اللوحة': 'count',
@@ -808,7 +819,7 @@ if not upcoming.empty:
                 
                 st.dataframe(city_summary, use_container_width=True)
                 
-                # عرض الخريطة لجميع المواقع القادمة
+                # عرض الخريطة
                 valid_coords = upcoming_boards[
                     upcoming_boards['Latitude'].notna() & 
                     (upcoming_boards['Latitude'] != 0)
@@ -819,37 +830,17 @@ if not upcoming.empty:
                     m = folium.Map(location=[34.8, 38.9], zoom_start=7)
                     
                     for _, row in valid_coords.iterrows():
-                        popup_text = f"""
-                        <div dir="rtl">
-                            <b>{row['اسم العمود']}</b><br>
-                            المحافظة: {row['المحافظة']}<br>
-                            الشبكة: {row['الشبكة']}<br>
-                            الحجم: {row['الحجم']}<br>
-                            ⏰ متاح بعد: {row['تاريخ النهاية']}
-                        </div>
-                        """
                         folium.Marker(
                             [row['Latitude'], row['Longitude']],
-                            popup=folium.Popup(popup_text, max_width=250),
+                            popup=f"{row['اسم العمود']}<br>{row['المحافظة']}",
                             icon=folium.Icon(color='orange', icon='clock')
                         ).add_to(m)
                     
                     st_folium(m, width="100%", height=400)
                 
-                # عرض القائمة التفصيلية
-                st.subheader("📋 قائمة اللوحات التي ستصبح متاحة")
+                # عرض القائمة
                 st.dataframe(
-                    upcoming_boards[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'اسم الزبون', 'تاريخ النهاية']],
-                    use_container_width=True
-                )
-                
-                # زر تصدير
-                csv_data = upcoming_boards.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button(
-                    "📥 تحميل التقرير (CSV)",
-                    csv_data,
-                    f"upcoming_boards_{next_month.strftime('%Y%m')}.csv",
-                    "text/csv",
+                    upcoming_boards[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'اسم الزبون']],
                     use_container_width=True
                 )
         else:
