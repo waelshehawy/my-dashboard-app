@@ -625,7 +625,6 @@ if page == "🏢 لوحات الشركات":
 # ============================================================
 # صفحة: الأعمدة المتاحة
 # ============================================================
-# ==================== صفحة الأعمدة المتاحة ====================
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
     
@@ -641,22 +640,21 @@ elif page == "📍 الأعمدة المتاحة":
         st.markdown("<br>", unsafe_allow_html=True)
         show_advanced = st.checkbox("🔍 إظهار المتاحة لغاية تاريخ", value=False)
     
-    # جلب البيانات حسب التاريخ
+    # جلب البيانات
     with st.spinner("جاري تحميل الأعمدة المتاحة..."):
         if show_advanced:
             available_data = get_available_boards_with_next_booking(start_date)
         else:
             available_data = get_available_boards_from_date(start_date)
     
-    if available_data is None or available_data.empty:
-        st.warning(f"⚠️ لا توجد أعمدة متاحة ابتداءً من تاريخ {start_date.strftime('%Y-%m-%d')}")
+    if available_data.empty:
+        st.warning(f"⚠️ لا توجد أعمدة متاحة ابتداءً من تاريخ {start_date}")
         st.stop()
     
-    # إحصائيات
     total_boards = len(get_all_boards())
     st.info(f"📊 عدد الأعمدة المتاحة: **{len(available_data)}** عمود (من أصل **{total_boards}** عمود)")
     
-    # عرض المدن
+    # عرض المحافظات
     cities = available_data['المحافظة'].unique()
     
     cols_per_row = 3
@@ -666,7 +664,7 @@ elif page == "📍 الأعمدة المتاحة":
             if i + j < len(cities):
                 city = cities[i + j]
                 city_data = available_data[available_data['المحافظة'] == city]
-                total_boards = len(city_data)
+                total_boards_city = len(city_data)
                 unique_sizes = city_data['الحجم'].nunique()
                 
                 with col:
@@ -675,7 +673,7 @@ elif page == "📍 الأعمدة المتاحة":
                         <div style="font-size: 48px;">🏙️</div>
                         <h3>{city}</h3>
                         <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
-                            {badge_animated(f"{int(total_boards)} عمود", "info")}
+                            {badge_animated(f"{int(total_boards_city)} عمود", "info")}
                             {badge_animated(f"{unique_sizes} حجم", "warning")}
                         </div>
                     </div>
@@ -686,7 +684,7 @@ elif page == "📍 الأعمدة المتاحة":
                         st.session_state['show_city_details'] = True
                         st.rerun()
     
-    # تفاصيل المدينة المختارة
+    # تفاصيل المدينة
     if st.session_state.get('show_city_details', False):
         city = st.session_state['selected_city']
         city_data = available_data[available_data['المحافظة'] == city]
@@ -697,7 +695,6 @@ elif page == "📍 الأعمدة المتاحة":
         for size_name in city_data['الحجم'].unique():
             group_data = city_data[city_data['الحجم'] == size_name]
             with st.expander(f"📏 {size_name} - {len(group_data)} عمود", expanded=True):
-                # خريطة
                 valid_coords = group_data.dropna(subset=['Latitude', 'Longitude'])
                 if not valid_coords.empty:
                     m = folium.Map(location=[valid_coords['Latitude'].mean(), valid_coords['Longitude'].mean()], zoom_start=12)
@@ -712,7 +709,6 @@ elif page == "📍 الأعمدة المتاحة":
                         ).add_to(m)
                     st_folium(m, width="100%", height=400)
                 
-                # جدول
                 cols_to_show = ['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم']
                 if 'متاحة لغاية' in group_data.columns:
                     cols_to_show.append('متاحة لغاية')
