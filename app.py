@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import psycopg2
 from psycopg2.extras import RealDictCursor
-
+from datetime import datetime
 # ============================================================
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
