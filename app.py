@@ -678,62 +678,135 @@ elif page == "📍 الأعمدة المتاحة":
     
     st.success(f"✅ عدد الأعمدة المتاحة: {len(available_data)}")
     
-    # عرض المحافظات بطريقة بسيطة ونظيفة
-    cities = available_data['المحافظة'].unique()
+    # ==================== عرض الأحجام كبطاقات ====================
+    st.subheader("📏 اختر الحجم لعرض الأعمدة المتاحة")
     
-    for city in cities:
-        city_data = available_data[available_data['المحافظة'] == city]
-        total_boards_city = len(city_data)
-        unique_sizes = city_data['الحجم'].nunique()
-        
-        with st.expander(f"🏙️ {city} - {total_boards_city} أعمدة | {unique_sizes} أحجام", expanded=True):
-            
-            # إحصائيات سريعة
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("عدد الأعمدة", total_boards_city)
-            with col2:
-                st.metric("الأحجام المتاحة", unique_sizes)
-            with col3:
-                st.metric("المحافظة", city)
-            
-            # عرض الجدول
-            st.dataframe(
-                city_data[['رقم اللوحة', 'اسم العمود', 'الحجم']], 
-                use_container_width=True,
-                hide_index=True
-            )
+    # الحصول على جميع الأحجام المتاحة
+    all_sizes = available_data['الحجم'].unique()
     
-    # خريطة عامة لجميع الأعمدة المتاحة
+    # ترتيب الأحجام (اختياري حسب الأفضلية)
+    size_order = ['2*1', '1.5*1', '3*1', '4*1', '5*1', '6*1', 'منصفات', 'أعمدة إنارة']
+    all_sizes = [s for s in size_order if s in all_sizes] + [s for s in all_sizes if s not in size_order]
+    
+    # عرض الأحجام في شبكة
+    cols_per_row = 4
+    for i in range(0, len(all_sizes), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, col in enumerate(cols):
+            if i + j < len(all_sizes):
+                size = all_sizes[i + j]
+                size_data = available_data[available_data['الحجم'] == size]
+                size_count = len(size_data)
+                size_cities = size_data['المحافظة'].nunique()
+                
+                with col:
+                    # بطاقة حجم قابلة للنقر
+                    if st.button(
+                        f"📐 {size}\n\n{size_count} عمود\n{size_cities} محافظة",
+                        key=f"size_{size}",
+                        use_container_width=True
+                    ):
+                        st.session_state['selected_size'] = size
+                        st.session_state['show_size_details'] = True
+                        st.rerun()
+    
     st.divider()
-    st.subheader("🗺️ خريطة الأعمدة المتاحة")
     
-    valid_coords = available_data.dropna(subset=['Latitude', 'Longitude'])
-    valid_coords = valid_coords[(valid_coords['Latitude'] != 0) & (valid_coords['Longitude'] != 0)]
+    # ==================== عرض تفاصيل الحجم المختار ====================
+    if st.session_state.get('show_size_details', False):
+        selected_size = st.session_state['selected_size']
+        size_data = available_data[available_data['الحجم'] == selected_size]
+        
+        st.subheader(f"📐 الحجم: {selected_size}")
+        st.caption(f"إجمالي الأعمدة المتاحة: {len(size_data)} عمود")
+        
+        # عرض الإحصائيات حسب المحافظة
+        city_stats = size_data.groupby('المحافظة').size().reset_index(name='العدد')
+        city_stats = city_stats.sort_values('العدد', ascending=False)
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.markdown("**📊 توزع حسب المحافظة**")
+            st.dataframe(city_stats, use_container_width=True, hide_index=True)
+        
+        with col2:
+            # رسم بياني بسيط
+            fig = px.bar(city_stats, x='المحافظة', y='العدد', title=f'توزع الأعمدة حجم {selected_size}')
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # عرض الجدول التفصيلي
+        st.markdown("**📋 قائمة الأعمدة المتاحة**")
+        
+        # أعمدة للعرض
+        display_cols = ['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة']
+        available_cols = [c for c in display_cols if c in size_data.columns]
+        
+        st.dataframe(
+            size_data[available_cols],
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # خريطة لهذا الحجم فقط
+        valid_coords = size_data.dropna(subset=['Latitude', 'Longitude'])
+        valid_coords = valid_coords[(valid_coords['Latitude'] != 0) & (valid_coords['Longitude'] != 0)]
+        
+        if not valid_coords.empty:
+            st.markdown("**🗺️ خريطة الأعمدة**")
+            m = folium.Map(location=[34.8, 38.9], zoom_start=7)
+            marker_cluster = MarkerCluster().add_to(m)
+            
+            for _, row in valid_coords.iterrows():
+                popup_html = f"""
+                <div dir="rtl" style="font-family:Arial;text-align:right;">
+                    <b>{row['اسم العمود']}</b><br>
+                    📍 {row['المحافظة']}<br>
+                    📏 {selected_size}<br>
+                    🔢 {row['رقم اللوحة']}
+                </div>
+                """
+                folium.Marker(
+                    [row['Latitude'], row['Longitude']],
+                    popup=popup_html,
+                    icon=folium.Icon(color='green', icon='info-sign')
+                ).add_to(marker_cluster)
+            
+            st_folium(m, width="100%", height=400)
+        
+        # زر العودة
+        if st.button("🔙 العودة إلى قائمة الأحجام", key="back_to_sizes"):
+            st.session_state['show_size_details'] = False
+            st.rerun()
     
-    if not valid_coords.empty:
-        m = folium.Map(location=[34.8, 38.9], zoom_start=7)
-        marker_cluster = MarkerCluster().add_to(m)
-        
-        for _, row in valid_coords.iterrows():
-            popup_html = f"""
-            <div dir="rtl" style="font-family:Arial;text-align:right;">
-                <b>{row['اسم العمود']}</b><br>
-                📍 {row['المحافظة']}<br>
-                📏 {row['الحجم']}<br>
-                🔢 رقم اللوحة: {row['رقم اللوحة']}
-            </div>
-            """
-            folium.Marker(
-                [row['Latitude'], row['Longitude']],
-                popup=popup_html,
-                icon=folium.Icon(color='green', icon='info-sign')
-            ).add_to(marker_cluster)
-        
-        st_folium(m, width="100%", height=500)
     else:
-        st.info("لا توجد إحداثيات متاحة للأعمدة المتاحة")
-
+        # ==================== الخريطة العامة ====================
+        with st.expander("🗺️ خريطة جميع الأعمدة المتاحة", expanded=False):
+            valid_coords = available_data.dropna(subset=['Latitude', 'Longitude'])
+            valid_coords = valid_coords[(valid_coords['Latitude'] != 0) & (valid_coords['Longitude'] != 0)]
+            
+            if not valid_coords.empty:
+                m = folium.Map(location=[34.8, 38.9], zoom_start=7)
+                marker_cluster = MarkerCluster().add_to(m)
+                
+                for _, row in valid_coords.iterrows():
+                    popup_html = f"""
+                    <div dir="rtl" style="font-family:Arial;text-align:right;">
+                        <b>{row['اسم العمود']}</b><br>
+                        📍 {row['المحافظة']}<br>
+                        📏 {row['الحجم']}<br>
+                        🔢 {row['رقم اللوحة']}
+                    </div>
+                    """
+                    folium.Marker(
+                        [row['Latitude'], row['Longitude']],
+                        popup=popup_html,
+                        icon=folium.Icon(color='green', icon='info-sign')
+                    ).add_to(marker_cluster)
+                
+                st_folium(m, width="100%", height=500)
+            else:
+                st.info("لا توجد إحداثيات متاحة للأعمدة المتاحة")
 
 elif page == "📊 Dashboard":
     st.markdown("""
