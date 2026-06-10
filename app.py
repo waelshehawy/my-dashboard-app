@@ -619,7 +619,7 @@ if page == "🏢 لوحات الشركات":
 
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (Full Option)
+# صفحة: الأعمدة المتاحة (Full Option مع جميع المحافظات)
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
@@ -706,42 +706,127 @@ elif page == "📍 الأعمدة المتاحة":
         available_data['size_group'] = available_data['الحجم'].apply(classify_size_for_card)
         
         # ============================================================
-        # عرض بطاقات المحافظات
+        # عرض بطاقات المحافظات (مع إضافة أيقونة "جميع المحافظات")
         # ============================================================
         
         cities = available_data['المحافظة'].unique()
         
+        # صف البطاقات (3 في الصف)
         cols_per_row = 3
-        for i in range(0, len(cities), cols_per_row):
+        city_list = list(cities)
+        
+        # إضافة "جميع المحافظات" كأول عنصر
+        city_list.insert(0, "🌟 جميع المحافظات")
+        
+        for i in range(0, len(city_list), cols_per_row):
             cols = st.columns(cols_per_row)
             for j, col in enumerate(cols):
-                if i + j < len(cities):
-                    city = cities[i + j]
-                    city_data = available_data[available_data['المحافظة'] == city]
-                    total_boards = city_data['العدد'].sum()
-                    total_sites = len(city_data)
-                    unique_sizes = city_data['الحجم'].nunique()
+                if i + j < len(city_list):
+                    item = city_list[i + j]
                     
-                    with col:
-                        st.markdown(f"""
-                        <div class="neumorphic-card" style="text-align: center; cursor: pointer;">
-                            <div style="font-size: 48px;">🏙️</div>
-                            <h3>{city}</h3>
-                            <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
-                                {badge_animated(f"{int(total_boards)} عمود", "info")}
-                                {badge_animated(f"{total_sites} موقع", "success")}
-                                {badge_animated(f"{unique_sizes} حجم", "warning")}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    if item == "🌟 جميع المحافظات":
+                        # بطاقة جميع المحافظات
+                        total_all_boards = available_data['العدد'].sum()
+                        total_all_sites = len(available_data)
+                        unique_all_sizes = available_data['الحجم'].nunique()
                         
-                        if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
-                            st.session_state['selected_city'] = city
-                            st.session_state['show_city_details'] = True
-                            st.rerun()
+                        with col:
+                            st.markdown(f"""
+                            <div class="neumorphic-card" style="text-align: center; cursor: pointer; background: linear-gradient(135deg, #667eea, #764ba2); color: white;">
+                                <div style="font-size: 48px;">🌟</div>
+                                <h3>جميع المحافظات</h3>
+                                <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
+                                    <span style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px;">{int(total_all_boards)} عمود</span>
+                                    <span style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px;">{total_all_sites} موقع</span>
+                                    <span style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px;">{unique_all_sizes} حجم</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if st.button(f"📋 عرض جميع المحافظات", key=f"city_all", use_container_width=True):
+                                st.session_state['show_all_cities'] = True
+                                st.session_state['show_city_details'] = False
+                                st.rerun()
+                    else:
+                        city = item
+                        city_data = available_data[available_data['المحافظة'] == city]
+                        total_boards = city_data['العدد'].sum()
+                        total_sites = len(city_data)
+                        unique_sizes = city_data['الحجم'].nunique()
+                        
+                        with col:
+                            st.markdown(f"""
+                            <div class="neumorphic-card" style="text-align: center; cursor: pointer;">
+                                <div style="font-size: 48px;">🏙️</div>
+                                <h3>{city}</h3>
+                                <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
+                                    {badge_animated(f"{int(total_boards)} عمود", "info")}
+                                    {badge_animated(f"{total_sites} موقع", "success")}
+                                    {badge_animated(f"{unique_sizes} حجم", "warning")}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
+                                st.session_state['selected_city'] = city
+                                st.session_state['show_city_details'] = True
+                                st.session_state['show_all_cities'] = False
+                                st.rerun()
         
         # ============================================================
-        # تفاصيل المحافظة المختارة
+        # عرض جدول جميع المحافظات (إذا تم اختياره)
+        # ============================================================
+        
+        if st.session_state.get('show_all_cities', False):
+            st.divider()
+            st.subheader("🌟 جميع الأعمدة المتاحة حالياً")
+            
+            # إحصائيات سريعة
+            col1, col2, col3 = st.columns(3)
+            col1.metric("إجمالي الأعمدة", int(available_data['العدد'].sum()))
+            col2.metric("عدد المواقع", len(available_data))
+            col3.metric("عدد المحافظات", available_data['المحافظة'].nunique())
+            
+            # عرض الخريطة لجميع المواقع المتاحة
+            valid_coords_all = available_data[
+                available_data['Latitude'].notna() & 
+                (available_data['Latitude'] != 0)
+            ]
+            
+            if not valid_coords_all.empty:
+                st.subheader("🗺️ خريطة جميع الأعمدة المتاحة")
+                m = folium.Map(location=[34.8, 38.9], zoom_start=7)
+                for _, row in valid_coords_all.iterrows():
+                    folium.Marker(
+                        [row['Latitude'], row['Longitude']],
+                        popup=f"<b>{row['اسم العمود']}</b><br>{row['المحافظة']}<br>{row['الحجم']}",
+                        icon=folium.Icon(color='green', icon='info-sign')
+                    ).add_to(m)
+                st_folium(m, width="100%", height=400)
+            
+            # عرض الجدول الكامل
+            st.subheader("📋 قائمة جميع الأعمدة المتاحة")
+            st.dataframe(
+                available_data[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
+                use_container_width=True
+            )
+            
+            # زر تصدير CSV
+            csv_data = available_data.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                "📥 تحميل التقرير (CSV)",
+                csv_data,
+                f"available_columns_{start_date.strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+            
+            if st.button("🔙 العودة إلى بطاقات المحافظات", key="back_from_all"):
+                st.session_state['show_all_cities'] = False
+                st.rerun()
+        
+        # ============================================================
+        # تفاصيل المحافظة المختارة (منفردة)
         # ============================================================
         
         if st.session_state.get('show_city_details', False):
@@ -751,25 +836,27 @@ elif page == "📍 الأعمدة المتاحة":
             st.divider()
             st.subheader(f"📍 محافظة {city}")
             
+            # عرض الخريطة للمحافظة
+            valid_coords = city_data[
+                city_data['Latitude'].notna() & 
+                (city_data['Latitude'] != 0)
+            ]
+            if not valid_coords.empty:
+                m = folium.Map(location=[34.8, 38.9], zoom_start=8)
+                for _, row in valid_coords.iterrows():
+                    folium.Marker(
+                        [row['Latitude'], row['Longitude']],
+                        popup=f"<b>{row['اسم العمود']}</b><br>{row['الشبكة']}<br>{row['الحجم']}",
+                        icon=folium.Icon(color='green', icon='info-sign')
+                    ).add_to(m)
+                st_folium(m, width="100%", height=400)
+            
+            # عرض حسب الحجم
             for size_name in ['أعمدة إنارة (2×1)', 'منصفات (125×185)', 'أحجام أخرى']:
                 group_data = city_data[city_data['size_group'] == size_name]
                 if not group_data.empty:
                     total = group_data['العدد'].sum()
                     with st.expander(f"📏 {size_name} - {int(total)} عمود", expanded=True):
-                        valid_coords = group_data[
-                            group_data['Latitude'].notna() & 
-                            (group_data['Latitude'] != 0)
-                        ]
-                        if not valid_coords.empty:
-                            m = folium.Map(location=[34.8, 38.9], zoom_start=8)
-                            for _, row in valid_coords.iterrows():
-                                folium.Marker(
-                                    [row['Latitude'], row['Longitude']],
-                                    popup=f"<b>{row['اسم العمود']}</b><br>{row['الشبكة']}<br>{row['الحجم']}",
-                                    icon=folium.Icon(color='green', icon='info-sign')
-                                ).add_to(m)
-                            st_folium(m, width="100%", height=400)
-                        
                         st.dataframe(group_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
                 else:
                     with st.expander(f"📏 {size_name}"):
@@ -837,16 +924,15 @@ elif page == "📍 الأعمدة المتاحة":
                 st.dataframe(city_summary, use_container_width=True)
                 
                 # عرض الخريطة
-                valid_coords = upcoming_boards[
+                valid_coords_upcoming = upcoming_boards[
                     upcoming_boards['Latitude'].notna() & 
                     (upcoming_boards['Latitude'] != 0)
                 ]
                 
-                if not valid_coords.empty:
+                if not valid_coords_upcoming.empty:
                     st.subheader("🗺️ خريطة المواقع التي ستصبح متاحة")
                     m = folium.Map(location=[34.8, 38.9], zoom_start=7)
-                    
-                    for _, row in valid_coords.iterrows():
+                    for _, row in valid_coords_upcoming.iterrows():
                         popup_text = f"""
                         <div dir="rtl">
                             <b>{row['اسم العمود']}</b><br>
@@ -860,13 +946,22 @@ elif page == "📍 الأعمدة المتاحة":
                             popup=folium.Popup(popup_text, max_width=250),
                             icon=folium.Icon(color='orange', icon='info-sign')
                         ).add_to(m)
-                    
                     st_folium(m, width="100%", height=400)
                 
                 # عرض القائمة التفصيلية
                 st.subheader("📋 قائمة اللوحات التي ستصبح متاحة")
                 st.dataframe(
                     upcoming_boards[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'اسم الزبون']],
+                    use_container_width=True
+                )
+                
+                # زر تصدير
+                csv_upcoming = upcoming_boards.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    "📥 تحميل تقرير المتاح قريباً (CSV)",
+                    csv_upcoming,
+                    f"upcoming_boards_{next_month.strftime('%Y%m')}.csv",
+                    "text/csv",
                     use_container_width=True
                 )
         else:
