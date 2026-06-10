@@ -176,102 +176,10 @@ st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 # دوال المتاح
 # ============================================================
 
-import datetime
-import pandas as pd
-from datetime import datetime as dt
-
-# شهر عربي
-MONTHS_AR = {
-    1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
-    5: "ايار", 6: "حزيران", 7: "تموز", 8: "اب",
-    9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
-}
-
-def convert_date_to_period_name(date):
-    """
-    تحويل التاريخ إلى صيغة "شهر 15-1" أو "شهر 30-15"
-    مثال: 2026-03-10 -> "اذار 15-1"
-    """
-    month_name = MONTHS_AR[date.month]
-    if date.day <= 15:
-        return f"{month_name} 15-1"
-    else:
-        return f"{month_name} 30-15"
-
-def get_available_boards_from_date(start_date):
-    """
-    المستوى 1: اللوحات المتاحة ابتداءً من start_date
-    المتاح = لا يوجد حجز في نفس الفترة
-    """
-    target_period = convert_date_to_period_name(start_date)
-    target_year = start_date.year
-    
-    # 1. جلب أرقام اللوحات المحجوزة في تلك الفترة
-    response = supabase.table('حجوزات1')\
-        .select('رقم اللوحة')\
-        .eq('فترة الحجز', target_period)\
-        .eq('العام', target_year)\
-        .execute()
-    
-    booked_board_ids = [row['رقم اللوحة'] for row in response.data]
-    
-    # 2. جلب جميع الأعمدة
-    all_boards = supabase.table('اعمدة انارة').select('*').execute()
-    all_boards_df = pd.DataFrame(all_boards.data)
-    
-    # 3. فلترة الأعمدة غير المحجوزة
-    available_df = all_boards_df[~all_boards_df['رقم اللوحة'].isin(booked_board_ids)]
-    
-    return available_df
-
-def get_available_boards_with_next_booking(start_date):
-    """
-    المستوى 2: اللوحات المتاحة + أول تاريخ حجز مستقبلي
-    """
-    available_df = get_available_boards_from_date(start_date)
-    
-    # إضافة عمود جديد
-    available_df['متاحة لغاية'] = None
-    
-    # ترتيب الفترات زمنياً (يجب أن يكون لديك جدول الفترة)
-    periods_order = get_periods_order()  # تحتاج إلى تنفيذ هذه الدالة
-    
-    current_period = convert_date_to_period_name(start_date)
-    current_period_index = periods_order.get(current_period, 0)
-    
-    for idx, row in available_df.iterrows():
-        board_id = row['رقم اللوحة']
-        
-        # جلب جميع حجوزات هذه اللوحة بعد العام الحالي
-        response = supabase.table('حجوزات1')\
-            .select('فترة الحجز, العام')\
-            .eq('رقم اللوحة', board_id)\
-            .gte('العام', start_date.year)\
-            .execute()
-        
-        future_periods = []
-        for booking in response.data:
-            period = booking['فترة الحجز']
-            year = booking['العام']
-            period_index = periods_order.get(period, 0)
-            
-            # إذا كانت الفترة بعد الفترة الحالية
-            if year > start_date.year or (year == start_date.year and period_index > current_period_index):
-                future_periods.append((period, year, period_index))
-        
-        if future_periods:
-            # أقرب فترة مستقبلية
-            next_booking = min(future_periods, key=lambda x: (x[1], x[2]))
-            available_df.at[idx, 'متاحة لغاية'] = f"{next_booking[0]} {next_booking[1]}"
-    
-    return available_df
-
-def get_periods_order():
-    """
-    جلب ترتيب الفترات من جدول الفترة
-    """
-    response = supabase.table('الفترة').select('namee, no').execute()
-    return {row['namee']: row['no'] for row in response.data}
+File "/mount/src/my-dashboard-app/app.py", line 815
+  elif page == "📍 الأعمدة المتاحة":
+  ^
+SyntaxError: invalid syntax
 # ============================================================
 # دوال مساعدة
 # ============================================================
@@ -717,100 +625,6 @@ if page == "🏢 لوحات الشركات":
 # ============================================================
 # صفحة: الأعمدة المتاحة
 # ============================================================
-from datetime import datetime
-
-# ==================== دوال المساعدة للفترات ====================
-MONTHS_AR = {
-    1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
-    5: "ايار", 6: "حزيران", 7: "تموز", 8: "اب",
-    9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
-}
-
-def convert_date_to_period_name(date):
-    """تحويل التاريخ إلى صيغة 'شهر 15-1' أو 'شهر 30-15'"""
-    month_name = MONTHS_AR[date.month]
-    if date.day <= 15:
-        return f"{month_name} 15-1"
-    else:
-        return f"{month_name} 30-15"
-
-def get_periods_order():
-    """جلب ترتيب الفترات من جدول الفترة (no من 1 إلى 24)"""
-    try:
-        response = supabase.table('الفترة').select('namee, no').execute()
-        return {row['namee']: row['no'] for row in response.data}
-    except Exception as e:
-        st.error(f"خطأ في جلب الفترات: {e}")
-        return {}
-
-def get_all_boards():
-    """جلب جميع الأعمدة من جدول اعمدة انارة"""
-    response = supabase.table('اعمدة انارة').select('*').execute()
-    return pd.DataFrame(response.data)
-
-def get_available_boards_from_date(start_date):
-    """
-    المستوى 1: اللوحات المتاحة ابتداءً من start_date
-    المتاح = لا يوجد حجز في نفس الفترة
-    """
-    target_period = convert_date_to_period_name(start_date)
-    target_year = start_date.year
-    
-    # جلب أرقام اللوحات المحجوزة في تلك الفترة
-    response = supabase.table('حجوزات1')\
-        .select('رقم اللوحة')\
-        .eq('فترة الحجز', target_period)\
-        .eq('العام', target_year)\
-        .execute()
-    
-    booked_board_ids = [row['رقم اللوحة'] for row in response.data]
-    
-    # جلب جميع الأعمدة
-    all_boards_df = get_all_boards()
-    
-    # فلترة الأعمدة غير المحجوزة
-    available_df = all_boards_df[~all_boards_df['رقم اللوحة'].isin(booked_board_ids)]
-    
-    return available_df
-
-def get_available_boards_with_next_booking(start_date):
-    """المستوى 2: اللوحات المتاحة + أول تاريخ حجز مستقبلي"""
-    available_df = get_available_boards_from_date(start_date)
-    
-    if available_df.empty:
-        return available_df
-    
-    available_df['متاحة لغاية'] = None
-    
-    periods_order = get_periods_order()
-    current_period = convert_date_to_period_name(start_date)
-    current_period_index = periods_order.get(current_period, 0)
-    
-    for idx, row in available_df.iterrows():
-        board_id = row['رقم اللوحة']
-        
-        # جلب جميع حجوزات هذه اللوحة
-        response = supabase.table('حجوزات1')\
-            .select('فترة الحجز, العام')\
-            .eq('رقم اللوحة', int(board_id))\
-            .execute()
-        
-        future_periods = []
-        for booking in response.data:
-            period = booking['فترة الحجز']
-            year = booking['العام']
-            period_index = periods_order.get(period, 0)
-            
-            if year > start_date.year or (year == start_date.year and period_index > current_period_index):
-                future_periods.append((period, year, period_index))
-        
-        if future_periods:
-            next_booking = min(future_periods, key=lambda x: (x[1], x[2]))
-            available_df.at[idx, 'متاحة لغاية'] = f"{next_booking[0]} {next_booking[1]}"
-    
-    return available_df
-
-
 # ==================== صفحة الأعمدة المتاحة ====================
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
@@ -907,7 +721,6 @@ elif page == "📍 الأعمدة المتاحة":
         if st.button("🔙 العودة إلى قائمة المحافظات", key="back_to_cities"):
             st.session_state['show_city_details'] = False
             st.rerun()
-
 
 
 elif page == "📊 Dashboard":
