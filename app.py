@@ -18,6 +18,7 @@ import plotly.express as px
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from supabase import create_client
+from datetime import datetime
 #============================================================
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
