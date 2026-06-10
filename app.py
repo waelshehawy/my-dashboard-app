@@ -640,49 +640,87 @@ elif page == "📍 الأعمدة المتاحة":
         include_future = st.checkbox("✅ تضمين الأعمدة التي ستصبح متاحة مستقبلاً", value=True)
     
     # حساب تواريخ انتهاء الحجوزات
-    def get_available_with_date_filter(start_date, include_future):
-        """جلب الأعمدة المتاحة بناءً على تاريخ البدء"""
-        conn = get_connection()
-        
-        # استعلام لجلب الحجوزات التي تنتهي بعد تاريخ البدء
-        query = f'''
-            SELECT DISTINCT "رقم اللوحة", "تاريخ النهاية"
-            FROM "حجوزات1"
-            WHERE "تاريخ النهاية" >= '{start_date}' OR "تاريخ النهاية" IS NULL
-        '''
-        
-        if not include_future:
-            query = f'''
-                SELECT DISTINCT "رقم اللوحة", "تاريخ النهاية"
-                FROM "حجوزات1"
-                WHERE "تاريخ النهاية" < '{start_date}'
-            '''
-        
-        booked_df = pd.read_sql_query(query, conn) if include_future else pd.DataFrame()
-        
-        if not booked_df.empty:
-            booked_boards = booked_df['رقم اللوحة'].tolist()
-        else:
-            booked_boards = []
-        
+def get_available_with_date_filter(start_date, include_future):
+    """جلب الأعمدة المتاحة بناءً على تاريخ البدء (بدون تعديل الجدول)"""
+    conn = get_connection()
+    
+    # جلب جميع الحجوزات
+    all_bookings = pd.read_sql_query('SELECT * FROM "حجوزات1"', conn)
+    
+    if all_bookings.empty:
+        conn.close()
         all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
         conn.close()
+        return all_columns
+    
+    # ============================================================
+    # حساب تاريخ النهاية لكل رقم حجز (في الذاكرة، بدون تعديل قاعدة البيانات)
+    # ============================================================
+    
+    def period_to_date(period, year):
+        """تحويل اسم الفترة إلى تاريخ تقريبي (اليوم الأول من الشهر)"""
+        month_map = {
+            'كانون الثاني': 1, 'كانون ثاني': 1,
+            'شباط': 2, 'آذار': 3, 'نيسان': 4,
+            'أيار': 5, 'حزيران': 6, 'تموز': 7,
+            'آب': 8, 'أيلول': 9, 'تشرين الأول': 10,
+            'تشرين الثاني': 11, 'كانون الأول': 12
+        }
         
-        # تصفية المتاحة
-        available = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
+        for month_name, month_num in month_map.items():
+            if month_name in period:
+                return date(year, month_num, 1)
+        return date(year, 12, 1)
+    
+    # تجميع حسب رقم الحجز وإيجاد أقصى تاريخ
+    booking_end_dates = {}
+    for _, row in all_bookings.iterrows():
+        booking_id = row['رقم الححز']
+        board_id = row['رقم اللوحة']
+        end_date = period_to_date(row['فترة الحجز'], row['العام'])
         
-        # تصنيف حسب الحجم
-        def classify_size_for_card(size):
-            size_str = str(size).strip()
-            if size_str in ['2*1', '2x1', '2 × 1']:
-                return 'أعمدة إنارة (2×1)'
-            elif size_str in ['125*185', '125x185', '125 × 185']:
-                return 'منصفات (125×185)'
-            else:
-                return 'أحجام أخرى'
-        
-        available['size_group'] = available['الحجم'].apply(classify_size_for_card)
-        return available
+        if booking_id not in booking_end_dates:
+            booking_end_dates[booking_id] = {
+                'رقم اللوحة': board_id,
+                'تاريخ_النهاية': end_date
+            }
+        else:
+            if end_date > booking_end_dates[booking_id]['تاريخ_النهاية']:
+                booking_end_dates[booking_id]['تاريخ_النهاية'] = end_date
+    
+    # تحويل إلى DataFrame
+    bookings_with_end = pd.DataFrame([
+        {'رقم اللوحة': v['رقم اللوحة'], 'تاريخ_النهاية': v['تاريخ_النهاية']}
+        for v in booking_end_dates.values()
+    ])
+    
+    # تصفية الحجوزات النشطة
+    if include_future:
+        active_bookings = bookings_with_end[bookings_with_end['تاريخ_النهاية'] >= start_date]
+    else:
+        active_bookings = bookings_with_end[bookings_with_end['تاريخ_النهاية'] < start_date]
+    
+    booked_boards = active_bookings['رقم اللوحة'].tolist()
+    
+    # جلب جميع الأعمدة
+    all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
+    conn.close()
+    
+    # تصفية المتاحة
+    available = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
+    
+    # تصنيف حسب الحجم للبطاقات
+    def classify_size_for_card(size):
+        size_str = str(size).strip()
+        if size_str in ['2*1', '2x1', '2 × 1']:
+            return 'أعمدة إنارة (2×1)'
+        elif size_str in ['125*185', '125x185', '125 × 185']:
+            return 'منصفات (125×185)'
+        else:
+            return 'أحجام أخرى'
+    
+    available['size_group'] = available['الحجم'].apply(classify_size_for_card)
+    return available
     
     # ============================================================
     # الأعمدة المتاحة حالياً (حسب الفلتر)
@@ -733,40 +771,29 @@ elif page == "📍 الأعمدة المتاحة":
         st.subheader("📅 اللوحات التي ستصبح متاحة قريباً")
         
         # حساب أول يوم من الشهر القادم
-        today = date.today()
-        if today.month == 12:
-            next_month = date(today.year + 1, 1, 1)
-        else:
-            next_month = date(today.year, today.month + 1, 1)
-        
-        # جلب الحجوزات التي تنتهي قبل أول الشهر القادم
-        conn = get_connection()
-        upcoming_query = f'''
-            SELECT DISTINCT 
-                h."رقم اللوحة",
-                h."اسم الزبون",
-                h."تاريخ النهاية",
-                b."اسم العمود",
-                b."المحافظة",
-                b."الشبكة",
-                b."الحجم",
-                b."العدد",
-                b."Latitude",
-                b."Longitude"
-            FROM "حجوزات1" h
-            INNER JOIN "اعمدة انارة" b ON CAST(h."رقم اللوحة" AS TEXT) = CAST(b."رقم اللوحة" AS TEXT)
-            WHERE h."تاريخ النهاية" < '{next_month}'
-            AND h."تاريخ النهاية" >= '{today}'
-            ORDER BY h."تاريخ النهاية"
-        '''
-        
-        upcoming_boards = pd.read_sql_query(upcoming_query, conn)
-        conn.close()
-        
-        if not upcoming_boards.empty:
-            # إحصائيات سريعة
-            total_upcoming = len(upcoming_boards)
-            unique_cities = upcoming_boards['المحافظة'].nunique()
+# حساب أول يوم من الشهر القادم
+today = date.today()
+if today.month == 12:
+    next_month = date(today.year + 1, 1, 1)
+else:
+    next_month = date(today.year, today.month + 1, 1)
+
+# استخدام نفس منطق حساب تاريخ النهاية
+bookings_with_end['تاريخ_النهاية'] = pd.to_datetime(bookings_with_end['تاريخ_النهاية'])
+
+upcoming = bookings_with_end[
+    (bookings_with_end['تاريخ_النهاية'] < pd.Timestamp(next_month)) &
+    (bookings_with_end['تاريخ_النهاية'] >= pd.Timestamp(today))
+]
+
+if not upcoming.empty:
+    # جلب معلومات الأعمدة
+    conn = get_connection()
+    columns_info = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
+    conn.close()
+    
+    upcoming_boards = upcoming.merge(columns_info, on='رقم اللوحة', how='left')
+    # ... باقي الكود كما هو ...
             
             st.success(f"📊 {total_upcoming} لوحة ستصبح متاحة في أول الشهر القادم (في {unique_cities} محافظة)")
             
