@@ -614,240 +614,73 @@ if page == "🏢 لوحات الشركات":
             st.session_state['show_company_map'] = False
             st.rerun()
 # ============================================================
-# صفحة: الأعمدة المتاحة (مع فلتر تاريخ وتقرير المتاح قريباً)
+# صفحة: الأعمدة المتاحة
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 اختر محافظة لعرض الأعمدة المتاحة فيها مع خريطة تفاعلية")
+    st.info("📌 اختر محافظة لعرض الأعمدة المتاحة فيها")
     
     # ============================================================
-    # فلتر تاريخ البداية
+    # جلب البيانات
     # ============================================================
     
-    st.subheader("📅 فلتر تاريخ بداية الإتاحة")
-    
-    col_date1, col_date2 = st.columns([2, 1])
-    with col_date1:
-        start_date = st.date_input(
-            "عرض الأعمدة المتاحة من تاريخ:",
-            value=date.today(),
-            help="اختر التاريخ الذي تبدأ منه فترة الإتاحة"
-        )
-    with col_date2:
-        st.write("")
-        st.write("")
-        include_future = st.checkbox("✅ تضمين الأعمدة التي ستصبح متاحة مستقبلاً", value=True)
-    
-    # حساب تواريخ انتهاء الحجوزات
-def get_available_with_date_filter(start_date, include_future):
-    """جلب الأعمدة المتاحة بناءً على تاريخ البدء (بدون تعديل الجدول)"""
     conn = get_connection()
     
-    # جلب جميع الحجوزات
-    all_bookings = pd.read_sql_query('SELECT * FROM "حجوزات1"', conn)
-    
-    if all_bookings.empty:
-        conn.close()
-        all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
-        conn.close()
-        return all_columns
-    
-    # ============================================================
-    # حساب تاريخ النهاية لكل رقم حجز (في الذاكرة، بدون تعديل قاعدة البيانات)
-    # ============================================================
-    
-    def period_to_date(period, year):
-        """تحويل اسم الفترة إلى تاريخ تقريبي (اليوم الأول من الشهر)"""
-        month_map = {
-            'كانون الثاني': 1, 'كانون ثاني': 1,
-            'شباط': 2, 'آذار': 3, 'نيسان': 4,
-            'أيار': 5, 'حزيران': 6, 'تموز': 7,
-            'آب': 8, 'أيلول': 9, 'تشرين الأول': 10,
-            'تشرين الثاني': 11, 'كانون الأول': 12
-        }
-        
-        for month_name, month_num in month_map.items():
-            if month_name in period:
-                return date(year, month_num, 1)
-        return date(year, 12, 1)
-    
-    # تجميع حسب رقم الحجز وإيجاد أقصى تاريخ
-    booking_end_dates = {}
-    for _, row in all_bookings.iterrows():
-        booking_id = row['رقم الححز']
-        board_id = row['رقم اللوحة']
-        end_date = period_to_date(row['فترة الحجز'], row['العام'])
-        
-        if booking_id not in booking_end_dates:
-            booking_end_dates[booking_id] = {
-                'رقم اللوحة': board_id,
-                'تاريخ_النهاية': end_date
-            }
-        else:
-            if end_date > booking_end_dates[booking_id]['تاريخ_النهاية']:
-                booking_end_dates[booking_id]['تاريخ_النهاية'] = end_date
-    
-    # تحويل إلى DataFrame
-    bookings_with_end = pd.DataFrame([
-        {'رقم اللوحة': v['رقم اللوحة'], 'تاريخ_النهاية': v['تاريخ_النهاية']}
-        for v in booking_end_dates.values()
-    ])
-    
-    # تصفية الحجوزات النشطة
-    if include_future:
-        active_bookings = bookings_with_end[bookings_with_end['تاريخ_النهاية'] >= start_date]
-    else:
-        active_bookings = bookings_with_end[bookings_with_end['تاريخ_النهاية'] < start_date]
-    
-    booked_boards = active_bookings['رقم اللوحة'].tolist()
+    # جلب الحجوزات النشطة للسنة الحالية
+    current_year = datetime.now().year
+    booked_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {current_year}'
+    booked_df = pd.read_sql_query(booked_query, conn)
+    booked_boards = booked_df['رقم اللوحة'].tolist() if not booked_df.empty else []
     
     # جلب جميع الأعمدة
     all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
     conn.close()
     
     # تصفية المتاحة
-    available = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
-    
-    # تصنيف حسب الحجم للبطاقات
-    def classify_size_for_card(size):
-        size_str = str(size).strip()
-        if size_str in ['2*1', '2x1', '2 × 1']:
-            return 'أعمدة إنارة (2×1)'
-        elif size_str in ['125*185', '125x185', '125 × 185']:
-            return 'منصفات (125×185)'
-        else:
-            return 'أحجام أخرى'
-    
-    available['size_group'] = available['الحجم'].apply(classify_size_for_card)
-    return available
-    
-    # ============================================================
-    # الأعمدة المتاحة حالياً (حسب الفلتر)
-    # ============================================================
-    
-    available_data = get_available_with_date_filter(start_date, include_future)
+    available_data = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
     
     if available_data.empty:
-        st.warning("⚠️ لا توجد أعمدة متاحة في الفترة المحددة")
-    else:
-        cities = available_data['المحافظة'].unique()
-        
-        # عرض بطاقات المحافظات
-        cols_per_row = 3
-        for i in range(0, len(cities), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j, col in enumerate(cols):
-                if i + j < len(cities):
-                    city = cities[i + j]
-                    city_data = available_data[available_data['المحافظة'] == city]
-                    total_boards = city_data['العدد'].sum()
-                    total_sites = len(city_data)
-                    unique_sizes = city_data['الحجم'].nunique()
-                    
-                    with col:
-                        st.markdown(f"""
-                        <div class="neumorphic-card" style="text-align: center; cursor: pointer;">
-                            <div style="font-size: 48px;">🏙️</div>
-                            <h3>{city}</h3>
-                            <div style="display: flex; justify-content: center; gap: 15px; margin: 10px 0;">
-                                {badge_animated(f"{int(total_boards)} عمود", "info")}
-                                {badge_animated(f"{total_sites} موقع", "success")}
-                                {badge_animated(f"{unique_sizes} حجم", "warning")}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
-                            st.session_state['selected_city'] = city
-                            st.session_state['show_city_details'] = True
-                            st.rerun()
-        
-        # ============================================================
-        # تقرير: اللوحات التي ستصبح متاحة في أول الشهر القادم
-        # ============================================================
-        
-        # ============================================================
-        # تقرير: اللوحات التي ستصبح متاحة في أول الشهر القادم
-        # ============================================================
-        
-        st.divider()
-        st.subheader("📅 اللوحات التي ستصبح متاحة قريباً")
-        
-        # حساب أول يوم من الشهر القادم
-        today = date.today()
-        if today.month == 12:
-            next_month = date(today.year + 1, 1, 1)
-        else:
-            next_month = date(today.year, today.month + 1, 1)
-        
-        # جلب الحجوزات التي ستنتهي قبل أول الشهر القادم
-        conn = get_connection()
-        upcoming_query = f'''
-            SELECT DISTINCT 
-                h."رقم اللوحة",
-                h."اسم الزبون",
-                h."العام",
-                h."فترة الحجز",
-                b."اسم العمود",
-                b."المحافظة",
-                b."الشبكة",
-                b."الحجم",
-                b."العدد",
-                b."Latitude",
-                b."Longitude"
-            FROM "حجوزات1" h
-            INNER JOIN "اعمدة انارة" b ON CAST(h."رقم اللوحة" AS TEXT) = CAST(b."رقم اللوحة" AS TEXT)
-            ORDER BY h."العام", h."فترة الحجز"
-        '''
-        
-        upcoming_boards = pd.read_sql_query(upcoming_query, conn)
-        conn.close()
-        
-        if not upcoming_boards.empty:
-            total_upcoming = len(upcoming_boards)
-            unique_cities = upcoming_boards['المحافظة'].nunique()
-            
-            st.success(f"📊 {total_upcoming} لوحة ستصبح متاحة في أول الشهر القادم (في {unique_cities} محافظة)")
-            
-            with st.expander(f"🏙️ جميع المحافظات - {total_upcoming} لوحة قادمة", expanded=False):
-                # عرض ملخص حسب المحافظة
-                city_summary = upcoming_boards.groupby('المحافظة').agg({
-                    'رقم اللوحة': 'count',
-                    'العدد': 'sum'
-                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد اللوحات'})
-                
-                st.dataframe(city_summary, use_container_width=True)
-                
-                # عرض الخريطة
-                valid_coords = upcoming_boards[
-                    upcoming_boards['Latitude'].notna() & 
-                    (upcoming_boards['Latitude'] != 0)
-                ]
-                
-                if not valid_coords.empty:
-                    st.subheader("🗺️ خريطة المواقع التي ستصبح متاحة")
-                    m = folium.Map(location=[34.8, 38.9], zoom_start=7)
-                    
-                    for _, row in valid_coords.iterrows():
-                        folium.Marker(
-                            [row['Latitude'], row['Longitude']],
-                            popup=f"{row['اسم العمود']}<br>{row['المحافظة']}",
-                            icon=folium.Icon(color='orange', icon='clock')
-                        ).add_to(m)
-                    
-                    st_folium(m, width="100%", height=400)
-                
-                # عرض القائمة
-                st.dataframe(
-                    upcoming_boards[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'اسم الزبون']],
-                    use_container_width=True
-                )
-        else:
-            st.info("ℹ️ لا توجد لوحات ستصبح متاحة في الشهر القادم")
+        st.warning("⚠️ لا توجد أعمدة متاحة حالياً")
+        st.stop()
     
     # ============================================================
-    # تفاصيل المحافظة المختارة (نفس الكود السابق)
+    # عرض بطاقات المحافظات
+    # ============================================================
+    
+    cities = available_data['المحافظة'].unique()
+    
+    cols_per_row = 3
+    for i in range(0, len(cities), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, col in enumerate(cols):
+            if i + j < len(cities):
+                city = cities[i + j]
+                city_data = available_data[available_data['المحافظة'] == city]
+                total_boards = city_data['العدد'].sum()
+                total_sites = len(city_data)
+                unique_sizes = city_data['الحجم'].nunique()
+                
+                with col:
+                    st.markdown(f"""
+                    <div style="background: white; border-radius: 20px; padding: 20px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        <div style="font-size: 48px;">🏙️</div>
+                        <h3>{city}</h3>
+                        <div style="display: flex; justify-content: center; gap: 10px; margin: 10px 0;">
+                            <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px;">{int(total_boards)} عمود</span>
+                            <span style="background: #11998e; color: white; padding: 4px 12px; border-radius: 20px;">{total_sites} موقع</span>
+                            <span style="background: #fa709a; color: white; padding: 4px 12px; border-radius: 20px;">{unique_sizes} حجم</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"📋 استكشاف {city}", key=f"city_{city}", use_container_width=True):
+                        st.session_state['selected_city'] = city
+                        st.session_state['show_city_details'] = True
+                        st.rerun()
+    
+    # ============================================================
+    # تفاصيل المحافظة المختارة
     # ============================================================
     
     if st.session_state.get('show_city_details', False):
@@ -857,30 +690,58 @@ def get_available_with_date_filter(start_date, include_future):
         st.divider()
         st.subheader(f"📍 محافظة {city}")
         
-        for size_name in ['أعمدة إنارة (2×1)', 'منصفات (125×185)', 'أحجام أخرى']:
-            group_data = city_data[city_data['size_group'] == size_name]
-            if not group_data.empty:
-                total = group_data['العدد'].sum()
-                with st.expander(f"📏 {size_name} - {int(total)} عمود", expanded=True):
-                    valid_coords = filter_valid_coordinates(group_data)
-                    if not valid_coords.empty:
-                        m = folium.Map(location=[34.8, 38.9], zoom_start=8)
-                        for _, row in valid_coords.iterrows():
-                            folium.Marker(
-                                [row['Latitude'], row['Longitude']],
-                                popup=f"<b>{row['اسم العمود']}</b><br>{row['الشبكة']}<br>{row['الحجم']}",
-                                icon=folium.Icon(color='green', icon='info-sign')
-                            ).add_to(m)
-                        st_folium(m, width="100%", height=400)
-                    
-                    st.dataframe(group_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
-            else:
-                with st.expander(f"📏 {size_name}"):
-                    st.info("لا توجد أعمدة في هذه الفئة")
+        # تجميع حسب الحجم
+        for size in city_data['الحجم'].unique():
+            group_data = city_data[city_data['الحجم'] == size]
+            total = group_data['العدد'].sum()
+            
+            with st.expander(f"📏 {size} - {int(total)} عمود", expanded=True):
+                # عرض الخريطة إذا وجدت إحداثيات
+                has_coords = group_data['Latitude'].notna() & (group_data['Latitude'] != 0)
+                if has_coords.any():
+                    m = folium.Map(location=[34.8, 38.9], zoom_start=8)
+                    for _, row in group_data[has_coords].iterrows():
+                        folium.Marker(
+                            [row['Latitude'], row['Longitude']],
+                            popup=row['اسم العمود']
+                        ).add_to(m)
+                    st_folium(m, width="100%", height=300)
+                
+                st.dataframe(group_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'العدد']], use_container_width=True)
         
         if st.button("🔙 العودة إلى قائمة المحافظات", key="back_to_cities"):
             st.session_state['show_city_details'] = False
             st.rerun()
+    
+    # ============================================================
+    # تقرير: اللوحات التي ستصبح متاحة قريباً (تبسيط)
+    # ============================================================
+    
+    st.divider()
+    st.subheader("📅 اللوحات التي ستصبح متاحة قريباً")
+    
+    # جلب الحجوزات من العام الماضي (المنتهية)
+    last_year = current_year - 1
+    past_query = f'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = {last_year}'
+    past_df = pd.read_sql_query(past_query, conn)
+    past_boards = past_df['رقم اللوحة'].tolist() if not past_df.empty else []
+    
+    # الأعمدة التي كانت محجوزة سابقاً وأصبحت متاحة
+    upcoming_boards = [b for b in past_boards if b not in booked_boards]
+    
+    if upcoming_boards:
+        st.success(f"📊 {len(upcoming_boards)} لوحة أصبحت متاحة (كانت محجوزة في {last_year})")
+        
+        # جلب تفاصيل هذه الأعمدة
+        upcoming_df = all_columns[all_columns['رقم اللوحة'].isin(upcoming_boards)]
+        
+        with st.expander(f"🏙️ جميع المحافظات - {len(upcoming_boards)} لوحة", expanded=False):
+            # عرض ملخص حسب المحافظة
+            city_summary = upcoming_df.groupby('المحافظة').size().reset_index(name='العدد')
+            st.dataframe(city_summary, use_container_width=True)
+            st.dataframe(upcoming_df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم']], use_container_width=True)
+    else:
+        st.info("ℹ️ لا توجد لوحات جديدة متاحة")
 
 elif page == "📊 Dashboard":
     st.markdown("""
