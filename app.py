@@ -725,7 +725,7 @@ elif page == "📍 الأعمدة المتاحة":
     with col_date:
         start_date = st.date_input(
             "📅 ابتداءً من تاريخ",
-            value=datetime.today(),
+            value=datetime.now().date(),
             help="اختر التاريخ الذي تريد بدء الإيجار منه"
         )
     with col_btn:
