@@ -717,10 +717,105 @@ if page == "🏢 لوحات الشركات":
 # ============================================================
 # صفحة: الأعمدة المتاحة
 # ============================================================
+from datetime import datetime
+
+# ==================== دوال المساعدة للفترات ====================
+MONTHS_AR = {
+    1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
+    5: "ايار", 6: "حزيران", 7: "تموز", 8: "اب",
+    9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
+}
+
+def convert_date_to_period_name(date):
+    """تحويل التاريخ إلى صيغة 'شهر 15-1' أو 'شهر 30-15'"""
+    month_name = MONTHS_AR[date.month]
+    if date.day <= 15:
+        return f"{month_name} 15-1"
+    else:
+        return f"{month_name} 30-15"
+
+def get_periods_order():
+    """جلب ترتيب الفترات من جدول الفترة (no من 1 إلى 24)"""
+    try:
+        response = supabase.table('الفترة').select('namee, no').execute()
+        return {row['namee']: row['no'] for row in response.data}
+    except Exception as e:
+        st.error(f"خطأ في جلب الفترات: {e}")
+        return {}
+
+def get_all_boards():
+    """جلب جميع الأعمدة من جدول اعمدة انارة"""
+    response = supabase.table('اعمدة انارة').select('*').execute()
+    return pd.DataFrame(response.data)
+
+def get_available_boards_from_date(start_date):
+    """
+    المستوى 1: اللوحات المتاحة ابتداءً من start_date
+    المتاح = لا يوجد حجز في نفس الفترة
+    """
+    target_period = convert_date_to_period_name(start_date)
+    target_year = start_date.year
+    
+    # جلب أرقام اللوحات المحجوزة في تلك الفترة
+    response = supabase.table('حجوزات1')\
+        .select('رقم اللوحة')\
+        .eq('فترة الحجز', target_period)\
+        .eq('العام', target_year)\
+        .execute()
+    
+    booked_board_ids = [row['رقم اللوحة'] for row in response.data]
+    
+    # جلب جميع الأعمدة
+    all_boards_df = get_all_boards()
+    
+    # فلترة الأعمدة غير المحجوزة
+    available_df = all_boards_df[~all_boards_df['رقم اللوحة'].isin(booked_board_ids)]
+    
+    return available_df
+
+def get_available_boards_with_next_booking(start_date):
+    """المستوى 2: اللوحات المتاحة + أول تاريخ حجز مستقبلي"""
+    available_df = get_available_boards_from_date(start_date)
+    
+    if available_df.empty:
+        return available_df
+    
+    available_df['متاحة لغاية'] = None
+    
+    periods_order = get_periods_order()
+    current_period = convert_date_to_period_name(start_date)
+    current_period_index = periods_order.get(current_period, 0)
+    
+    for idx, row in available_df.iterrows():
+        board_id = row['رقم اللوحة']
+        
+        # جلب جميع حجوزات هذه اللوحة
+        response = supabase.table('حجوزات1')\
+            .select('فترة الحجز, العام')\
+            .eq('رقم اللوحة', int(board_id))\
+            .execute()
+        
+        future_periods = []
+        for booking in response.data:
+            period = booking['فترة الحجز']
+            year = booking['العام']
+            period_index = periods_order.get(period, 0)
+            
+            if year > start_date.year or (year == start_date.year and period_index > current_period_index):
+                future_periods.append((period, year, period_index))
+        
+        if future_periods:
+            next_booking = min(future_periods, key=lambda x: (x[1], x[2]))
+            available_df.at[idx, 'متاحة لغاية'] = f"{next_booking[0]} {next_booking[1]}"
+    
+    return available_df
+
+
+# ==================== صفحة الأعمدة المتاحة ====================
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
     
-    # ==================== فلتر التاريخ ====================
+    # فلتر التاريخ
     col_date, col_btn = st.columns([3, 1])
     with col_date:
         start_date = st.date_input(
@@ -732,7 +827,7 @@ elif page == "📍 الأعمدة المتاحة":
         st.markdown("<br>", unsafe_allow_html=True)
         show_advanced = st.checkbox("🔍 إظهار المتاحة لغاية تاريخ", value=False)
     
-    # ==================== جلب البيانات حسب التاريخ ====================
+    # جلب البيانات حسب التاريخ
     with st.spinner("جاري تحميل الأعمدة المتاحة..."):
         if show_advanced:
             available_data = get_available_boards_with_next_booking(start_date)
@@ -743,10 +838,11 @@ elif page == "📍 الأعمدة المتاحة":
         st.warning(f"⚠️ لا توجد أعمدة متاحة ابتداءً من تاريخ {start_date.strftime('%Y-%m-%d')}")
         st.stop()
     
-    # ==================== عرض الإحصائيات ====================
-    st.info(f"📊 عدد الأعمدة المتاحة: **{len(available_data)}** عمود (من أصل {len(all_boards_df)} عمود)")
+    # إحصائيات
+    total_boards = len(get_all_boards())
+    st.info(f"📊 عدد الأعمدة المتاحة: **{len(available_data)}** عمود (من أصل **{total_boards}** عمود)")
     
-    # ==================== عرض المدن ====================
+    # عرض المدن
     cities = available_data['المحافظة'].unique()
     
     cols_per_row = 3
@@ -776,7 +872,7 @@ elif page == "📍 الأعمدة المتاحة":
                         st.session_state['show_city_details'] = True
                         st.rerun()
     
-    # ==================== تفاصيل المدينة المختارة ====================
+    # تفاصيل المدينة المختارة
     if st.session_state.get('show_city_details', False):
         city = st.session_state['selected_city']
         city_data = available_data[available_data['المحافظة'] == city]
@@ -784,7 +880,6 @@ elif page == "📍 الأعمدة المتاحة":
         st.divider()
         st.subheader(f"📍 محافظة {city}")
         
-        # تجميع حسب الحجم
         for size_name in city_data['الحجم'].unique():
             group_data = city_data[city_data['الحجم'] == size_name]
             with st.expander(f"📏 {size_name} - {len(group_data)} عمود", expanded=True):
