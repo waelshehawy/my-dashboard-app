@@ -742,66 +742,36 @@ elif page == "📍 الأعمدة المتاحة":
     bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
     
     # دالة تحديد الحالة (مصححة)
-    def get_board_status(board_id):
-        board_bookings = bookings_df[bookings_df['رقم اللوحة'] == str(board_id)]
-        
-        if board_bookings.empty:
-            return '🟢 متاح فوراً'
-        
-        has_current_booking = False
-        has_future_booking = False
-        
-        for _, row in board_bookings.iterrows():
-            if row['العام'] > target_year:
-                has_future_booking = True
-            elif row['العام'] == target_year:
-                if row['period_num'] == target_period_num:
-                    has_current_booking = True
-                elif row['period_num'] > target_period_num:
-                    has_future_booking = True
-        
-        if has_current_booking:
-            if has_future_booking:
-                return '🔴 محجوز بالكامل'
-            else:
-                return '🟠 محجوز حالياً (سيُتاح بعد هذه الفترة)'
-        elif has_future_booking:
-            return '🟡 متاح حالياً (سيُحجز لاحقاً)'
+def get_board_status(board_id):
+    """تحديد حالة اللوحة"""
+    board_bookings = bookings_df[bookings_df['رقم اللوحة'] == str(board_id)]
+    
+    if board_bookings.empty:
+        return '🟢 متاح فوراً'
+    
+    # آخر فترة حجز للوحة
+    max_period = board_bookings['period_num'].max()
+    max_year = board_bookings[board_bookings['period_num'] == max_period]['العام'].max()
+    
+    # أقل فترة مستقبلية (أكبر من الفترة الحالية)
+    future_bookings = board_bookings[
+        (board_bookings['العام'] > target_year) |
+        ((board_bookings['العام'] == target_year) & (board_bookings['period_num'] > target_period_num))
+    ]
+    
+    if max_period < target_period_num and max_year <= target_year:
+        # آخر حجز انتهى قبل الفترة الحالية
+        if not future_bookings.empty:
+            return '🟡 متاح مؤقتاً (سيُحجز لاحقاً)'
         else:
             return '🟢 متاح فوراً'
-    
-    # تطبيق الحالة
-    all_columns['status'] = all_columns['رقم اللوحة'].apply(get_board_status)
-    
-    # عرض الإحصائيات
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🟢 متاح فوراً", len(all_columns[all_columns['status'] == '🟢 متاح فوراً']))
-    col2.metric("🟡 متاح مؤقتاً", len(all_columns[all_columns['status'].str.startswith('🟡')]))
-    col3.metric("🟠 محجوز مؤقتاً", len(all_columns[all_columns['status'].str.startswith('🟠')]))
-    col4.metric("🔴 محجوز بالكامل", len(all_columns[all_columns['status'] == '🔴 محجوز بالكامل']))
-    
-    st.divider()
-    
-    # عرض حسب المحافظة
-    for city in all_columns['المحافظة'].unique():
-        city_data = all_columns[all_columns['المحافظة'] == city]
-        with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
-            st.dataframe(
-                city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
-                use_container_width=True
-            )
-    
-    # تصدير
-    csv_data = all_columns[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_csv(
-        index=False, encoding='utf-8-sig'
-    )
-    st.download_button(
-        "📥 تحميل التقرير (CSV)",
-        csv_data,
-        f"available_boards_{start_date.strftime('%Y%m%d')}.csv",
-        "text/csv",
-        use_container_width=True
-    )
+    else:
+        # آخر حجز لا يزال فعالاً (>= الفترة الحالية)
+        # التحقق مما إذا كان هناك حجز مستقبلي أيضاً
+        if not future_bookings.empty:
+            return '🔴 محجوز بالكامل'
+        else:
+            return '🟠 محجوز حالياً (سينتهي قريباً)'
 #=================
 # لوحة المراقبة
 #==================
