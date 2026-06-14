@@ -704,8 +704,9 @@ if page == "🏢 لوحات الشركات":
         if st.button("🔙 إغلاق الخريطة"):
             st.session_state['show_company_map'] = False
             st.rerun()
+
 # ============================================================
-# صفحة: الأعمدة المتاحة (مع ثلاث حالات)
+# صفحة: الأعمدة المتاحة (مع ثلاث حالات) - نسخة معدلة
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
@@ -739,41 +740,24 @@ elif page == "📍 الأعمدة المتاحة":
     # جلب جميع الأعمدة
     all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
     
-    # جلب الحجوزات مع أرقام الفترات
+    # جلب الحجوزات (بدون CASE، سنعالجها في Python)
     bookings_df = pd.read_sql_query("""
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-            CASE "فترة الحجز"
-                WHEN '1-15 كانون الثاني' THEN 1
-                WHEN '16-31 كانون الثاني' THEN 2
-                WHEN '1-15 شباط' THEN 3
-                WHEN '16-28 شباط' THEN 4
-                WHEN '1-15 آذار' THEN 5
-                WHEN '16-31 آذار' THEN 6
-                WHEN '1-15 نيسان' THEN 7
-                WHEN '16-30 نيسان' THEN 8
-                WHEN '1-15 أيار' THEN 9
-                WHEN '16-31 أيار' THEN 10
-                WHEN '1-15 حزيران' THEN 11
-                WHEN '16-30 حزيران' THEN 12
-                WHEN '1-15 تموز' THEN 13
-                WHEN '16-31 تموز' THEN 14
-                WHEN '1-15 آب' THEN 15
-                WHEN '16-31 آب' THEN 16
-                WHEN '1-15 أيلول' THEN 17
-                WHEN '16-30 أيلول' THEN 18
-                WHEN '1-15 تشرين الأول' THEN 19
-                WHEN '16-31 تشرين الأول' THEN 20
-                WHEN '1-15 تشرين الثاني' THEN 21
-                WHEN '16-30 تشرين الثاني' THEN 22
-                WHEN '1-15 كانون الأول' THEN 23
-                WHEN '16-31 كانون الأول' THEN 24
-            END as period_num,
+            "فترة الحجز",
             "العام"
         FROM "حجوزات1"
-        WHERE "العام" >= {target_year}
-    """, conn)
+        WHERE "العام" >= %s
+    """, conn, params=(target_year,))
+    
     conn.close()
+    
+    # ============================================================
+    # معالجة البيانات في Python (أكثر أماناً)
+    # ============================================================
+    
+    # إضافة رقم الفترة لكل حجز باستخدام الدالة
+    bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
     
     # ============================================================
     # حساب حالة كل لوحة
@@ -786,11 +770,11 @@ elif page == "📍 الأعمدة المتاحة":
         # تصفية الحجوزات من الفترة المستهدفة فصاعداً
         future_bookings = board_bookings[
             (board_bookings['العام'] > target_year) |
-            (board_bookings['العام'] == target_year) & (board_bookings['period_num'] >= target_period_num)
+            ((board_bookings['العام'] == target_year) & (board_bookings['period_num'] >= target_period_num))
         ]
         
         if future_bookings.empty:
-            return '🟢 متاح فوراً', 'success'
+            return '🟢 متاح فوراً'
         
         # هل هناك حجز في الفترة المستهدفة بالضبط؟
         current_booking = future_bookings[
@@ -799,16 +783,12 @@ elif page == "📍 الأعمدة المتاحة":
         ]
         
         if not current_booking.empty:
-            return '🔴 محجوز', 'danger'
+            return '🔴 محجوز'
         else:
-            # يوجد حجز في المستقبل ولكن ليس في الفترة الحالية
-            min_period = future_bookings['period_num'].min()
-            return f'🟡 متاح مؤقتاً (سيُحجز لاحقاً)', 'warning'
+            return '🟡 متاح مؤقتاً (سيُحجز لاحقاً)'
     
     # تطبيق الحالة على كل الأعمدة
-    all_columns['status'] = all_columns['رقم اللوحة'].apply(
-        lambda x: get_board_status(x)[0]
-    )
+    all_columns['status'] = all_columns['رقم اللوحة'].apply(get_board_status)
     
     # ============================================================
     # عرض الإحصائيات
@@ -828,7 +808,7 @@ elif page == "📍 الأعمدة المتاحة":
     st.divider()
     
     # ============================================================
-    # عرض البطاقات حسب المحافظة (مع التصنيف الجديد)
+    # عرض البطاقات حسب المحافظة
     # ============================================================
     
     for city in all_columns['المحافظة'].unique():
@@ -836,7 +816,7 @@ elif page == "📍 الأعمدة المتاحة":
         
         with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
             
-            # عرض إحصائيات سريعة للمدينة
+            # إحصائيات سريعة للمدينة
             city_available = len(city_data[city_data['status'] == '🟢 متاح فوراً'])
             city_temp = len(city_data[city_data['status'].str.contains('متاح مؤقتاً')])
             city_booked = len(city_data[city_data['status'] == '🔴 محجوز'])
@@ -869,6 +849,11 @@ elif page == "📍 الأعمدة المتاحة":
         "text/csv",
         use_container_width=True
     )
+
+#=================
+# لوحة المراقبة
+#==================
+
 elif page == "📊 Dashboard":
     st.markdown("""
     <div style="text-align: center; margin-bottom: 30px;">
