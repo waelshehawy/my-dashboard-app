@@ -763,46 +763,170 @@ elif page == "📍 الأعمدة المتاحة":
     # حساب حالة كل لوحة
     # ============================================================
     
-def get_board_status(board_id, target_period_num, target_year):
-    """تحديد حالة اللوحة (4 حالات)"""
-    board_bookings = bookings_df[bookings_df['رقم اللوحة'] == str(board_id)]
+# ============================================================
+# صفحة: الأعمدة المتاحة (4 حالات)
+# ============================================================
+
+elif page == "📍 الأعمدة المتاحة":
+    st.title("📍 الأعمدة المتاحة للإيجار")
+    st.info("📌 عرض الأعمدة حسب حالة الإتاحة")
     
-    # تصفية الحجوزات من الفترة المستهدفة فصاعداً
-    future_bookings = board_bookings[
-        (board_bookings['العام'] > target_year) |
-        ((board_bookings['العام'] == target_year) & (board_bookings['period_num'] >= target_period_num))
-    ]
+    # ============================================================
+    # فلتر تاريخ البداية
+    # ============================================================
     
-    if future_bookings.empty:
-        return '🟢 متاح فوراً'
+    st.subheader("📅 فلتر تاريخ بداية الإتاحة")
+    start_date = st.date_input(
+        "عرض الأعمدة المتاحة من تاريخ:",
+        value=date.today(),
+        help="اختر التاريخ الذي تبدأ منه فترة الإتاحة"
+    )
     
-    # هل يوجد حجز في الفترة الحالية؟
-    current_booking = future_bookings[
-        (future_bookings['العام'] == target_year) & 
-        (future_bookings['period_num'] == target_period_num)
-    ]
+    # ============================================================
+    # حساب الفترة المستهدفة
+    # ============================================================
     
-    # أصغر فترة مستقبلية (بعد الفترة الحالية)
-    future_only = future_bookings[
-        (future_bookings['العام'] == target_year) & 
-        (future_bookings['period_num'] > target_period_num)
-    ]
+    target_period_num = get_period_from_date(start_date)
+    target_year = start_date.year
     
-    if not current_booking.empty:
-        # يوجد حجز في الفترة الحالية
-        if future_only.empty:
-            # الحجز موجود فقط في الفترة الحالية (سينتهي بعد هذه الفترة)
-            return '🟠 محجوز حالياً (سيُتاح نهاية هذه الفترة)'
-        else:
-            # الحجز مستمر إلى فترات مستقبلية
-            return '🔴 محجوز بالكامل'
-    else:
-        # لا يوجد حجز في الفترة الحالية، ولكن يوجد في المستقبل
-        if not future_only.empty:
-            min_future_period = future_only['period_num'].min()
-            return f'🟡 متاح حالياً (سيُحجز من الفترة {min_future_period})'
-        else:
+    # ============================================================
+    # جلب البيانات من Supabase
+    # ============================================================
+    
+    conn = get_connection()
+    
+    # جلب جميع الأعمدة
+    all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
+    
+    # جلب الحجوزات
+    bookings_df = pd.read_sql_query("""
+        SELECT 
+            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
+            "فترة الحجز",
+            "العام"
+        FROM "حجوزات1"
+        WHERE "العام" >= %s
+    """, conn, params=(target_year,))
+    
+    conn.close()
+    
+    # ============================================================
+    # معالجة البيانات في Python
+    # ============================================================
+    
+    # إضافة رقم الفترة لكل حجز
+    bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
+    
+    # ============================================================
+    # دالة تحديد الحالة (4 حالات)
+    # ============================================================
+    
+    def get_board_status(board_id):
+        """تحديد حالة اللوحة (4 حالات)"""
+        board_bookings = bookings_df[bookings_df['رقم اللوحة'] == str(board_id)]
+        
+        # تصفية الحجوزات من الفترة المستهدفة فصاعداً
+        future_bookings = board_bookings[
+            (board_bookings['العام'] > target_year) |
+            ((board_bookings['العام'] == target_year) & (board_bookings['period_num'] >= target_period_num))
+        ]
+        
+        if future_bookings.empty:
             return '🟢 متاح فوراً'
+        
+        # هل يوجد حجز في الفترة الحالية؟
+        current_booking = future_bookings[
+            (future_bookings['العام'] == target_year) & 
+            (future_bookings['period_num'] == target_period_num)
+        ]
+        
+        # حجوزات مستقبلية فقط (بعد الفترة الحالية)
+        future_only = future_bookings[
+            (future_bookings['العام'] == target_year) & 
+            (future_bookings['period_num'] > target_period_num)
+        ]
+        
+        if not current_booking.empty:
+            if future_only.empty:
+                return '🟠 محجوز حالياً (سيُتاح بعد هذه الفترة)'
+            else:
+                return '🔴 محجوز بالكامل'
+        else:
+            if not future_only.empty:
+                min_future = future_only['period_num'].min()
+                period_names = {v: k for k, v in PERIOD_ORDER.items()}
+                period_name = period_names.get(min_future, str(min_future))
+                return f'🟡 متاح حالياً (سيُحجز من {period_name})'
+            else:
+                return '🟢 متاح فوراً'
+    
+    # تطبيق الحالة على جميع الأعمدة
+    all_columns['status'] = all_columns['رقم اللوحة'].apply(get_board_status)
+    
+    # ============================================================
+    # عرض الإحصائيات
+    # ============================================================
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        available_now = len(all_columns[all_columns['status'] == '🟢 متاح فوراً'])
+        st.metric("🟢 متاح فوراً", available_now)
+    with col2:
+        available_temp = len(all_columns[all_columns['status'].str.startswith('🟡')])
+        st.metric("🟡 متاح مؤقتاً", available_temp)
+    with col3:
+        booked_temp = len(all_columns[all_columns['status'].str.startswith('🟠')])
+        st.metric("🟠 محجوز مؤقتاً", booked_temp)
+    with col4:
+        booked_full = len(all_columns[all_columns['status'] == '🔴 محجوز بالكامل'])
+        st.metric("🔴 محجوز بالكامل", booked_full)
+    
+    st.divider()
+    
+    # ============================================================
+    # عرض حسب المحافظة
+    # ============================================================
+    
+    for city in all_columns['المحافظة'].unique():
+        city_data = all_columns[all_columns['المحافظة'] == city]
+        
+        with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
+            
+            # إحصائيات سريعة للمدينة
+            city_available = len(city_data[city_data['status'] == '🟢 متاح فوراً'])
+            city_available_temp = len(city_data[city_data['status'].str.startswith('🟡')])
+            city_booked_temp = len(city_data[city_data['status'].str.startswith('🟠')])
+            city_booked_full = len(city_data[city_data['status'] == '🔴 محجوز بالكامل'])
+            
+            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a.markdown(f"🟢 متاح: {city_available}")
+            col_b.markdown(f"🟡 مؤقتاً: {city_available_temp}")
+            col_c.markdown(f"🟠 محجوز مؤقتاً: {city_booked_temp}")
+            col_d.markdown(f"🔴 محجوز كلياً: {city_booked_full}")
+            
+            # عرض الجدول
+            st.dataframe(
+                city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
+                use_container_width=True,
+                column_config={
+                    'status': st.column_config.TextColumn('الحالة', width='medium')
+                }
+            )
+    
+    # ============================================================
+    # زر تصدير
+    # ============================================================
+    
+    csv_data = all_columns[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_csv(
+        index=False, encoding='utf-8-sig'
+    )
+    st.download_button(
+        "📥 تحميل التقرير (CSV)",
+        csv_data,
+        f"available_boards_{start_date.strftime('%Y%m%d')}.csv",
+        "text/csv",
+        use_container_width=True
+    )
     
     # ============================================================
     # عرض الإحصائيات
