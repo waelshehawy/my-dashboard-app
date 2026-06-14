@@ -763,32 +763,46 @@ elif page == "📍 الأعمدة المتاحة":
     # حساب حالة كل لوحة
     # ============================================================
     
-    def get_board_status(board_id):
-        """تحديد حالة اللوحة: متاح فوراً / متاح مؤقتاً / محجوز"""
-        board_bookings = bookings_df[bookings_df['رقم اللوحة'] == str(board_id)]
-        
-        # تصفية الحجوزات من الفترة المستهدفة فصاعداً
-        future_bookings = board_bookings[
-            (board_bookings['العام'] > target_year) |
-            ((board_bookings['العام'] == target_year) & (board_bookings['period_num'] >= target_period_num))
-        ]
-        
-        if future_bookings.empty:
-            return '🟢 متاح فوراً'
-        
-        # هل هناك حجز في الفترة المستهدفة بالضبط؟
-        current_booking = future_bookings[
-            (future_bookings['العام'] == target_year) & 
-            (future_bookings['period_num'] == target_period_num)
-        ]
-        
-        if not current_booking.empty:
-            return '🔴 محجوز'
-        else:
-            return '🟡 متاح مؤقتاً (سيُحجز لاحقاً)'
+def get_board_status(board_id, target_period_num, target_year):
+    """تحديد حالة اللوحة (4 حالات)"""
+    board_bookings = bookings_df[bookings_df['رقم اللوحة'] == str(board_id)]
     
-    # تطبيق الحالة على كل الأعمدة
-    all_columns['status'] = all_columns['رقم اللوحة'].apply(get_board_status)
+    # تصفية الحجوزات من الفترة المستهدفة فصاعداً
+    future_bookings = board_bookings[
+        (board_bookings['العام'] > target_year) |
+        ((board_bookings['العام'] == target_year) & (board_bookings['period_num'] >= target_period_num))
+    ]
+    
+    if future_bookings.empty:
+        return '🟢 متاح فوراً'
+    
+    # هل يوجد حجز في الفترة الحالية؟
+    current_booking = future_bookings[
+        (future_bookings['العام'] == target_year) & 
+        (future_bookings['period_num'] == target_period_num)
+    ]
+    
+    # أصغر فترة مستقبلية (بعد الفترة الحالية)
+    future_only = future_bookings[
+        (future_bookings['العام'] == target_year) & 
+        (future_bookings['period_num'] > target_period_num)
+    ]
+    
+    if not current_booking.empty:
+        # يوجد حجز في الفترة الحالية
+        if future_only.empty:
+            # الحجز موجود فقط في الفترة الحالية (سينتهي بعد هذه الفترة)
+            return '🟠 محجوز حالياً (سيُتاح نهاية هذه الفترة)'
+        else:
+            # الحجز مستمر إلى فترات مستقبلية
+            return '🔴 محجوز بالكامل'
+    else:
+        # لا يوجد حجز في الفترة الحالية، ولكن يوجد في المستقبل
+        if not future_only.empty:
+            min_future_period = future_only['period_num'].min()
+            return f'🟡 متاح حالياً (سيُحجز من الفترة {min_future_period})'
+        else:
+            return '🟢 متاح فوراً'
     
     # ============================================================
     # عرض الإحصائيات
