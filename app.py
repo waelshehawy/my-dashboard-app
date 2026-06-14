@@ -706,64 +706,6 @@ if page == "🏢 لوحات الشركات":
             st.rerun()
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (مع ثلاث حالات) - نسخة معدلة
-# ============================================================
-
-elif page == "📍 الأعمدة المتاحة":
-    st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة حسب حالة الإتاحة")
-    
-    # ============================================================
-    # فلتر تاريخ البداية
-    # ============================================================
-    
-    st.subheader("📅 فلتر تاريخ بداية الإتاحة")
-    start_date = st.date_input(
-        "عرض الأعمدة المتاحة من تاريخ:",
-        value=date.today(),
-        help="اختر التاريخ الذي تبدأ منه فترة الإتاحة"
-    )
-    
-    # ============================================================
-    # حساب الفترة المستهدفة
-    # ============================================================
-    
-    target_period_num = get_period_from_date(start_date)
-    target_year = start_date.year
-    
-    # ============================================================
-    # جلب البيانات من Supabase
-    # ============================================================
-    
-    conn = get_connection()
-    
-    # جلب جميع الأعمدة
-    all_columns = pd.read_sql_query('SELECT * FROM "اعمدة انارة"', conn)
-    
-    # جلب الحجوزات (بدون CASE، سنعالجها في Python)
-    bookings_df = pd.read_sql_query("""
-        SELECT 
-            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-            "فترة الحجز",
-            "العام"
-        FROM "حجوزات1"
-        WHERE "العام" >= %s
-    """, conn, params=(target_year,))
-    
-    conn.close()
-    
-    # ============================================================
-    # معالجة البيانات في Python (أكثر أماناً)
-    # ============================================================
-    
-    # إضافة رقم الفترة لكل حجز باستخدام الدالة
-    bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
-    
-    # ============================================================
-    # حساب حالة كل لوحة
-    # ============================================================
-    
-# ============================================================
 # صفحة: الأعمدة المتاحة (4 حالات)
 # ============================================================
 
@@ -910,66 +852,6 @@ elif page == "📍 الأعمدة المتاحة":
                 use_container_width=True,
                 column_config={
                     'status': st.column_config.TextColumn('الحالة', width='medium')
-                }
-            )
-    
-    # ============================================================
-    # زر تصدير
-    # ============================================================
-    
-    csv_data = all_columns[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_csv(
-        index=False, encoding='utf-8-sig'
-    )
-    st.download_button(
-        "📥 تحميل التقرير (CSV)",
-        csv_data,
-        f"available_boards_{start_date.strftime('%Y%m%d')}.csv",
-        "text/csv",
-        use_container_width=True
-    )
-    
-    # ============================================================
-    # عرض الإحصائيات
-    # ============================================================
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        available_now = len(all_columns[all_columns['status'] == '🟢 متاح فوراً'])
-        st.metric("✅ متاح فوراً", available_now)
-    with col2:
-        available_temp = len(all_columns[all_columns['status'].str.contains('متاح مؤقتاً')])
-        st.metric("🟡 متاح مؤقتاً", available_temp)
-    with col3:
-        booked = len(all_columns[all_columns['status'] == '🔴 محجوز'])
-        st.metric("🔴 محجوز", booked)
-    
-    st.divider()
-    
-    # ============================================================
-    # عرض البطاقات حسب المحافظة
-    # ============================================================
-    
-    for city in all_columns['المحافظة'].unique():
-        city_data = all_columns[all_columns['المحافظة'] == city]
-        
-        with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
-            
-            # إحصائيات سريعة للمدينة
-            city_available = len(city_data[city_data['status'] == '🟢 متاح فوراً'])
-            city_temp = len(city_data[city_data['status'].str.contains('متاح مؤقتاً')])
-            city_booked = len(city_data[city_data['status'] == '🔴 محجوز'])
-            
-            col_a, col_b, col_c = st.columns(3)
-            col_a.markdown(f"🟢 متاح: {city_available}")
-            col_b.markdown(f"🟡 مؤقتاً: {city_temp}")
-            col_c.markdown(f"🔴 محجوز: {city_booked}")
-            
-            # عرض الجدول
-            st.dataframe(
-                city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
-                use_container_width=True,
-                column_config={
-                    'status': st.column_config.TextColumn('الحالة', width='small')
                 }
             )
     
