@@ -727,12 +727,12 @@ if page == "🏢 لوحات الشركات":
             st.rerun()
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (4 حالات مع تواريخ)
+# صفحة: الأعمدة المتاحة (4 حالات مع إحصائيات اللوحات الفعلية)
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع تواريخ البدء/الانتهاء")
+    st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
     
     # فلتر تاريخ البداية
     st.subheader("📅 فلتر تاريخ بداية الإتاحة")
@@ -807,16 +807,8 @@ elif page == "📍 الأعمدة المتاحة":
             WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح مؤقتاً'
             ELSE '🟢 متاح فوراً'
         END as status,
-        -- تاريخ بدء الحجز القادم (للمتاح مؤقتاً)
-        CASE 
-            WHEN b.has_current = 0 AND b.has_future = 1 THEN b.min_future_period
-            ELSE NULL
-        END as next_booking_period,
-        -- تاريخ انتهاء الحجز (للمحجوز مؤقتاً)
-        CASE 
-            WHEN b.has_current = 1 AND b.has_future = 0 THEN b.max_current_period
-            ELSE NULL
-        END as end_booking_period
+        b.min_future_period as next_booking_period,
+        b.max_current_period as end_booking_period
     FROM "اعمدة انارة" a
     LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
     ORDER BY a."المحافظة", a."رقم اللوحة"
@@ -825,39 +817,94 @@ elif page == "📍 الأعمدة المتاحة":
     df = pd.read_sql_query(query, conn)
     conn.close()
     
+    # حساب الإحصائيات (المواقع واللوحات الفعلية)
+    available_now_sites = len(df[df['status'] == '🟢 متاح فوراً'])
+    available_now_boards = df[df['status'] == '🟢 متاح فوراً']['العدد'].sum()
+    
+    available_temp_sites = len(df[df['status'] == '🟡 متاح مؤقتاً'])
+    available_temp_boards = df[df['status'] == '🟡 متاح مؤقتاً']['العدد'].sum()
+    
+    booked_temp_sites = len(df[df['status'] == '🟠 محجوز مؤقتاً'])
+    booked_temp_boards = df[df['status'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
+    
+    booked_full_sites = len(df[df['status'] == '🔴 محجوز بالكامل'])
+    booked_full_boards = df[df['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
+    
     # عرض الإحصائيات
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🟢 متاح فوراً", len(df[df['status'] == '🟢 متاح فوراً']))
-    col2.metric("🟡 متاح مؤقتاً", len(df[df['status'] == '🟡 متاح مؤقتاً']))
-    col3.metric("🟠 محجوز مؤقتاً", len(df[df['status'] == '🟠 محجوز مؤقتاً']))
-    col4.metric("🔴 محجوز بالكامل", len(df[df['status'] == '🔴 محجوز بالكامل']))
+    st.subheader("📊 إحصائيات عامة")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### 🟢 متاح فوراً")
+        st.markdown(f"📍 **المواقع:** {available_now_sites}")
+        st.markdown(f"📌 **اللوحات:** {int(available_now_boards):,}")
+    
+    with col2:
+        st.markdown("#### 🟡 متاح مؤقتاً")
+        st.markdown(f"📍 **المواقع:** {available_temp_sites}")
+        st.markdown(f"📌 **اللوحات:** {int(available_temp_boards):,}")
+    
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("#### 🟠 محجوز مؤقتاً")
+        st.markdown(f"📍 **المواقع:** {booked_temp_sites}")
+        st.markdown(f"📌 **اللوحات:** {int(booked_temp_boards):,}")
+    
+    with col4:
+        st.markdown("#### 🔴 محجوز بالكامل")
+        st.markdown(f"📍 **المواقع:** {booked_full_sites}")
+        st.markdown(f"📌 **اللوحات:** {int(booked_full_boards):,}")
     
     st.divider()
     
-    # عرض حسب المحافظة
+    # عرض حسب المحافظة (مع إحصائيات كل محافظة)
     for city in df['المحافظة'].unique():
         city_data = df[df['المحافظة'] == city]
-        with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
+        
+        with st.expander(f"🏙️ {city} - {len(city_data)} موقع", expanded=True):
             
-            # إضافة أعمدة التواريخ للعرض
+            # إحصائيات المحافظة
+            city_available_sites = len(city_data[city_data['status'] == '🟢 متاح فوراً'])
+            city_available_boards = city_data[city_data['status'] == '🟢 متاح فوراً']['العدد'].sum()
+            city_available_temp_sites = len(city_data[city_data['status'] == '🟡 متاح مؤقتاً'])
+            city_available_temp_boards = city_data[city_data['status'] == '🟡 متاح مؤقتاً']['العدد'].sum()
+            city_booked_temp_sites = len(city_data[city_data['status'] == '🟠 محجوز مؤقتاً'])
+            city_booked_temp_boards = city_data[city_data['status'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
+            city_booked_full_sites = len(city_data[city_data['status'] == '🔴 محجوز بالكامل'])
+            city_booked_full_boards = city_data[city_data['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
+            
+            # عرض إحصائيات المحافظة
+            st.markdown(f"""
+            <div style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
+                <div style="background: #e8f5e9; padding: 10px 15px; border-radius: 10px;">
+                    🟢 متاح: {city_available_sites} مواقع / {int(city_available_boards)} لوحات
+                </div>
+                <div style="background: #fff3e0; padding: 10px 15px; border-radius: 10px;">
+                    🟡 مؤقتاً: {city_available_temp_sites} مواقع / {int(city_available_temp_boards)} لوحات
+                </div>
+                <div style="background: #ffebee; padding: 10px 15px; border-radius: 10px;">
+                    🟠 محجوز: {city_booked_temp_sites} مواقع / {int(city_booked_temp_boards)} لوحات
+                </div>
+                <div style="background: #fce4ec; padding: 10px 15px; border-radius: 10px;">
+                    🔴 دائم: {city_booked_full_sites} مواقع / {int(city_booked_full_boards)} لوحات
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # عرض الجدول
             display_df = city_data.copy()
             
-            # تحويل أرقام الفترات إلى تواريخ تقريبية للعرض
-            def period_to_date_text(period_num):
+            def period_to_text(period_num):
                 if pd.isna(period_num):
                     return ""
-                period_map = {
-                    11: "يبدأ من 1 حزيران", 12: "يبدأ من 16 حزيران",
-                    13: "يبدأ من 1 تموز", 14: "يبدأ من 16 تموز",
-                    15: "يبدأ من 1 آب", 16: "يبدأ من 16 آب",
-                }
-                return period_map.get(period_num, f"الفترة {period_num}")
+                period_map = {11: "يبدأ 1/6", 12: "يبدأ 16/6", 13: "يبدأ 1/7", 14: "يبدأ 16/7"}
+                return period_map.get(period_num, f"فترة {period_num}")
             
-            display_df['تاريخ البدء القادم'] = display_df['next_booking_period'].apply(period_to_date_text)
-            display_df['تاريخ انتهاء الحجز'] = display_df['end_booking_period'].apply(period_to_date_text)
+            display_df['تاريخ البدء'] = display_df['next_booking_period'].apply(period_to_text)
+            display_df['تاريخ الانتهاء'] = display_df['end_booking_period'].apply(period_to_text)
             
             st.dataframe(
-                display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء القادم', 'تاريخ انتهاء الحجز']],
+                display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء', 'تاريخ الانتهاء']],
                 use_container_width=True
             )
     
