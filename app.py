@@ -755,7 +755,6 @@ elif page == "📍 الأعمدة المتاحة":
         FROM "حجوزات1"
         WHERE "العام" = {target_year}
           AND (
-          AND (
               CASE
                   WHEN "فترة الحجز" = 'كانون الثاني 15-1' THEN 1
                   WHEN "فترة الحجز" = 'كانون الثاني 31-16' THEN 2
