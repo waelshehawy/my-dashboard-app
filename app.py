@@ -706,12 +706,12 @@ if page == "🏢 لوحات الشركات":
             st.rerun()
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (4 حالات) - نسخة مصححة
+# صفحة: الأعمدة المتاحة (حالتان فقط)
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة حسب حالة الإتاحة")
+    st.info("📌 عرض الأعمدة المتاحة حالياً والمحجوزة حالياً")
     
     # فلتر تاريخ البداية
     st.subheader("📅 فلتر تاريخ بداية الإتاحة")
@@ -725,62 +725,43 @@ elif page == "📍 الأعمدة المتاحة":
     target_period_num = get_period_from_date(start_date)
     target_year = start_date.year
     
-    # جلب البيانات مع الحالة محسوبة في SQL
+    # جلب البيانات
     conn = get_connection()
     
-    # استعلام ديناميكي باستخدام رقم الفترة
+    # استعلام بسيط: هل هناك حجز في الفترة الحالية؟
     query = f"""
-    WITH all_boards AS (
-        SELECT 
-            "رقم اللوحة",
-            "اسم العمود",
-            "المحافظة",
-            "الشبكة",
-            "الحجم",
-            "العدد"
-        FROM "اعمدة انارة"
-    ),
-    booking_periods AS (
-        SELECT 
-            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-            "فترة الحجز",
-            "العام",
-            CASE "فترة الحجز"
-                WHEN '1-15 كانون الثاني' THEN 1
-                WHEN '16-31 كانون الثاني' THEN 2
-                WHEN '1-15 شباط' THEN 3
-                WHEN '16-28 شباط' THEN 4
-                WHEN '1-15 آذار' THEN 5
-                WHEN '16-31 آذار' THEN 6
-                WHEN '1-15 نيسان' THEN 7
-                WHEN '16-30 نيسان' THEN 8
-                WHEN '1-15 أيار' THEN 9
-                WHEN '16-31 أيار' THEN 10
-                WHEN '1-15 حزيران' THEN 11
-                WHEN '16-30 حزيران' THEN 12
-                WHEN '1-15 تموز' THEN 13
-                WHEN '16-31 تموز' THEN 14
-                WHEN '1-15 آب' THEN 15
-                WHEN '16-31 آب' THEN 16
-                WHEN '1-15 أيلول' THEN 17
-                WHEN '16-30 أيلول' THEN 18
-                WHEN '1-15 تشرين الأول' THEN 19
-                WHEN '16-31 تشرين الأول' THEN 20
-                WHEN '1-15 تشرين الثاني' THEN 21
-                WHEN '16-30 تشرين الثاني' THEN 22
-                WHEN '1-15 كانون الأول' THEN 23
-                WHEN '16-31 كانون الأول' THEN 24
-            END as period_num
+    WITH current_bookings AS (
+        SELECT DISTINCT CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة"
         FROM "حجوزات1"
-        WHERE "العام" >= {target_year}
-    ),
-    booking_status AS (
-        SELECT 
-            "رقم اللوحة",
-            MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
-            MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future
-        FROM booking_periods
-        GROUP BY "رقم اللوحة"
+        WHERE "العام" = {target_year}
+          AND (
+              CASE "فترة الحجز"
+                  WHEN '1-15 كانون الثاني' THEN 1
+                  WHEN '16-31 كانون الثاني' THEN 2
+                  WHEN '1-15 شباط' THEN 3
+                  WHEN '16-28 شباط' THEN 4
+                  WHEN '1-15 آذار' THEN 5
+                  WHEN '16-31 آذار' THEN 6
+                  WHEN '1-15 نيسان' THEN 7
+                  WHEN '16-30 نيسان' THEN 8
+                  WHEN '1-15 أيار' THEN 9
+                  WHEN '16-31 أيار' THEN 10
+                  WHEN '1-15 حزيران' THEN 11
+                  WHEN '16-30 حزيران' THEN 12
+                  WHEN '1-15 تموز' THEN 13
+                  WHEN '16-31 تموز' THEN 14
+                  WHEN '1-15 آب' THEN 15
+                  WHEN '16-31 آب' THEN 16
+                  WHEN '1-15 أيلول' THEN 17
+                  WHEN '16-30 أيلول' THEN 18
+                  WHEN '1-15 تشرين الأول' THEN 19
+                  WHEN '16-31 تشرين الأول' THEN 20
+                  WHEN '1-15 تشرين الثاني' THEN 21
+                  WHEN '16-30 تشرين الثاني' THEN 22
+                  WHEN '1-15 كانون الأول' THEN 23
+                  WHEN '16-31 كانون الأول' THEN 24
+              END = {target_period_num}
+          )
     )
     SELECT 
         a."رقم اللوحة",
@@ -790,13 +771,11 @@ elif page == "📍 الأعمدة المتاحة":
         a."الحجم",
         a."العدد",
         CASE 
-            WHEN b.has_current = 1 AND b.has_future = 1 THEN '🔴 محجوز بالكامل'
-            WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز حالياً (سيُتاح)'
-            WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح حالياً (سيُحجز)'
-            ELSE '🟢 متاح فوراً'
+            WHEN b."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز حالياً'
+            ELSE '🟢 متاح حالياً'
         END as status
-    FROM all_boards a
-    LEFT JOIN booking_status b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+    FROM "اعمدة انارة" a
+    LEFT JOIN current_bookings b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
     ORDER BY a."المحافظة", a."رقم اللوحة"
     """
     
@@ -804,11 +783,9 @@ elif page == "📍 الأعمدة المتاحة":
     conn.close()
     
     # عرض الإحصائيات
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🟢 متاح فوراً", len(df[df['status'] == '🟢 متاح فوراً']))
-    col2.metric("🟡 متاح مؤقتاً", len(df[df['status'] == '🟡 متاح حالياً (سيُحجز)']))
-    col3.metric("🟠 محجوز مؤقتاً", len(df[df['status'] == '🟠 محجوز حالياً (سيُتاح)']))
-    col4.metric("🔴 محجوز بالكامل", len(df[df['status'] == '🔴 محجوز بالكامل']))
+    col1, col2 = st.columns(2)
+    col1.metric("🟢 متاح حالياً", len(df[df['status'] == '🟢 متاح حالياً']))
+    col2.metric("🔴 محجوز حالياً", len(df[df['status'] == '🔴 محجوز حالياً']))
     
     st.divider()
     
@@ -816,6 +793,12 @@ elif page == "📍 الأعمدة المتاحة":
     for city in df['المحافظة'].unique():
         city_data = df[df['المحافظة'] == city]
         with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
+            # إحصائيات المدينة
+            city_available = len(city_data[city_data['status'] == '🟢 متاح حالياً'])
+            city_booked = len(city_data[city_data['status'] == '🔴 محجوز حالياً'])
+            st.markdown(f"🟢 متاح: {city_available} | 🔴 محجوز: {city_booked}")
+            
+            # عرض الجدول
             st.dataframe(
                 city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
                 use_container_width=True
