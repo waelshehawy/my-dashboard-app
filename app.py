@@ -727,12 +727,12 @@ if page == "🏢 لوحات الشركات":
             st.rerun()
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (4 حالات - متاح/محجوز مع تفاصيل)
+# صفحة: الأعمدة المتاحة (4 حالات مع تواريخ)
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة حسب حالة الإتاحة (4 حالات)")
+    st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع تواريخ البدء/الانتهاء")
     
     # فلتر تاريخ البداية
     st.subheader("📅 فلتر تاريخ بداية الإتاحة")
@@ -784,11 +784,13 @@ elif page == "📍 الأعمدة المتاحة":
         FROM "حجوزات1"
         WHERE "العام" >= {target_year}
     ),
-    board_status AS (
+    board_aggregated AS (
         SELECT 
             "رقم اللوحة",
             MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
-            MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future
+            MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future,
+            MIN(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN period_num ELSE NULL END) as min_future_period,
+            MAX(CASE WHEN "period_num" <= {target_period_num} THEN period_num ELSE NULL END) as max_current_period
         FROM booking_periods
         GROUP BY "رقم اللوحة"
     )
@@ -801,12 +803,22 @@ elif page == "📍 الأعمدة المتاحة":
         a."العدد",
         CASE 
             WHEN b.has_current = 1 AND b.has_future = 1 THEN '🔴 محجوز بالكامل'
-            WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز حالياً (سينتهي)'
-            WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح حالياً (سيُحجز لاحقاً)'
+            WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز مؤقتاً'
+            WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح مؤقتاً'
             ELSE '🟢 متاح فوراً'
-        END as status
+        END as status,
+        -- تاريخ بدء الحجز القادم (للمتاح مؤقتاً)
+        CASE 
+            WHEN b.has_current = 0 AND b.has_future = 1 THEN b.min_future_period
+            ELSE NULL
+        END as next_booking_period,
+        -- تاريخ انتهاء الحجز (للمحجوز مؤقتاً)
+        CASE 
+            WHEN b.has_current = 1 AND b.has_future = 0 THEN b.max_current_period
+            ELSE NULL
+        END as end_booking_period
     FROM "اعمدة انارة" a
-    LEFT JOIN board_status b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+    LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
     ORDER BY a."المحافظة", a."رقم اللوحة"
     """
     
@@ -816,8 +828,8 @@ elif page == "📍 الأعمدة المتاحة":
     # عرض الإحصائيات
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🟢 متاح فوراً", len(df[df['status'] == '🟢 متاح فوراً']))
-    col2.metric("🟡 متاح مؤقتاً", len(df[df['status'] == '🟡 متاح حالياً (سيُحجز لاحقاً)']))
-    col3.metric("🟠 محجوز مؤقتاً", len(df[df['status'] == '🟠 محجوز حالياً (سينتهي)']))
+    col2.metric("🟡 متاح مؤقتاً", len(df[df['status'] == '🟡 متاح مؤقتاً']))
+    col3.metric("🟠 محجوز مؤقتاً", len(df[df['status'] == '🟠 محجوز مؤقتاً']))
     col4.metric("🔴 محجوز بالكامل", len(df[df['status'] == '🔴 محجوز بالكامل']))
     
     st.divider()
@@ -826,24 +838,31 @@ elif page == "📍 الأعمدة المتاحة":
     for city in df['المحافظة'].unique():
         city_data = df[df['المحافظة'] == city]
         with st.expander(f"🏙️ {city} - {len(city_data)} لوحة", expanded=True):
-            city_available = len(city_data[city_data['status'] == '🟢 متاح فوراً'])
-            city_available_temp = len(city_data[city_data['status'] == '🟡 متاح حالياً (سيُحجز لاحقاً)'])
-            city_booked_temp = len(city_data[city_data['status'] == '🟠 محجوز حالياً (سينتهي)'])
-            city_booked_full = len(city_data[city_data['status'] == '🔴 محجوز بالكامل'])
             
-            col_a, col_b, col_c, col_d = st.columns(4)
-            col_a.markdown(f"🟢 متاح: {city_available}")
-            col_b.markdown(f"🟡 مؤقتاً: {city_available_temp}")
-            col_c.markdown(f"🟠 محجوز: {city_booked_temp}")
-            col_d.markdown(f"🔴 دائم: {city_booked_full}")
+            # إضافة أعمدة التواريخ للعرض
+            display_df = city_data.copy()
+            
+            # تحويل أرقام الفترات إلى تواريخ تقريبية للعرض
+            def period_to_date_text(period_num):
+                if pd.isna(period_num):
+                    return ""
+                period_map = {
+                    11: "يبدأ من 1 حزيران", 12: "يبدأ من 16 حزيران",
+                    13: "يبدأ من 1 تموز", 14: "يبدأ من 16 تموز",
+                    15: "يبدأ من 1 آب", 16: "يبدأ من 16 آب",
+                }
+                return period_map.get(period_num, f"الفترة {period_num}")
+            
+            display_df['تاريخ البدء القادم'] = display_df['next_booking_period'].apply(period_to_date_text)
+            display_df['تاريخ انتهاء الحجز'] = display_df['end_booking_period'].apply(period_to_date_text)
             
             st.dataframe(
-                city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
+                display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء القادم', 'تاريخ انتهاء الحجز']],
                 use_container_width=True
             )
     
     # تصدير
-    csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_csv(
+    csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_csv(
         index=False, encoding='utf-8-sig'
     )
     st.download_button(
