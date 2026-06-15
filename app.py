@@ -706,7 +706,7 @@ if page == "🏢 لوحات الشركات":
             st.rerun()
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (4 حالات) - نسخة مبسطة
+# صفحة: الأعمدة المتاحة (4 حالات) - نسخة مصححة
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
@@ -728,6 +728,7 @@ elif page == "📍 الأعمدة المتاحة":
     # جلب البيانات مع الحالة محسوبة في SQL
     conn = get_connection()
     
+    # استعلام ديناميكي باستخدام رقم الفترة
     query = f"""
     WITH all_boards AS (
         SELECT 
@@ -739,13 +740,47 @@ elif page == "📍 الأعمدة المتاحة":
             "العدد"
         FROM "اعمدة انارة"
     ),
-    booking_status AS (
+    booking_periods AS (
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-            MAX(CASE WHEN "العام" = {target_year} AND "فترة الحجز" = '1-15 حزيران' THEN 1 ELSE 0 END) as has_current,
-            MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "فترة الحجز" > '1-15 حزيران') THEN 1 ELSE 0 END) as has_future
+            "فترة الحجز",
+            "العام",
+            CASE "فترة الحجز"
+                WHEN '1-15 كانون الثاني' THEN 1
+                WHEN '16-31 كانون الثاني' THEN 2
+                WHEN '1-15 شباط' THEN 3
+                WHEN '16-28 شباط' THEN 4
+                WHEN '1-15 آذار' THEN 5
+                WHEN '16-31 آذار' THEN 6
+                WHEN '1-15 نيسان' THEN 7
+                WHEN '16-30 نيسان' THEN 8
+                WHEN '1-15 أيار' THEN 9
+                WHEN '16-31 أيار' THEN 10
+                WHEN '1-15 حزيران' THEN 11
+                WHEN '16-30 حزيران' THEN 12
+                WHEN '1-15 تموز' THEN 13
+                WHEN '16-31 تموز' THEN 14
+                WHEN '1-15 آب' THEN 15
+                WHEN '16-31 آب' THEN 16
+                WHEN '1-15 أيلول' THEN 17
+                WHEN '16-30 أيلول' THEN 18
+                WHEN '1-15 تشرين الأول' THEN 19
+                WHEN '16-31 تشرين الأول' THEN 20
+                WHEN '1-15 تشرين الثاني' THEN 21
+                WHEN '16-30 تشرين الثاني' THEN 22
+                WHEN '1-15 كانون الأول' THEN 23
+                WHEN '16-31 كانون الأول' THEN 24
+            END as period_num
         FROM "حجوزات1"
-        GROUP BY CAST("رقم اللوحة" AS TEXT)
+        WHERE "العام" >= {target_year}
+    ),
+    booking_status AS (
+        SELECT 
+            "رقم اللوحة",
+            MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
+            MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future
+        FROM booking_periods
+        GROUP BY "رقم اللوحة"
     )
     SELECT 
         a."رقم اللوحة",
@@ -797,6 +832,7 @@ elif page == "📍 الأعمدة المتاحة":
         "text/csv",
         use_container_width=True
     )
+    
 #=================
 # لوحة المراقبة
 #==================
