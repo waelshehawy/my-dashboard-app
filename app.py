@@ -981,23 +981,12 @@ elif page == "📅 لوحة الفترات":
     boards_df, bookings_df = load_period_data(selected_city, selected_size)
     
     # ============================================================
-    # قائمة الفترات الصحيحة (حسب قاعدة البيانات)
+    # قائمة الفترات الـ 24 (مرتبة حسب الأرقام)
     # ============================================================
     
-    periods = [
-        'كانون الثاني 15-1', 'كانون الثاني 31-16',
-        'شباط 15-1', 'شباط 28-16',
-        'آذار 15-1', 'آذار 31-16',
-        'نيسان 15-1', 'نيسان 30-16',
-        'أيار 15-1', 'أيار 31-16',
-        'حزيران 15-1', 'حزيران 30-16',
-        'تموز 15-1', 'تموز 31-16',
-        'آب 15-1', 'آب 31-16',
-        'أيلول 15-1', 'أيلول 30-16',
-        'تشرين الأول 15-1', 'تشرين الأول 31-16',
-        'تشرين الثاني 15-1', 'تشرين الثاني 30-16',
-        'كانون الأول 15-1', 'كانون الأول 31-16'
-    ]
+    # استخدام PERIOD_ORDER للحصول على الفترات مرتبة
+    sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
+    periods = [p[0] for p in sorted_periods]
     
     # ============================================================
     # حساب الإحصائيات لكل فترة
@@ -1005,7 +994,7 @@ elif page == "📅 لوحة الفترات":
     
     total_boards = boards_df['العدد'].sum()
     period_stats = []
-    period_details = {}  # لتخزين التفاصيل لكل فترة
+    period_details = {}
     
     for period in periods:
         # اللوحات المحجوزة في هذه الفترة
@@ -1021,6 +1010,7 @@ elif page == "📅 لوحة الفترات":
         
         period_stats.append({
             'الفترة': period,
+            'رقم الفترة': PERIOD_ORDER.get(period, 99),
             'إجمالي اللوحات': int(total_boards),
             'محجوز': int(booked_details['العدد'].sum()),
             'متاح': int(total_boards - booked_details['العدد'].sum()),
@@ -1029,7 +1019,6 @@ elif page == "📅 لوحة الفترات":
             'عدد الزبائن': len(customers)
         })
         
-        # تخزين التفاصيل لكل فترة
         period_details[period] = {
             'booked_details': booked_details,
             'customers': customers,
@@ -1056,7 +1045,6 @@ elif page == "📅 لوحة الفترات":
     
     st.subheader("📋 الفترات")
     
-    # عرض الفترات في صفوف (4 فترات في الصف)
     for i in range(0, len(periods), 4):
         cols = st.columns(4)
         for j, col in enumerate(cols):
@@ -1065,12 +1053,11 @@ elif page == "📅 لوحة الفترات":
                 stats = period_stats[i + j]
                 
                 with col:
-                    # اختيار اللون حسب حالة الإشغال
                     if stats['نسبة الإشغال'] == '0.0%':
-                        bg_color = "#e8f5e9"  # أخضر فاتح
+                        bg_color = "#e8f5e9"
                         border_color = "#4CAF50"
                     elif stats['عدد الزبائن'] > 0:
-                        bg_color = "#fff3e0"  # برتقالي فاتح
+                        bg_color = "#fff3e0"
                         border_color = "#FF9800"
                     else:
                         bg_color = "#f5f5f5"
@@ -1084,7 +1071,6 @@ elif page == "📅 لوحة الفترات":
                         padding: 15px;
                         text-align: center;
                         margin: 5px 0;
-                        cursor: pointer;
                     ">
                         <div style="font-size: 14px; font-weight: bold;">{period}</div>
                         <div style="font-size: 12px; margin-top: 5px;">
@@ -1096,8 +1082,7 @@ elif page == "📅 لوحة الفترات":
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # زر لعرض التفاصيل
-                    if st.button(f"📋 تفاصيل {period[:10]}...", key=f"detail_{i+j}"):
+                    if st.button(f"📋 تفاصيل", key=f"detail_{i+j}"):
                         st.session_state[f'selected_period_{i+j}'] = period
                         st.session_state['show_period_detail'] = True
                         st.rerun()
@@ -1107,7 +1092,6 @@ elif page == "📅 لوحة الفترات":
     # ============================================================
     
     if st.session_state.get('show_period_detail', False):
-        # العثور على الفترة المختارة
         selected_period = None
         for key in st.session_state:
             if key.startswith('selected_period_'):
@@ -1120,19 +1104,16 @@ elif page == "📅 لوحة الفترات":
             st.divider()
             st.subheader(f"📋 تفاصيل الفترة: {selected_period}")
             
-            # عرض إحصائيات الفترة
             period_stat = next(p for p in period_stats if p['الفترة'] == selected_period)
             col1, col2, col3 = st.columns(3)
             col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
             col2.metric("🔴 محجوز", period_stat['محجوز'])
             col3.metric("🟢 متاح", period_stat['متاح'])
             
-            # قائمة الزبائن
             if len(details['customers']) > 0:
                 st.write("**👥 الزبائن:**")
                 st.write(", ".join(details['customers']))
             
-            # جدول اللوحات المحجوزة في هذه الفترة
             if not details['booked_details'].empty:
                 st.write("**📋 اللوحات المحجوزة في هذه الفترة:**")
                 st.dataframe(
@@ -1142,7 +1123,6 @@ elif page == "📅 لوحة الفترات":
             else:
                 st.info("✅ لا توجد لوحات محجوزة في هذه الفترة")
             
-            # زر إغلاق التفاصيل
             if st.button("🔙 إغلاق التفاصيل", key="close_detail"):
                 st.session_state['show_period_detail'] = False
                 for key in list(st.session_state.keys()):
@@ -1186,16 +1166,14 @@ elif page == "📅 لوحة الفترات":
     st.divider()
     st.subheader("📥 تصدير التقرير")
     
-    # إنشاء ملف Excel
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
         
-        # إضافة تفاصيل كل فترة في صفحة منفصلة
         for period in periods:
             if period in period_details and not period_details[period]['booked_details'].empty:
                 details = period_details[period]
-                sheet_name = period[:25]  # Excel sheet name max 31 chars
+                sheet_name = period[:25]
                 details['booked_details'].to_excel(writer, sheet_name=sheet_name, index=False)
     
     output.seek(0)
