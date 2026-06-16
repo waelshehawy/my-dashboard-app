@@ -911,7 +911,7 @@ elif page == "📍 الأعمدة المتاحة":
 
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
-    st.info("📌 عرض المتاح والمحجوز لكل فترة مع قائمة الزبائن")
+    st.info("📌 عرض المتاح والمحجوز لكل فترة مع جدول تفصيلي")
     
     # ============================================================
     # الفلاتر
@@ -920,7 +920,6 @@ elif page == "📅 لوحة الفترات":
     col_filter1, col_filter2 = st.columns(2)
     
     with col_filter1:
-        # جلب المحافظات
         conn = get_connection()
         cities_df = pd.read_sql_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"', conn)
         conn.close()
@@ -928,7 +927,6 @@ elif page == "📅 لوحة الفترات":
         selected_city = st.selectbox("🏙️ اختر المحافظة:", city_list)
     
     with col_filter2:
-        # جلب الأحجام
         conn = get_connection()
         sizes_df = pd.read_sql_query('SELECT DISTINCT "الحجم" FROM "اعمدة انارة" ORDER BY "الحجم"', conn)
         conn.close()
@@ -936,14 +934,13 @@ elif page == "📅 لوحة الفترات":
         selected_size = st.selectbox("📏 اختر الحجم:", size_list)
     
     # ============================================================
-    # جلب البيانات حسب الفلاتر
+    # جلب البيانات
     # ============================================================
     
     @st.cache_data(ttl=300)
     def load_period_data(selected_city, selected_size):
         conn = get_connection()
         
-        # بناء شرط الفلتر
         where_conditions = []
         if selected_city != 'جميع المحافظات':
             where_conditions.append(f'"المحافظة" = \'{selected_city}\'')
@@ -952,7 +949,7 @@ elif page == "📅 لوحة الفترات":
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
-        # جلب الأعمدة مع التصفية
+        # الأعمدة
         boards_query = f"""
         SELECT 
             "رقم اللوحة",
@@ -966,8 +963,8 @@ elif page == "📅 لوحة الفترات":
         """
         boards_df = pd.read_sql_query(boards_query, conn)
         
-        # جلب الحجوزات مع التصفية
-        bookings_query = f"""
+        # الحجوزات
+        bookings_query = """
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
             "اسم الزبون",
@@ -984,10 +981,9 @@ elif page == "📅 لوحة الفترات":
     boards_df, bookings_df = load_period_data(selected_city, selected_size)
     
     # ============================================================
-    # حساب البيانات لكل فترة
+    # قائمة الفترات الصحيحة (حسب قاعدة البيانات)
     # ============================================================
     
-    # قائمة الفترات الـ 24
     periods = [
         'كانون الثاني 15-1', 'كانون الثاني 31-16',
         'شباط 15-1', 'شباط 28-16',
@@ -1003,27 +999,42 @@ elif page == "📅 لوحة الفترات":
         'كانون الأول 15-1', 'كانون الأول 31-16'
     ]
     
+    # ============================================================
     # حساب الإحصائيات لكل فترة
-    period_stats = []
+    # ============================================================
+    
     total_boards = boards_df['العدد'].sum()
+    period_stats = []
+    period_details = {}  # لتخزين التفاصيل لكل فترة
     
     for period in periods:
         # اللوحات المحجوزة في هذه الفترة
         booked_boards = bookings_df[bookings_df['فترة الحجز'] == period]['رقم اللوحة'].unique()
-        booked_count = boards_df[boards_df['رقم اللوحة'].isin(booked_boards)]['العدد'].sum()
+        booked_boards_list = list(booked_boards)
         
-        # الزبائن الذين حجزوا في هذه الفترة
+        # تفاصيل اللوحات المحجوزة
+        booked_details = boards_df[boards_df['رقم اللوحة'].isin(booked_boards_list)]
+        
+        # الزبائن
         customers = bookings_df[bookings_df['فترة الحجز'] == period]['اسم الزبون'].unique()
         customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
         
         period_stats.append({
             'الفترة': period,
             'إجمالي اللوحات': int(total_boards),
-            'محجوز': int(booked_count),
-            'متاح': int(total_boards - booked_count),
-            'نسبة الإشغال': f"{(booked_count/total_boards*100):.1f}%" if total_boards > 0 else "0%",
-            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد'
+            'محجوز': int(booked_details['العدد'].sum()),
+            'متاح': int(total_boards - booked_details['العدد'].sum()),
+            'نسبة الإشغال': f"{(booked_details['العدد'].sum()/total_boards*100):.1f}%" if total_boards > 0 else "0%",
+            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد',
+            'عدد الزبائن': len(customers)
         })
+        
+        # تخزين التفاصيل لكل فترة
+        period_details[period] = {
+            'booked_details': booked_details,
+            'customers': customers,
+            'booked_boards': booked_boards_list
+        }
     
     period_df = pd.DataFrame(period_stats)
     
@@ -1040,80 +1051,160 @@ elif page == "📅 لوحة الفترات":
     st.divider()
     
     # ============================================================
-    # عرض الجدول البصري للفترات
+    # عرض الفترات كبطاقات
     # ============================================================
     
-    st.subheader("📋 الجدول البصري للفترات")
+    st.subheader("📋 الفترات")
     
-    # تنسيق الألوان
-    def color_cells(val):
-        if 'محجوز' in str(val):
-            return 'background-color: #ffebee; color: #c62828;'
-        elif 'متاح' in str(val):
-            return 'background-color: #e8f5e9; color: #2e7d32;'
-        return ''
-    
-    # عرض الجدول مع تلوين
-    styled_df = period_df.style.applymap(color_cells, subset=['الحالة'])
-    
-    st.dataframe(
-        period_df[['الفترة', 'إجمالي اللوحات', 'محجوز', 'متاح', 'نسبة الإشغال', 'الزبائن']],
-        use_container_width=True,
-        height=500,
-        column_config={
-            'الفترة': st.column_config.TextColumn('الفترة', width='small'),
-            'إجمالي اللوحات': st.column_config.NumberColumn('الإجمالي', format='%d'),
-            'محجوز': st.column_config.NumberColumn('محجوز', format='%d'),
-            'متاح': st.column_config.NumberColumn('متاح', format='%d'),
-            'نسبة الإشغال': st.column_config.TextColumn('نسبة الإشغال', width='small'),
-            'الزبائن': st.column_config.TextColumn('الزبائن', width='large')
-        }
-    )
+    # عرض الفترات في صفوف (4 فترات في الصف)
+    for i in range(0, len(periods), 4):
+        cols = st.columns(4)
+        for j, col in enumerate(cols):
+            if i + j < len(periods):
+                period = periods[i + j]
+                stats = period_stats[i + j]
+                
+                with col:
+                    # اختيار اللون حسب حالة الإشغال
+                    if stats['نسبة الإشغال'] == '0.0%':
+                        bg_color = "#e8f5e9"  # أخضر فاتح
+                        border_color = "#4CAF50"
+                    elif stats['عدد الزبائن'] > 0:
+                        bg_color = "#fff3e0"  # برتقالي فاتح
+                        border_color = "#FF9800"
+                    else:
+                        bg_color = "#f5f5f5"
+                        border_color = "#9E9E9E"
+                    
+                    st.markdown(f"""
+                    <div style="
+                        background: {bg_color};
+                        border: 2px solid {border_color};
+                        border-radius: 12px;
+                        padding: 15px;
+                        text-align: center;
+                        margin: 5px 0;
+                        cursor: pointer;
+                    ">
+                        <div style="font-size: 14px; font-weight: bold;">{period}</div>
+                        <div style="font-size: 12px; margin-top: 5px;">
+                            🟢 {stats['متاح']} | 🔴 {stats['محجوز']}
+                        </div>
+                        <div style="font-size: 12px; margin-top: 5px; color: #666;">
+                            👥 {stats['الزبائن']}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # زر لعرض التفاصيل
+                    if st.button(f"📋 تفاصيل {period[:10]}...", key=f"detail_{i+j}"):
+                        st.session_state[f'selected_period_{i+j}'] = period
+                        st.session_state['show_period_detail'] = True
+                        st.rerun()
     
     # ============================================================
-    # رسم بياني للفترات
+    # عرض التفاصيل للفترة المختارة
+    # ============================================================
+    
+    if st.session_state.get('show_period_detail', False):
+        # العثور على الفترة المختارة
+        selected_period = None
+        for key in st.session_state:
+            if key.startswith('selected_period_'):
+                selected_period = st.session_state[key]
+                break
+        
+        if selected_period and selected_period in period_details:
+            details = period_details[selected_period]
+            
+            st.divider()
+            st.subheader(f"📋 تفاصيل الفترة: {selected_period}")
+            
+            # عرض إحصائيات الفترة
+            period_stat = next(p for p in period_stats if p['الفترة'] == selected_period)
+            col1, col2, col3 = st.columns(3)
+            col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
+            col2.metric("🔴 محجوز", period_stat['محجوز'])
+            col3.metric("🟢 متاح", period_stat['متاح'])
+            
+            # قائمة الزبائن
+            if len(details['customers']) > 0:
+                st.write("**👥 الزبائن:**")
+                st.write(", ".join(details['customers']))
+            
+            # جدول اللوحات المحجوزة في هذه الفترة
+            if not details['booked_details'].empty:
+                st.write("**📋 اللوحات المحجوزة في هذه الفترة:**")
+                st.dataframe(
+                    details['booked_details'][['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
+                    use_container_width=True
+                )
+            else:
+                st.info("✅ لا توجد لوحات محجوزة في هذه الفترة")
+            
+            # زر إغلاق التفاصيل
+            if st.button("🔙 إغلاق التفاصيل", key="close_detail"):
+                st.session_state['show_period_detail'] = False
+                for key in list(st.session_state.keys()):
+                    if key.startswith('selected_period_'):
+                        del st.session_state[key]
+                st.rerun()
+    
+    # ============================================================
+    # الرسم البياني
     # ============================================================
     
     st.divider()
     st.subheader("📊 رسم بياني للمتاح والمحجوز")
     
     fig = go.Figure()
-    
     fig.add_trace(go.Bar(
         x=period_df['الفترة'],
         y=period_df['متاح'],
         name='متاح',
         marker_color='#4CAF50'
     ))
-    
     fig.add_trace(go.Bar(
         x=period_df['الفترة'],
         y=period_df['محجوز'],
         name='محجوز',
         marker_color='#f44336'
     ))
-    
     fig.update_layout(
         barmode='stack',
         height=400,
         xaxis_tickangle=-45,
         xaxis_title='الفترة',
-        yaxis_title='عدد اللوحات',
-        legend_title='الحالة'
+        yaxis_title='عدد اللوحات'
     )
-    
     st.plotly_chart(fig, use_container_width=True)
     
     # ============================================================
-    # زر تصدير
+    # تصدير Excel
     # ============================================================
     
-    csv_data = period_df.to_csv(index=False, encoding='utf-8-sig')
+    st.divider()
+    st.subheader("📥 تصدير التقرير")
+    
+    # إنشاء ملف Excel
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
+        
+        # إضافة تفاصيل كل فترة في صفحة منفصلة
+        for period in periods:
+            if period in period_details and not period_details[period]['booked_details'].empty:
+                details = period_details[period]
+                sheet_name = period[:25]  # Excel sheet name max 31 chars
+                details['booked_details'].to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    output.seek(0)
+    
     st.download_button(
-        "📥 تحميل التقرير (CSV)",
-        csv_data,
-        f"periods_report_{selected_city}_{selected_size}.csv",
-        "text/csv",
+        "📥 تحميل تقرير Excel",
+        output,
+        f"periods_report_{selected_city}_{selected_size}.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
 
