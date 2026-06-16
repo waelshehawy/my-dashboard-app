@@ -906,12 +906,12 @@ elif page == "📍 الأعمدة المتاحة":
         )
 
 # ============================================================
-# صفحة: لوحة التحكم البصرية للفترات (حالتان فقط)
+# صفحة: لوحة التحكم البصرية للفترات (من الفترة الحالية فصاعداً)
 # ============================================================
 
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
-    st.info("📌 عرض المتاح والمحجوز لكل فترة (حالتان فقط)")
+    st.info("📌 عرض المتاح والمحجوز للفترات القادمة فقط")
     
     # ============================================================
     # الفلاتر
@@ -934,11 +934,19 @@ elif page == "📅 لوحة الفترات":
         selected_size = st.selectbox("📏 اختر الحجم:", size_list)
     
     # ============================================================
+    # حساب الفترة الحالية
+    # ============================================================
+    
+    today = date.today()
+    current_period_num = get_period_from_date(today)
+    current_year = today.year
+    
+    # ============================================================
     # جلب البيانات
     # ============================================================
     
     @st.cache_data(ttl=300)
-    def load_period_data(selected_city, selected_size):
+    def load_period_data(selected_city, selected_size, current_year):
         conn = get_connection()
         
         where_conditions = []
@@ -963,39 +971,46 @@ elif page == "📅 لوحة الفترات":
         """
         boards_df = pd.read_sql_query(boards_query, conn)
         
-        # الحجوزات (جميع الفترات)
-        bookings_query = """
+        # الحجوزات (جميع الفترات من السنة الحالية)
+        bookings_query = f"""
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
             "اسم الزبون",
             "فترة الحجز",
             "العام"
         FROM "حجوزات1"
-        WHERE "العام" = 2026
+        WHERE "العام" = {current_year}
         """
         bookings_df = pd.read_sql_query(bookings_query, conn)
         conn.close()
         
         return boards_df, bookings_df
     
-    boards_df, bookings_df = load_period_data(selected_city, selected_size)
+    boards_df, bookings_df = load_period_data(selected_city, selected_size, current_year)
     
     # ============================================================
-    # قائمة الفترات من PERIOD_ORDER
+    # الحصول على الفترات من PERIOD_ORDER (من الفترة الحالية فصاعداً)
     # ============================================================
     
     sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
-    periods = [p[0] for p in sorted_periods]
+    all_periods = [p[0] for p in sorted_periods]
+    
+    # تصفية الفترات من الحالية فصاعداً
+    future_periods = []
+    for period in all_periods:
+        period_num = PERIOD_ORDER.get(period, 99)
+        if period_num >= current_period_num:
+            future_periods.append(period)
     
     # ============================================================
-    # حساب الإحصائيات لكل فترة (حالتان فقط)
+    # حساب الإحصائيات لكل فترة
     # ============================================================
     
     total_boards = boards_df['العدد'].sum()
     period_stats = []
     period_details = {}
     
-    for period in periods:
+    for period in future_periods:
         # اللوحات المحجوزة في هذه الفترة بالضبط
         booked_boards = bookings_df[bookings_df['فترة الحجز'] == period]['رقم اللوحة'].unique()
         booked_boards_list = list(booked_boards)
@@ -1032,7 +1047,7 @@ elif page == "📅 لوحة الفترات":
     st.subheader("📊 إحصائيات عامة")
     col1, col2, col3 = st.columns(3)
     col1.metric("🏢 إجمالي اللوحات", int(total_boards))
-    col2.metric("📅 عدد الفترات", 24)
+    col2.metric("📅 عدد الفترات القادمة", len(future_periods))
     col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
     
     st.divider()
@@ -1041,17 +1056,16 @@ elif page == "📅 لوحة الفترات":
     # عرض الفترات كبطاقات
     # ============================================================
     
-    st.subheader("📋 الفترات")
+    st.subheader("📋 الفترات القادمة")
     
-    for i in range(0, len(periods), 4):
+    for i in range(0, len(future_periods), 4):
         cols = st.columns(4)
         for j, col in enumerate(cols):
-            if i + j < len(periods):
-                period = periods[i + j]
+            if i + j < len(future_periods):
+                period = future_periods[i + j]
                 stats = period_stats[i + j]
                 
                 with col:
-                    # اللون: أخضر إذا كان المتاح = الإجمالي، برتقالي إذا كان هناك حجوزات
                     if stats['محجوز'] == 0:
                         bg_color = "#e8f5e9"
                         border_color = "#4CAF50"
@@ -1154,33 +1168,6 @@ elif page == "📅 لوحة الفترات":
         yaxis_title='عدد اللوحات'
     )
     st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # تصدير Excel
-    # ============================================================
-    
-    st.divider()
-    st.subheader("📥 تصدير التقرير")
-    
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
-        
-        for period in periods:
-            if period in period_details and not period_details[period]['booked_details'].empty:
-                details = period_details[period]
-                sheet_name = period[:25]
-                details['booked_details'].to_excel(writer, sheet_name=sheet_name, index=False)
-    
-    output.seek(0)
-    
-    st.download_button(
-        "📥 تحميل تقرير Excel",
-        output,
-        f"periods_report_{selected_city}_{selected_size}.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
 
 #=================
 # لوحة المراقبة
