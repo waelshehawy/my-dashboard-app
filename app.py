@@ -911,7 +911,7 @@ elif page == "📍 الأعمدة المتاحة":
 
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
-    st.info("📌 عرض المتاح والمحجوز لكل فترة")
+    st.info("📌 عرض المتاح والمحجوز لكل فترة مع تفاصيل اللوحات المتاحة")
     
     # ============================================================
     # بناء PERIOD_ORDER من قاعدة البيانات
@@ -924,11 +924,6 @@ elif page == "📅 لوحة الفترات":
         return {row['namee']: row['no'] for _, row in df.iterrows()}
     
     PERIOD_ORDER = build_period_order()
-    
-    def get_period_number(period_name):
-        if period_name is None:
-            return 99
-        return PERIOD_ORDER.get(period_name, 99)
     
     # ============================================================
     # الفلاتر
@@ -1015,11 +1010,17 @@ elif page == "📅 لوحة الفترات":
     period_details = {}
     
     for period_name, period_num in sorted_periods:
+        # اللوحات المحجوزة في هذه الفترة
         booked_boards = bookings_df[bookings_df['period_num'] == period_num]['رقم اللوحة'].unique()
         booked_boards_list = list(booked_boards)
         
+        # تفاصيل اللوحات المحجوزة
         booked_details = boards_df[boards_df['رقم اللوحة'].isin(booked_boards_list)]
         
+        # ✅ اللوحات المتاحة في هذه الفترة (جميع اللوحات - المحجوزة)
+        available_boards = boards_df[~boards_df['رقم اللوحة'].isin(booked_boards_list)]
+        
+        # الزبائن في هذه الفترة
         customers = bookings_df[bookings_df['period_num'] == period_num]['اسم الزبون'].unique()
         customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
         
@@ -1035,6 +1036,7 @@ elif page == "📅 لوحة الفترات":
         
         period_details[period_name] = {
             'booked_details': booked_details,
+            'available_details': available_boards,  # ✅ اللوحات المتاحة
             'customers': customers,
             'booked_boards': booked_boards_list
         }
@@ -1084,7 +1086,7 @@ elif page == "📅 لوحة الفترات":
                         st.rerun()
     
     # ============================================================
-    # التفاصيل للفترة المختارة
+    # التفاصيل للفترة المختارة (عرض المتاح)
     # ============================================================
     
     if st.session_state.get('show_period_detail', False):
@@ -1106,18 +1108,22 @@ elif page == "📅 لوحة الفترات":
             col2.metric("🔴 محجوز", period_stat['محجوز'])
             col3.metric("🟢 متاح", period_stat['متاح'])
             
+            # عرض الزبائن في هذه الفترة
             if len(details['customers']) > 0:
                 st.write("**👥 الزبائن في هذه الفترة:**")
                 st.write(", ".join(details['customers']))
+            else:
+                st.write("**👥 الزبائن في هذه الفترة:** لا يوجد")
             
-            if not details['booked_details'].empty:
-                st.write("**📋 اللوحات المحجوزة في هذه الفترة:**")
+            # ✅ عرض اللوحات المتاحة (وليس المحجوزة)
+            if not details['available_details'].empty:
+                st.write("**📋 اللوحات المتاحة في هذه الفترة:**")
                 st.dataframe(
-                    details['booked_details'][['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
+                    details['available_details'][['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
                     use_container_width=True
                 )
             else:
-                st.info("✅ لا توجد لوحات محجوزة في هذه الفترة")
+                st.info("✅ لا توجد لوحات متاحة في هذه الفترة")
             
             if st.button("🔙 إغلاق التفاصيل", key="close_detail"):
                 st.session_state['show_period_detail'] = False
@@ -1146,25 +1152,24 @@ elif page == "📅 لوحة الفترات":
     st.plotly_chart(fig, use_container_width=True)
     
     # ============================================================
-    # تصدير Excel
+    # تصدير Excel (مع المتاح في التفاصيل)
     # ============================================================
     
     st.divider()
     st.subheader("📥 تصدير التقرير")
     
-    # إنشاء ملف Excel
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         # صفحة الملخص
         period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
         
-        # صفحة لكل فترة تحتوي على تفاصيل اللوحات المحجوزة
+        # صفحة لكل فترة تحتوي على اللوحات المتاحة
         for period_name in all_period_names:
             if period_name in period_details:
                 details = period_details[period_name]
-                if not details['booked_details'].empty:
-                    sheet_name = period_name[:25]  # Excel sheet name max 31 chars
-                    details['booked_details'].to_excel(writer, sheet_name=sheet_name, index=False)
+                if not details['available_details'].empty:
+                    sheet_name = period_name[:25]
+                    details['available_details'].to_excel(writer, sheet_name=sheet_name, index=False)
     
     output.seek(0)
     
