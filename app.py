@@ -966,9 +966,10 @@ elif page == "📅 لوحة الفترات":
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
+        # ✅ تأكد من أن رقم اللوحة بنفس النوع في كلا الجدولين
         boards_query = f"""
         SELECT 
-            "رقم اللوحة",
+            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
             "اسم العمود",
             "المحافظة",
             "الشبكة",
@@ -991,7 +992,6 @@ elif page == "📅 لوحة الفترات":
         bookings_df = pd.read_sql_query(bookings_query, conn)
         conn.close()
         
-        # ✅ تحويل الفترات باستخدام PERIOD_ORDER الجديد
         bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(
             lambda x: PERIOD_ORDER.get(x, 99)
         )
@@ -999,6 +999,24 @@ elif page == "📅 لوحة الفترات":
         return boards_df, bookings_df
     
     boards_df, bookings_df = load_period_data(selected_city, selected_size, PERIOD_ORDER)
+    
+    # ============================================================
+    # DEBUG - التحقق من تطابق اللوحات
+    # ============================================================
+    
+    st.subheader("🔍 DEBUG - التحقق من البيانات")
+    
+    st.write("**عدد اللوحات في boards_df:**", len(boards_df))
+    st.write("**عدد اللوحات الفريدة في bookings_df:**", bookings_df['رقم اللوحة'].nunique())
+    
+    common_boards = set(boards_df['رقم اللوحة']) & set(bookings_df['رقم اللوحة'])
+    st.write("**اللوحات المشتركة:**", len(common_boards))
+    
+    if len(common_boards) == 0:
+        st.error("❌ لا توجد لوحات مشتركة بين الجدولين! تأكد من CAST.")
+        st.stop()
+    
+    st.divider()
     
     # ============================================================
     # الحصول على الفترات من PERIOD_ORDER
@@ -1041,32 +1059,6 @@ elif page == "📅 لوحة الفترات":
         }
     
     period_df = pd.DataFrame(period_stats)
-    
-    # ============================================================
-    # DEBUG - كشف سبب ظهور كل الفترات "متاح"
-    # ============================================================
-    
-    st.subheader("🔍 DEBUG - تحليل البيانات")
-    
-    st.write("**1. عينة من الحجوزات بعد تحويل period_num:**")
-    debug_sample = bookings_df[['رقم اللوحة', 'فترة الحجز', 'period_num']].head(10)
-    st.dataframe(debug_sample, use_container_width=True)
-    
-    st.write("**2. توزيع الحجوزات حسب رقم الفترة:**")
-    debug_dist = bookings_df['period_num'].value_counts().sort_index()
-    st.write(debug_dist)
-    
-    st.write("**3. الفترات التي تحتوي على حجوزات:**")
-    periods_with_bookings = sorted(bookings_df['period_num'].unique())
-    st.write(f"أرقام الفترات: {periods_with_bookings}")
-    
-    st.write("**4. الفترات من PERIOD_ORDER:**")
-    st.write(list(PERIOD_ORDER.items())[:10])
-    
-    st.write("**5. عينة من period_stats المحسوبة:**")
-    st.write(period_stats[:5])
-    
-    st.divider()
     
     # ============================================================
     # عرض النتائج
