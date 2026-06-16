@@ -1399,8 +1399,16 @@ elif page == "📄 عرض سعر":
         st.divider()
         st.subheader("📍 اختيار المواقع")
         
+        # ============================================================
+        # 1. اختيار المحافظة والحجم (كما هو موجود)
+        # ============================================================
+        
         cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"')['المحافظة'].tolist()
         selected_city = st.selectbox("اختر المحافظة:", cities)
+        
+        # ============================================================
+        # 2. جلب الأعمدة المتاحة في المحافظة والحجم المختارين
+        # ============================================================
         
         available_columns = run_query('''
             SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم" 
@@ -1408,6 +1416,7 @@ elif page == "📄 عرض سعر":
             WHERE "المحافظة" = %s AND "الحجم" = %s
         ''', (selected_city, selected_size))
         
+        # تصفية المحجوز
         period_placeholders = ','.join([f"'{p}'" for p in selected_periods])
         booked_query = f'''
             SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
@@ -1419,20 +1428,85 @@ elif page == "📄 عرض سعر":
         
         available_columns = available_columns[~available_columns['رقم اللوحة'].isin(booked_boards)]
         
-        if not available_columns.empty:
-            networks = st.multiselect("اختر الشبكات:", available_columns['الشبكة'].unique().tolist())
+        if available_columns.empty:
+            st.warning("⚠️ لا توجد مواقع متاحة")
+        else:
+            # ============================================================
+            # 3. اختيار الشبكات (كما هو موجود)
+            # ============================================================
+            
+            st.markdown("**📡 اختيار الشبكات:**")
+            networks = st.multiselect(
+                "اختر الشبكات:", 
+                available_columns['الشبكة'].unique().tolist(),
+                key="networks_select"
+            )
+            
+            # ============================================================
+            # 4. اختيار أعمدة فردية (بدون شبكة)
+            # ============================================================
+            
+            st.markdown("**📍 اختيار أعمدة فردية (بدون شبكة):**")
+            
+            # فلتر الأعمدة التي ليس لها شبكة (أو شبكة 0)
+            individual_columns = available_columns[
+                (available_columns['الشبكة'] == 0) | 
+                (available_columns['الشبكة'].isna()) | 
+                (available_columns['الشبكة'] == '')
+            ]
+            
+            if not individual_columns.empty:
+                # إضافة خيار "اختر الكل" للأعمدة الفردية
+                all_individual = st.checkbox("✅ اختيار جميع الأعمدة الفردية", key="select_all_individual")
+                
+                if all_individual:
+                    selected_individual_boards = individual_columns['رقم اللوحة'].tolist()
+                else:
+                    selected_individual = st.multiselect(
+                        "اختر الأعمدة الفردية:", 
+                        individual_columns['رقم اللوحة'].tolist(),
+                        format_func=lambda x: f"{x} - {individual_columns[individual_columns['رقم اللوحة'] == x]['الموقع'].iloc[0]}",
+                        key="individual_select"
+                    )
+                    selected_individual_boards = selected_individual
+            else:
+                st.info("ℹ️ لا توجد أعمدة فردية (بدون شبكة) في هذه المحافظة")
+                selected_individual_boards = []
+            
+            # ============================================================
+            # 5. زر إضافة إلى السلة (شبكات + أعمدة فردية)
+            # ============================================================
+            
             if st.button("➕ إضافة إلى السلة", type="primary", use_container_width=True):
                 if selected_city not in st.session_state.cart:
                     st.session_state.cart[selected_city] = {}
+                
+                added_count = 0
+                
+                # إضافة الشبكات المختارة
                 for net in networks:
                     net_data = available_columns[available_columns['الشبكة'] == net].copy()
                     net_data['fee_print'] = per_column_print
                     net_data['fee_display'] = per_column_display
-                    st.session_state.cart[selected_city][net] = net_data
-                st.success("✅ تمت الإضافة")
+                    st.session_state.cart[selected_city][f"شبكة {net}"] = net_data
+                    added_count += len(net_data)
+                
+                # إضافة الأعمدة الفردية المختارة
+                if selected_individual_boards:
+                    individual_data = available_columns[
+                        available_columns['رقم اللوحة'].isin(selected_individual_boards)
+                    ].copy()
+                    individual_data['fee_print'] = per_column_print
+                    individual_data['fee_display'] = per_column_display
+                    st.session_state.cart[selected_city]["أعمدة فردية"] = individual_data
+                    added_count += len(individual_data)
+                
+                if added_count > 0:
+                    st.success(f"✅ تمت إضافة {added_count} عمود إلى السلة")
+                else:
+                    st.warning("⚠️ لم يتم اختيار أي مواقع")
+                
                 st.rerun()
-        else:
-            st.warning("⚠️ لا توجد مواقع متاحة")
         
         if st.session_state.cart:
             st.divider()
@@ -1441,11 +1515,22 @@ elif page == "📄 عرض سعر":
             grand_total_print = 0.0
             grand_total_display = 0.0
             
-            for city, networks in list(st.session_state.cart.items()):
-                for net, df_cart in list(networks.items()):
-                    with st.expander(f"📍 {city} - {net}", expanded=True):
-                        edited_df = st.data_editor(df_cart, key=f"edit_{city}_{net}", num_rows="dynamic", use_container_width=True)
-                        st.session_state.cart[city][net] = edited_df
+            for city, items in list(st.session_state.cart.items()):
+                for item_name, df_cart in list(items.items()):
+                    # تحديد نوع العنصر (شبكة أو أعمدة فردية)
+                    if item_name.startswith("شبكة"):
+                        icon = "📡"
+                    else:
+                        icon = "📍"
+                    
+                    with st.expander(f"{icon} {city} - {item_name}", expanded=True):
+                        edited_df = st.data_editor(
+                            df_cart, 
+                            key=f"edit_{city}_{item_name}", 
+                            num_rows="dynamic", 
+                            use_container_width=True
+                        )
+                        st.session_state.cart[city][item_name] = edited_df
                         
                         qty = int(edited_df['العدد'].sum())
                         fp = float(edited_df['fee_print'].iloc[0]) if 'fee_print' in edited_df.columns else per_column_print
@@ -1459,8 +1544,8 @@ elif page == "📄 عرض سعر":
                         
                         st.info(f"📊 العدد: {qty} | الطباعة: {section_print:.2f}$ | العرض: {section_display:.2f}$")
                         
-                        if st.button("🗑️ حذف", key=f"delete_{city}_{net}"):
-                            del st.session_state.cart[city][net]
+                        if st.button("🗑️ حذف", key=f"delete_{city}_{item_name}"):
+                            del st.session_state.cart[city][item_name]
                             st.rerun()
             
             st.divider()
