@@ -446,6 +446,7 @@ with st.sidebar:
     st.radio("📋 القائمة الرئيسية", [
         "🏢 لوحات الشركات",
         "📍 الأعمدة المتاحة",
+        "📅 لوحة الفترات",
         "📊 Dashboard",
         "📄 عرض سعر",
         "📋 تقرير الجرد",
@@ -903,7 +904,219 @@ elif page == "📍 الأعمدة المتاحة":
             "text/csv",
             use_container_width=True
         )
+
+# ============================================================
+# صفحة: لوحة التحكم البصرية للفترات (للمبيعات والتسويق)
+# ============================================================
+
+elif page == "📅 لوحة الفترات":
+    st.title("📅 لوحة التحكم البصرية للفترات")
+    st.info("📌 عرض المتاح والمحجوز لكل فترة مع قائمة الزبائن")
     
+    # ============================================================
+    # الفلاتر
+    # ============================================================
+    
+    col_filter1, col_filter2 = st.columns(2)
+    
+    with col_filter1:
+        # جلب المحافظات
+        conn = get_connection()
+        cities_df = pd.read_sql_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"', conn)
+        conn.close()
+        city_list = ['جميع المحافظات'] + cities_df['المحافظة'].tolist()
+        selected_city = st.selectbox("🏙️ اختر المحافظة:", city_list)
+    
+    with col_filter2:
+        # جلب الأحجام
+        conn = get_connection()
+        sizes_df = pd.read_sql_query('SELECT DISTINCT "الحجم" FROM "اعمدة انارة" ORDER BY "الحجم"', conn)
+        conn.close()
+        size_list = ['جميع الأحجام'] + sizes_df['الحجم'].tolist()
+        selected_size = st.selectbox("📏 اختر الحجم:", size_list)
+    
+    # ============================================================
+    # جلب البيانات حسب الفلاتر
+    # ============================================================
+    
+    @st.cache_data(ttl=300)
+    def load_period_data(selected_city, selected_size):
+        conn = get_connection()
+        
+        # بناء شرط الفلتر
+        where_conditions = []
+        if selected_city != 'جميع المحافظات':
+            where_conditions.append(f'"المحافظة" = \'{selected_city}\'')
+        if selected_size != 'جميع الأحجام':
+            where_conditions.append(f'"الحجم" = \'{selected_size}\'')
+        
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        
+        # جلب الأعمدة مع التصفية
+        boards_query = f"""
+        SELECT 
+            "رقم اللوحة",
+            "اسم العمود",
+            "المحافظة",
+            "الشبكة",
+            "الحجم",
+            "العدد"
+        FROM "اعمدة انارة"
+        WHERE {where_clause}
+        """
+        boards_df = pd.read_sql_query(boards_query, conn)
+        
+        # جلب الحجوزات مع التصفية
+        bookings_query = f"""
+        SELECT 
+            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
+            "اسم الزبون",
+            "فترة الحجز",
+            "العام"
+        FROM "حجوزات1"
+        WHERE "العام" = 2026
+        """
+        bookings_df = pd.read_sql_query(bookings_query, conn)
+        conn.close()
+        
+        return boards_df, bookings_df
+    
+    boards_df, bookings_df = load_period_data(selected_city, selected_size)
+    
+    # ============================================================
+    # حساب البيانات لكل فترة
+    # ============================================================
+    
+    # قائمة الفترات الـ 24
+    periods = [
+        'كانون الثاني 15-1', 'كانون الثاني 31-16',
+        'شباط 15-1', 'شباط 28-16',
+        'آذار 15-1', 'آذار 31-16',
+        'نيسان 15-1', 'نيسان 30-16',
+        'أيار 15-1', 'أيار 31-16',
+        'حزيران 15-1', 'حزيران 30-16',
+        'تموز 15-1', 'تموز 31-16',
+        'آب 15-1', 'آب 31-16',
+        'أيلول 15-1', 'أيلول 30-16',
+        'تشرين الأول 15-1', 'تشرين الأول 31-16',
+        'تشرين الثاني 15-1', 'تشرين الثاني 30-16',
+        'كانون الأول 15-1', 'كانون الأول 31-16'
+    ]
+    
+    # حساب الإحصائيات لكل فترة
+    period_stats = []
+    total_boards = boards_df['العدد'].sum()
+    
+    for period in periods:
+        # اللوحات المحجوزة في هذه الفترة
+        booked_boards = bookings_df[bookings_df['فترة الحجز'] == period]['رقم اللوحة'].unique()
+        booked_count = boards_df[boards_df['رقم اللوحة'].isin(booked_boards)]['العدد'].sum()
+        
+        # الزبائن الذين حجزوا في هذه الفترة
+        customers = bookings_df[bookings_df['فترة الحجز'] == period]['اسم الزبون'].unique()
+        customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
+        
+        period_stats.append({
+            'الفترة': period,
+            'إجمالي اللوحات': int(total_boards),
+            'محجوز': int(booked_count),
+            'متاح': int(total_boards - booked_count),
+            'نسبة الإشغال': f"{(booked_count/total_boards*100):.1f}%" if total_boards > 0 else "0%",
+            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد'
+        })
+    
+    period_df = pd.DataFrame(period_stats)
+    
+    # ============================================================
+    # عرض الإحصائيات العامة
+    # ============================================================
+    
+    st.subheader("📊 إحصائيات عامة")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🏢 إجمالي اللوحات", int(total_boards))
+    col2.metric("📅 عدد الفترات", 24)
+    col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
+    
+    st.divider()
+    
+    # ============================================================
+    # عرض الجدول البصري للفترات
+    # ============================================================
+    
+    st.subheader("📋 الجدول البصري للفترات")
+    
+    # تنسيق الألوان
+    def color_cells(val):
+        if 'محجوز' in str(val):
+            return 'background-color: #ffebee; color: #c62828;'
+        elif 'متاح' in str(val):
+            return 'background-color: #e8f5e9; color: #2e7d32;'
+        return ''
+    
+    # عرض الجدول مع تلوين
+    styled_df = period_df.style.applymap(color_cells, subset=['الحالة'])
+    
+    st.dataframe(
+        period_df[['الفترة', 'إجمالي اللوحات', 'محجوز', 'متاح', 'نسبة الإشغال', 'الزبائن']],
+        use_container_width=True,
+        height=500,
+        column_config={
+            'الفترة': st.column_config.TextColumn('الفترة', width='small'),
+            'إجمالي اللوحات': st.column_config.NumberColumn('الإجمالي', format='%d'),
+            'محجوز': st.column_config.NumberColumn('محجوز', format='%d'),
+            'متاح': st.column_config.NumberColumn('متاح', format='%d'),
+            'نسبة الإشغال': st.column_config.TextColumn('نسبة الإشغال', width='small'),
+            'الزبائن': st.column_config.TextColumn('الزبائن', width='large')
+        }
+    )
+    
+    # ============================================================
+    # رسم بياني للفترات
+    # ============================================================
+    
+    st.divider()
+    st.subheader("📊 رسم بياني للمتاح والمحجوز")
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=period_df['الفترة'],
+        y=period_df['متاح'],
+        name='متاح',
+        marker_color='#4CAF50'
+    ))
+    
+    fig.add_trace(go.Bar(
+        x=period_df['الفترة'],
+        y=period_df['محجوز'],
+        name='محجوز',
+        marker_color='#f44336'
+    ))
+    
+    fig.update_layout(
+        barmode='stack',
+        height=400,
+        xaxis_tickangle=-45,
+        xaxis_title='الفترة',
+        yaxis_title='عدد اللوحات',
+        legend_title='الحالة'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # ============================================================
+    # زر تصدير
+    # ============================================================
+    
+    csv_data = period_df.to_csv(index=False, encoding='utf-8-sig')
+    st.download_button(
+        "📥 تحميل التقرير (CSV)",
+        csv_data,
+        f"periods_report_{selected_city}_{selected_size}.csv",
+        "text/csv",
+        use_container_width=True
+    )
+
 #=================
 # لوحة المراقبة
 #==================
