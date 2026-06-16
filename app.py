@@ -906,12 +906,12 @@ elif page == "📍 الأعمدة المتاحة":
         )
 
 # ============================================================
-# صفحة: لوحة التحكم البصرية للفترات (للمبيعات والتسويق)
+# صفحة: لوحة التحكم البصرية للفترات (حالتان فقط)
 # ============================================================
 
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
-    st.info("📌 عرض المتاح والمحجوز لكل فترة مع جدول تفصيلي")
+    st.info("📌 عرض المتاح والمحجوز لكل فترة (حالتان فقط)")
     
     # ============================================================
     # الفلاتر
@@ -949,7 +949,7 @@ elif page == "📅 لوحة الفترات":
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
-        # الأعمدة
+        # الأعمدة مع التصفية
         boards_query = f"""
         SELECT 
             "رقم اللوحة",
@@ -963,7 +963,7 @@ elif page == "📅 لوحة الفترات":
         """
         boards_df = pd.read_sql_query(boards_query, conn)
         
-        # الحجوزات
+        # الحجوزات (جميع الفترات)
         bookings_query = """
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
@@ -981,15 +981,14 @@ elif page == "📅 لوحة الفترات":
     boards_df, bookings_df = load_period_data(selected_city, selected_size)
     
     # ============================================================
-    # قائمة الفترات الـ 24 (مرتبة حسب الأرقام)
+    # قائمة الفترات من PERIOD_ORDER
     # ============================================================
     
-    # استخدام PERIOD_ORDER للحصول على الفترات مرتبة
     sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
     periods = [p[0] for p in sorted_periods]
     
     # ============================================================
-    # حساب الإحصائيات لكل فترة
+    # حساب الإحصائيات لكل فترة (حالتان فقط)
     # ============================================================
     
     total_boards = boards_df['العدد'].sum()
@@ -997,14 +996,14 @@ elif page == "📅 لوحة الفترات":
     period_details = {}
     
     for period in periods:
-        # اللوحات المحجوزة في هذه الفترة
+        # اللوحات المحجوزة في هذه الفترة بالضبط
         booked_boards = bookings_df[bookings_df['فترة الحجز'] == period]['رقم اللوحة'].unique()
         booked_boards_list = list(booked_boards)
         
         # تفاصيل اللوحات المحجوزة
         booked_details = boards_df[boards_df['رقم اللوحة'].isin(booked_boards_list)]
         
-        # الزبائن
+        # الزبائن في هذه الفترة
         customers = bookings_df[bookings_df['فترة الحجز'] == period]['اسم الزبون'].unique()
         customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
         
@@ -1014,9 +1013,8 @@ elif page == "📅 لوحة الفترات":
             'إجمالي اللوحات': int(total_boards),
             'محجوز': int(booked_details['العدد'].sum()),
             'متاح': int(total_boards - booked_details['العدد'].sum()),
-            'نسبة الإشغال': f"{(booked_details['العدد'].sum()/total_boards*100):.1f}%" if total_boards > 0 else "0%",
-            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد',
-            'عدد الزبائن': len(customers)
+            'عدد الزبائن': len(customers),
+            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد'
         })
         
         period_details[period] = {
@@ -1053,15 +1051,13 @@ elif page == "📅 لوحة الفترات":
                 stats = period_stats[i + j]
                 
                 with col:
-                    if stats['نسبة الإشغال'] == '0.0%':
+                    # اللون: أخضر إذا كان المتاح = الإجمالي، برتقالي إذا كان هناك حجوزات
+                    if stats['محجوز'] == 0:
                         bg_color = "#e8f5e9"
                         border_color = "#4CAF50"
-                    elif stats['عدد الزبائن'] > 0:
+                    else:
                         bg_color = "#fff3e0"
                         border_color = "#FF9800"
-                    else:
-                        bg_color = "#f5f5f5"
-                        border_color = "#9E9E9E"
                     
                     st.markdown(f"""
                     <div style="
@@ -1076,7 +1072,7 @@ elif page == "📅 لوحة الفترات":
                         <div style="font-size: 12px; margin-top: 5px;">
                             🟢 {stats['متاح']} | 🔴 {stats['محجوز']}
                         </div>
-                        <div style="font-size: 12px; margin-top: 5px; color: #666;">
+                        <div style="font-size: 11px; margin-top: 5px; color: #666;">
                             👥 {stats['الزبائن']}
                         </div>
                     </div>
@@ -1111,7 +1107,7 @@ elif page == "📅 لوحة الفترات":
             col3.metric("🟢 متاح", period_stat['متاح'])
             
             if len(details['customers']) > 0:
-                st.write("**👥 الزبائن:**")
+                st.write("**👥 الزبائن في هذه الفترة:**")
                 st.write(", ".join(details['customers']))
             
             if not details['booked_details'].empty:
