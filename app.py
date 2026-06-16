@@ -906,7 +906,7 @@ elif page == "📍 الأعمدة المتاحة":
         )
 
 # ============================================================
-# صفحة: لوحة التحكم البصرية للفترات (باستخدام get_period_number)
+# صفحة: لوحة التحكم البصرية للفترات
 # ============================================================
 
 elif page == "📅 لوحة الفترات":
@@ -949,7 +949,7 @@ elif page == "📅 لوحة الفترات":
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
-        # الأعمدة مع التصفية
+        # الأعمدة
         boards_query = f"""
         SELECT 
             "رقم اللوحة",
@@ -963,7 +963,7 @@ elif page == "📅 لوحة الفترات":
         """
         boards_df = pd.read_sql_query(boards_query, conn)
         
-        # الحجوزات (مع تحويل الفترات إلى أرقام باستخدام get_period_number في Python)
+        # الحجوزات
         bookings_query = """
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
@@ -976,7 +976,7 @@ elif page == "📅 لوحة الفترات":
         bookings_df = pd.read_sql_query(bookings_query, conn)
         conn.close()
         
-        # ✅ تحويل الفترات إلى أرقام باستخدام get_period_number
+        # ✅ تطبيق get_period_number على جميع الحجوزات
         bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
         
         return boards_df, bookings_df
@@ -984,15 +984,14 @@ elif page == "📅 لوحة الفترات":
     boards_df, bookings_df = load_period_data(selected_city, selected_size)
     
     # ============================================================
-    # الحصول على الفترات من PERIOD_ORDER (مرتبة)
+    # الحصول على الفترات من PERIOD_ORDER
     # ============================================================
     
     sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
     all_period_names = [p[0] for p in sorted_periods]
-    all_period_nums = [p[1] for p in sorted_periods]
     
     # ============================================================
-    # حساب الإحصائيات لكل فترة باستخدام period_num
+    # حساب الإحصائيات لكل فترة
     # ============================================================
     
     total_boards = boards_df['العدد'].sum()
@@ -1000,14 +999,14 @@ elif page == "📅 لوحة الفترات":
     period_details = {}
     
     for period_name, period_num in sorted_periods:
-        # اللوحات المحجوزة في هذه الفترة (باستخدام period_num)
+        # ✅ اللوحات المحجوزة في هذه الفترة (باستخدام period_num)
         booked_boards = bookings_df[bookings_df['period_num'] == period_num]['رقم اللوحة'].unique()
         booked_boards_list = list(booked_boards)
         
         # تفاصيل اللوحات المحجوزة
         booked_details = boards_df[boards_df['رقم اللوحة'].isin(booked_boards_list)]
         
-        # الزبائن في هذه الفترة
+        # الزبائن
         customers = bookings_df[bookings_df['period_num'] == period_num]['اسم الزبون'].unique()
         customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
         
@@ -1030,7 +1029,7 @@ elif page == "📅 لوحة الفترات":
     period_df = pd.DataFrame(period_stats)
     
     # ============================================================
-    # عرض الإحصائيات العامة
+    # عرض النتائج
     # ============================================================
     
     st.subheader("📊 إحصائيات عامة")
@@ -1040,10 +1039,6 @@ elif page == "📅 لوحة الفترات":
     col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
     
     st.divider()
-    
-    # ============================================================
-    # عرض الفترات كبطاقات
-    # ============================================================
     
     st.subheader("📋 الفترات")
     
@@ -1063,21 +1058,10 @@ elif page == "📅 لوحة الفترات":
                         border_color = "#FF9800"
                     
                     st.markdown(f"""
-                    <div style="
-                        background: {bg_color};
-                        border: 2px solid {border_color};
-                        border-radius: 12px;
-                        padding: 15px;
-                        text-align: center;
-                        margin: 5px 0;
-                    ">
-                        <div style="font-size: 14px; font-weight: bold;">{period_name}</div>
-                        <div style="font-size: 12px; margin-top: 5px;">
-                            🟢 {stats['متاح']} | 🔴 {stats['محجوز']}
-                        </div>
-                        <div style="font-size: 11px; margin-top: 5px; color: #666;">
-                            👥 {stats['الزبائن']}
-                        </div>
+                    <div style="background:{bg_color};border:2px solid {border_color};border-radius:12px;padding:15px;text-align:center;margin:5px 0;">
+                        <div style="font-size:14px;font-weight:bold;">{period_name}</div>
+                        <div style="font-size:12px;margin-top:5px;">🟢 {stats['متاح']} | 🔴 {stats['محجوز']}</div>
+                        <div style="font-size:11px;margin-top:5px;color:#666;">👥 {stats['الزبائن']}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -1087,7 +1071,7 @@ elif page == "📅 لوحة الفترات":
                         st.rerun()
     
     # ============================================================
-    # عرض التفاصيل للفترة المختارة
+    # التفاصيل
     # ============================================================
     
     if st.session_state.get('show_period_detail', False):
@@ -1137,43 +1121,10 @@ elif page == "📅 لوحة الفترات":
     st.subheader("📊 رسم بياني للمتاح والمحجوز")
     
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=period_df['الفترة'],
-        y=period_df['متاح'],
-        name='متاح',
-        marker_color='#4CAF50'
-    ))
-    fig.add_trace(go.Bar(
-        x=period_df['الفترة'],
-        y=period_df['محجوز'],
-        name='محجوز',
-        marker_color='#f44336'
-    ))
-    fig.update_layout(
-        barmode='stack',
-        height=400,
-        xaxis_tickangle=-45,
-        xaxis_title='الفترة',
-        yaxis_title='عدد اللوحات'
-    )
+    fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['متاح'], name='متاح', marker_color='#4CAF50'))
+    fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['محجوز'], name='محجوز', marker_color='#f44336'))
+    fig.update_layout(barmode='stack', height=400, xaxis_tickangle=-45)
     st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # تصدير CSV
-    # ============================================================
-    
-    st.divider()
-    st.subheader("📥 تصدير التقرير")
-    
-    csv_data = period_df.to_csv(index=False, encoding='utf-8-sig')
-    st.download_button(
-        "📥 تحميل التقرير (CSV)",
-        csv_data,
-        f"periods_report_{selected_city}_{selected_size}.csv",
-        "text/csv",
-        use_container_width=True
-    )
-
 #=================
 # لوحة المراقبة
 #==================
