@@ -966,7 +966,6 @@ elif page == "📅 لوحة الفترات":
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
-        # ✅ تأكد من أن رقم اللوحة بنفس النوع في كلا الجدولين
         boards_query = f"""
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
@@ -999,24 +998,6 @@ elif page == "📅 لوحة الفترات":
         return boards_df, bookings_df
     
     boards_df, bookings_df = load_period_data(selected_city, selected_size, PERIOD_ORDER)
-    
-    # ============================================================
-    # DEBUG - التحقق من تطابق اللوحات
-    # ============================================================
-    
-    st.subheader("🔍 DEBUG - التحقق من البيانات")
-    
-    st.write("**عدد اللوحات في boards_df:**", len(boards_df))
-    st.write("**عدد اللوحات الفريدة في bookings_df:**", bookings_df['رقم اللوحة'].nunique())
-    
-    common_boards = set(boards_df['رقم اللوحة']) & set(bookings_df['رقم اللوحة'])
-    st.write("**اللوحات المشتركة:**", len(common_boards))
-    
-    if len(common_boards) == 0:
-        st.error("❌ لا توجد لوحات مشتركة بين الجدولين! تأكد من CAST.")
-        st.stop()
-    
-    st.divider()
     
     # ============================================================
     # الحصول على الفترات من PERIOD_ORDER
@@ -1103,7 +1084,7 @@ elif page == "📅 لوحة الفترات":
                         st.rerun()
     
     # ============================================================
-    # التفاصيل
+    # التفاصيل للفترة المختارة
     # ============================================================
     
     if st.session_state.get('show_period_detail', False):
@@ -1155,22 +1136,43 @@ elif page == "📅 لوحة الفترات":
     fig = go.Figure()
     fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['متاح'], name='متاح', marker_color='#4CAF50'))
     fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['محجوز'], name='محجوز', marker_color='#f44336'))
-    fig.update_layout(barmode='stack', height=400, xaxis_tickangle=-45, xaxis_title='الفترة', yaxis_title='عدد اللوحات')
+    fig.update_layout(
+        barmode='stack',
+        height=400,
+        xaxis_tickangle=-45,
+        xaxis_title='الفترة',
+        yaxis_title='عدد اللوحات'
+    )
     st.plotly_chart(fig, use_container_width=True)
     
     # ============================================================
-    # تصدير CSV
+    # تصدير Excel
     # ============================================================
     
     st.divider()
     st.subheader("📥 تصدير التقرير")
     
-    csv_data = period_df.to_csv(index=False, encoding='utf-8-sig')
+    # إنشاء ملف Excel
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # صفحة الملخص
+        period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
+        
+        # صفحة لكل فترة تحتوي على تفاصيل اللوحات المحجوزة
+        for period_name in all_period_names:
+            if period_name in period_details:
+                details = period_details[period_name]
+                if not details['booked_details'].empty:
+                    sheet_name = period_name[:25]  # Excel sheet name max 31 chars
+                    details['booked_details'].to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    output.seek(0)
+    
     st.download_button(
-        "📥 تحميل التقرير (CSV)",
-        csv_data,
-        f"periods_report_{selected_city}_{selected_size}.csv",
-        "text/csv",
+        "📥 تحميل تقرير Excel",
+        output,
+        f"periods_report_{selected_city}_{selected_size}.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
 #=================
