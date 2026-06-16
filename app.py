@@ -906,12 +906,12 @@ elif page == "📍 الأعمدة المتاحة":
         )
 
 # ============================================================
-# صفحة: لوحة التحكم البصرية للفترات (باستخدام أرقام الفترات)
+# صفحة: لوحة التحكم البصرية للفترات (باستخدام get_period_number)
 # ============================================================
 
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
-    st.info("📌 عرض المتاح والمحجوز لكل فترة (بنفس منطق صفحة الأعمدة المتاحة)")
+    st.info("📌 عرض المتاح والمحجوز لكل فترة")
     
     # ============================================================
     # الفلاتر
@@ -934,7 +934,7 @@ elif page == "📅 لوحة الفترات":
         selected_size = st.selectbox("📏 اختر الحجم:", size_list)
     
     # ============================================================
-    # جلب البيانات (نفس منطق صفحة الأعمدة المتاحة)
+    # جلب البيانات
     # ============================================================
     
     @st.cache_data(ttl=300)
@@ -963,44 +963,21 @@ elif page == "📅 لوحة الفترات":
         """
         boards_df = pd.read_sql_query(boards_query, conn)
         
-        # الحجوزات مع أرقام الفترات (نفس منطق صفحة الأعمدة المتاحة)
+        # الحجوزات (مع تحويل الفترات إلى أرقام باستخدام get_period_number في Python)
         bookings_query = """
         SELECT 
             CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
             "اسم الزبون",
             "فترة الحجز",
-            "العام",
-            CASE
-                WHEN "فترة الحجز" = 'كانون الثاني 15-1' THEN 1
-                WHEN "فترة الحجز" = 'كانون الثاني 31-16' THEN 2
-                WHEN "فترة الحجز" = 'شباط 15-1' THEN 3
-                WHEN "فترة الحجز" = 'شباط 28-16' THEN 4
-                WHEN "فترة الحجز" = 'آذار 15-1' THEN 5
-                WHEN "فترة الحجز" = 'آذار 31-16' THEN 6
-                WHEN "فترة الحجز" = 'نيسان 15-1' THEN 7
-                WHEN "فترة الحجز" = 'نيسان 30-16' THEN 8
-                WHEN "فترة الحجز" = 'أيار 15-1' THEN 9
-                WHEN "فترة الحجز" = 'أيار 31-16' THEN 10
-                WHEN "فترة الحجز" = 'حزيران 15-1' THEN 11
-                WHEN "فترة الحجز" = 'حزيران 30-16' THEN 12
-                WHEN "فترة الحجز" = 'تموز 15-1' THEN 13
-                WHEN "فترة الحجز" = 'تموز 31-16' THEN 14
-                WHEN "فترة الحجز" = 'آب 15-1' THEN 15
-                WHEN "فترة الحجز" = 'آب 31-16' THEN 16
-                WHEN "فترة الحجز" = 'أيلول 15-1' THEN 17
-                WHEN "فترة الحجز" = 'أيلول 30-16' THEN 18
-                WHEN "فترة الحجز" = 'تشرين الأول 15-1' THEN 19
-                WHEN "فترة الحجز" = 'تشرين الأول 31-16' THEN 20
-                WHEN "فترة الحجز" = 'تشرين الثاني 15-1' THEN 21
-                WHEN "فترة الحجز" = 'تشرين الثاني 30-16' THEN 22
-                WHEN "فترة الحجز" = 'كانون الأول 15-1' THEN 23
-                WHEN "فترة الحجز" = 'كانون الأول 31-16' THEN 24
-            END as period_num
+            "العام"
         FROM "حجوزات1"
         WHERE "العام" = 2026
         """
         bookings_df = pd.read_sql_query(bookings_query, conn)
         conn.close()
+        
+        # ✅ تحويل الفترات إلى أرقام باستخدام get_period_number
+        bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
         
         return boards_df, bookings_df
     
@@ -1011,7 +988,7 @@ elif page == "📅 لوحة الفترات":
     # ============================================================
     
     sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
-    all_periods = [p[0] for p in sorted_periods]
+    all_period_names = [p[0] for p in sorted_periods]
     all_period_nums = [p[1] for p in sorted_periods]
     
     # ============================================================
@@ -1059,7 +1036,7 @@ elif page == "📅 لوحة الفترات":
     st.subheader("📊 إحصائيات عامة")
     col1, col2, col3 = st.columns(3)
     col1.metric("🏢 إجمالي اللوحات", int(total_boards))
-    col2.metric("📅 عدد الفترات", 24)
+    col2.metric("📅 عدد الفترات", len(all_period_names))
     col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
     
     st.divider()
@@ -1070,11 +1047,11 @@ elif page == "📅 لوحة الفترات":
     
     st.subheader("📋 الفترات")
     
-    for i in range(0, len(all_periods), 4):
+    for i in range(0, len(all_period_names), 4):
         cols = st.columns(4)
         for j, col in enumerate(cols):
-            if i + j < len(all_periods):
-                period_name = all_periods[i + j]
+            if i + j < len(all_period_names):
+                period_name = all_period_names[i + j]
                 stats = period_stats[i + j]
                 
                 with col:
@@ -1182,7 +1159,7 @@ elif page == "📅 لوحة الفترات":
     st.plotly_chart(fig, use_container_width=True)
     
     # ============================================================
-    # تصدير CSV (بدلاً من Excel لتجنب مشكلة openpyxl)
+    # تصدير CSV
     # ============================================================
     
     st.divider()
