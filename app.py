@@ -905,9 +905,30 @@ elif page == "📍 الأعمدة المتاحة":
             use_container_width=True
         )
 
+# ============================================================
+# صفحة: لوحة التحكم البصرية للفترات
+# ============================================================
+
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
     st.info("📌 عرض المتاح والمحجوز لكل فترة")
+    
+    # ============================================================
+    # بناء PERIOD_ORDER من قاعدة البيانات
+    # ============================================================
+    
+    def build_period_order():
+        conn = get_connection()
+        df = pd.read_sql_query('SELECT no, namee FROM "الفترة" ORDER BY no', conn)
+        conn.close()
+        return {row['namee']: row['no'] for _, row in df.iterrows()}
+    
+    PERIOD_ORDER = build_period_order()
+    
+    def get_period_number(period_name):
+        if period_name is None:
+            return 99
+        return PERIOD_ORDER.get(period_name, 99)
     
     # ============================================================
     # الفلاتر
@@ -934,7 +955,7 @@ elif page == "📅 لوحة الفترات":
     # ============================================================
     
     @st.cache_data(ttl=300)
-    def load_period_data(selected_city, selected_size):
+    def load_period_data(selected_city, selected_size, PERIOD_ORDER):
         conn = get_connection()
         
         where_conditions = []
@@ -970,11 +991,14 @@ elif page == "📅 لوحة الفترات":
         bookings_df = pd.read_sql_query(bookings_query, conn)
         conn.close()
         
-        bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(get_period_number)
+        # ✅ تحويل الفترات باستخدام PERIOD_ORDER الجديد
+        bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(
+            lambda x: PERIOD_ORDER.get(x, 99)
+        )
         
         return boards_df, bookings_df
     
-    boards_df, bookings_df = load_period_data(selected_city, selected_size)
+    boards_df, bookings_df = load_period_data(selected_city, selected_size, PERIOD_ORDER)
     
     # ============================================================
     # الحصول على الفترات من PERIOD_ORDER
@@ -982,7 +1006,6 @@ elif page == "📅 لوحة الفترات":
     
     sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
     all_period_names = [p[0] for p in sorted_periods]
-    all_period_nums = [p[1] for p in sorted_periods]
     
     # ============================================================
     # حساب الإحصائيات لكل فترة
