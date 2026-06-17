@@ -854,9 +854,8 @@ if page == "🏢 لوحات الشركات":
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📅 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
+    st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
     
-    # استخدام st.form لمنع إعادة التحميل التلقائي
     with st.form(key="filter_form"):
         st.subheader("📅 فلتر تاريخ بداية الإتاحة")
         start_date = st.date_input(
@@ -873,20 +872,18 @@ elif page == "📍 الأعمدة المتاحة":
             
             df = load_available_boards(target_period_num, target_year)
             
-            # حساب الإحصائيات باستخدام groupby
             stats = df.groupby('status').agg({
                 'رقم اللوحة': 'count',
                 'العدد': 'sum'
             }).rename(columns={'رقم اللوحة': 'sites', 'العدد': 'boards'})
             
-            # عرض الإحصائيات
-            st.subheader("(شكل) إحصائيات عامة")
+            st.subheader("📊 إحصائيات عامة")
             
             status_colors = {
-                '(متاح) متاح فوراً': ('(متاح) متاح فوراً', '#d4edda'),
+                '🟢 متاح فوراً': ('🟢 متاح فوراً', '#d4edda'),
                 '🟡 متاح مؤقتاً': ('🟡 متاح مؤقتاً', '#fff3cd'),
                 '🟠 محجوز مؤقتاً': ('🟠 محجوز مؤقتاً', '#ffe5d0'),
-                '(متاح) محجوز بالكامل': ('(متاح) محجوز بالكامل', '#f8d7da')
+                '🔴 محجوز بالكامل': ('🔴 محجوز بالكامل', '#f8d7da')
             }
             
             cols = st.columns(4)
@@ -904,43 +901,18 @@ elif page == "📍 الأعمدة المتاحة":
             
             st.divider()
             
-            # عرض حسب المحافظة
             for city in df['المحافظة'].unique():
                 city_data = df[df['المحافظة'] == city]
                 
                 with st.expander(f"🏙️ {city} - {len(city_data)} موقع", expanded=False):
                     display_df = city_data.copy()
                     
-                    @st.cache_data(ttl=3600)
-                    def period_to_text(period_num):
-                        if pd.isna(period_num):
-                            return ""
-                        period_map = {
-                            1: "1-15 كانون ثاني", 2: "16-30 كانون ثاني",
-                            3: "1-15 شباط", 4: "16-28 شباط",
-                            5: "1-15 آذار", 6: "16-31 آذار",
-                            7: "1-15 نيسان", 8: "16-30 نيسان",
-                            9: "1-15 أيار", 10: "16-31 أيار",
-                            11: "1-15 حزيران", 12: "16-30 حزيران",
-                            13: "1-15 تموز", 14: "16-31 تموز",
-                            15: "1-15 آب", 16: "16-31 آب",
-                            17: "1-15 أيلول", 18: "16-30 أيلول",
-                            19: "1-15 تشرين أول", 20: "16-31 تشرين أول",
-                            21: "1-15 تشرين ثاني", 22: "16-30 تشرين ثاني",
-                            23: "1-15 كانون أول", 24: "16-31 كانون أول"
-                        }
-                        return period_map.get(period_num, f"فترة {period_num}")
-                    
-                    display_df['تاريخ البدء'] = display_df['next_booking_period'].apply(period_to_text)
-                    display_df['تاريخ الانتهاء'] = display_df['end_booking_period'].apply(period_to_text)
-                    
                     st.dataframe(
-                        display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء', 'تاريخ الانتهاء']],
+                        display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
                         use_container_width=True,
                         height=300
                     )
             
-            # تصدير CSV
             csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_csv(
                 index=False, encoding='utf-8-sig'
             )
