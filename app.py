@@ -3,6 +3,10 @@
 # app.py - النسخة المحسنة مع التصحيحات الإلزامية
 # ============================================================
 
+# ============================================================
+# الاستيرادات
+# ============================================================
+
 import streamlit as st
 import pandas as pd
 import os
@@ -11,6 +15,7 @@ import folium
 import json
 import hashlib
 import secrets
+from dotenv import load_dotenv
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 from docx import Document
@@ -23,19 +28,28 @@ import plotly.graph_objects as go
 import plotly.express as px
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
-from supabase import create_client
 
+# تحميل متغيرات البيئة
+load_dotenv()
 # ============================================================
 # إعدادات Supabase (من متغيرات البيئة فقط - تم إزالة الكلمة الافتراضية)
 # ============================================================
 
 @st.cache_resource(ttl=3600)
+# ============================================================
+# دوال الاتصال والتشفير
+# ============================================================
+
+@st.cache_resource(ttl=3600)
 def get_connection():
     """اتصال مباشر بـ Supabase PostgreSQL - مع تخزين مؤقت"""
-    password = os.environ.get("SUPABASE_PASSWORD")
+    
+    password = os.getenv("SUPABASE_PASSWORD")
     if not password:
-        st.error("⚠️ كلمة المرور غير موجودة في متغيرات البيئة")
-        st.stop()
+        st.error("""
+        ⚠️ **كلمة المرور غير موجودة!**
+        
+        يرجى إنشاء ملف `.env` في المجلد الرئيسي وإضافة:
     
     return psycopg2.connect(
         host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
