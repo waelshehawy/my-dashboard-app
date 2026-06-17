@@ -752,7 +752,8 @@ elif page == "📍 الأعمدة المتاحة":
         # حساب الفترة المستهدفة
         target_period_num = get_period_from_date(start_date)
         target_year = start_date.year
-        
+        st.write(f"📅 التاريخ المختار: {start_date}")
+        st.write(f"📅 رقم الفترة: {target_period_num}")
         # جلب البيانات مع تخزين مؤقت
         @st.cache_data(ttl=300)
         def load_data(target_period_num, target_year):
