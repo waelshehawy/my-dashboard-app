@@ -338,15 +338,6 @@ ADVANCED_CSS = """
     }
 </style>
 """
-
-st.set_page_config(
-    page_title="PreView Ads ERP - نظام إدارة الإعلانات",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 #part3
 # ============================================================
 # دوال المساعدة والمتاح (مع تصحيحات Cache)
