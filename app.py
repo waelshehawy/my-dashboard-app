@@ -88,7 +88,6 @@ def verify_password(password, hashed):
 @st.cache_data(ttl=60)
 def authenticate_user(username, password):
     """مصادقة المستخدم من قاعدة البيانات"""
-    print(f"🔍 محاولة تسجيل دخول: {username}")
     
     conn = get_connection()
     cursor = conn.cursor()
@@ -100,17 +99,19 @@ def authenticate_user(username, password):
         """, (username,))
         user = cursor.fetchone()
         
+        st.write(f"🔍 المستخدم: {username}")
+        st.write(f"📌 المستخدم موجود: {user is not None}")
+        
         if not user:
-            print("❌ المستخدم غير موجود")
+            st.error("❌ المستغير غير موجود")
             return None
         
-        print(f"✅ المستخدم موجود: {user[1]}")
         stored_password = user[2]
-        print(f"📝 كلمة المرور المخزنة: {stored_password[:20]}...")
+        st.write(f"📝 كلمة المرور المخزنة (أول 20 حرف): {stored_password[:20]}...")
         
         # مقارنة مباشرة (نص عادي)
         if password == stored_password:
-            print("✅ تطابق نص عادي")
+            st.success("✅ تطابق نص عادي")
             cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
             conn.commit()
             return {
@@ -123,10 +124,10 @@ def authenticate_user(username, password):
         
         # مقارنة SHA256 (بدون ملح)
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
-        print(f"🔑 كلمة المرور المشفرة: {hashed_password[:20]}...")
+        st.write(f"🔑 المشفرة المدخلة: {hashed_password[:20]}...")
         
         if hashed_password == stored_password:
-            print("✅ تطابق SHA256")
+            st.success("✅ تطابق SHA256")
             cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
             conn.commit()
             return {
@@ -137,10 +138,9 @@ def authenticate_user(username, password):
                 'is_active': user[5]
             }
         
-        print("❌ كلمة المرور غير صحيحة")
+        st.error("❌ كلمة المرور غير صحيحة")
         return None
     except Exception as e:
-        print(f"❌ خطأ: {str(e)}")
         st.error(f"❌ خطأ في المصادقة: {str(e)}")
         return None
     finally:
