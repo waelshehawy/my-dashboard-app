@@ -89,27 +89,36 @@ def verify_password(password, hashed):
 def authenticate_user(username, password):
     """مصادقة المستخدم من قاعدة البيانات"""
     
-    conn = get_connection()
-    cursor = conn.cursor()
+    st.write("🚀 دخلنا دالة authenticate_user")
+    st.write(f"👤 اسم المستخدم: {username}")
+    st.write(f"🔑 كلمة المرور: {password}")
+    
     try:
+        st.write("📞 جاري الاتصال بقاعدة البيانات...")
+        conn = get_connection()
+        st.write("✅ تم الاتصال")
+        
+        cursor = conn.cursor()
+        st.write("✅ تم إنشاء cursor")
+        
         cursor.execute("""
             SELECT id, username, password, role, full_name, is_active 
             FROM users 
             WHERE username = %s AND is_active = TRUE
         """, (username,))
-        user = cursor.fetchone()
         
-        st.write(f"🔍 المستخدم: {username}")
+        st.write("✅ تم تنفيذ الاستعلام")
+        user = cursor.fetchone()
         st.write(f"📌 المستخدم موجود: {user is not None}")
         
         if not user:
-            st.error("❌ المستغير غير موجود")
+            st.error("❌ المستخدم غير موجود")
             return None
         
         stored_password = user[2]
-        st.write(f"📝 كلمة المرور المخزنة (أول 20 حرف): {stored_password[:20]}...")
+        st.write(f"📝 كلمة المرور المخزنة (أول 10): {stored_password[:10]}...")
         
-        # مقارنة مباشرة (نص عادي)
+        # مقارنة مباشرة
         if password == stored_password:
             st.success("✅ تطابق نص عادي")
             cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
@@ -122,9 +131,9 @@ def authenticate_user(username, password):
                 'is_active': user[5]
             }
         
-        # مقارنة SHA256 (بدون ملح)
+        # مقارنة SHA256
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
-        st.write(f"🔑 المشفرة المدخلة: {hashed_password[:20]}...")
+        st.write(f"🔑 المشفرة المدخلة: {hashed_password[:10]}...")
         
         if hashed_password == stored_password:
             st.success("✅ تطابق SHA256")
@@ -141,10 +150,13 @@ def authenticate_user(username, password):
         st.error("❌ كلمة المرور غير صحيحة")
         return None
     except Exception as e:
-        st.error(f"❌ خطأ في المصادقة: {str(e)}")
+        st.error(f"❌ خطأ: {str(e)}")
         return None
     finally:
-        cursor.close()
+        try:
+            cursor.close()
+        except:
+            pass
 
 @st.cache_data(ttl=300)
 def get_all_users():
