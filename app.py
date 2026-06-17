@@ -103,7 +103,7 @@ def authenticate_user(username, password):
         
         stored_password = user[2]
         
-        # طريقة 1: مقارنة مباشرة (نص عادي)
+        # مقارنة مباشرة (نص عادي)
         if password == stored_password:
             cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
             conn.commit()
@@ -115,7 +115,7 @@ def authenticate_user(username, password):
                 'is_active': user[5]
             }
         
-        # طريقة 2: مقارنة SHA256 (بدون ملح)
+        # مقارنة SHA256 (بدون ملح)
         if hashlib.sha256(password.encode()).hexdigest() == stored_password:
             cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
             conn.commit()
@@ -127,7 +127,7 @@ def authenticate_user(username, password):
                 'is_active': user[5]
             }
         
-        # طريقة 3: مقارنة مع ملح (تنسيق salt:hash)
+        # مقارنة مع ملح (تنسيق salt:hash)
         try:
             salt, hash_value = stored_password.split(':')
             if hash_value == hashlib.sha256((salt + password).encode()).hexdigest():
