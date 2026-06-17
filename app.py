@@ -843,37 +843,37 @@ elif page == "📍 الأعمدة المتاحة":
         booked_full_sites = len(df[df['status'] == '🔴 محجوز بالكامل'])
         booked_full_boards = df[df['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
 
-# ============================================================
-# DEBUG - تحليل التصنيفات
-# ============================================================
-
-st.subheader("🔍 DEBUG - تحليل التصنيفات")
-
-# عرض توزيع الحالة
-status_dist = df['status'].value_counts()
-st.write("**توزيع الحالة:**")
-st.write(status_dist)
-
-# عرض عينة من اللوحات المصنفة كـ "متاح مؤقتاً"
-temp_sample = df[df['status'] == '🟡 متاح مؤقتاً'][['رقم اللوحة', 'اسم العمود', 'status']].head(10)
-st.write("**عينة من اللوحات المصنفة كـ 'متاح مؤقتاً':**")
-st.dataframe(temp_sample, use_container_width=True)
-
-# عرض عينة من اللوحات المصنفة كـ "محجوز مؤقتاً"
-booked_temp_sample = df[df['status'] == '🟠 محجوز مؤقتاً'][['رقم اللوحة', 'اسم العمود', 'status']].head(10)
-st.write("**عينة من اللوحات المصنفة كـ 'محجوز مؤقتاً':**")
-st.dataframe(booked_temp_sample, use_container_width=True)
-
-# عرض عينة من bookings_df للفترة الحالية
-current_bookings = bookings_df[bookings_df['period_num'] == target_period_num]
-st.write(f"**عدد الحجوزات في الفترة {target_period_num}:** {len(current_bookings)}")
-st.write("**عينة من الحجوزات في الفترة الحالية:**")
-st.dataframe(current_bookings[['رقم اللوحة', 'فترة الحجز', 'period_num']].head(10), use_container_width=True)
-
-st.divider()
-# ============================================================
-# نهاية DEBUG
-# ============================================================
+        # ============================================================
+        # DEBUG - تحليل التصنيفات
+        # ============================================================
+        
+        st.subheader("🔍 DEBUG - تحليل التصنيفات")
+        
+        # عرض توزيع الحالة
+        status_dist = df['status'].value_counts()
+        st.write("**توزيع الحالة:**")
+        st.write(status_dist)
+        
+        # عرض عينة من اللوحات المصنفة كـ "متاح مؤقتاً"
+        temp_sample = df[df['status'] == '🟡 متاح مؤقتاً'][['رقم اللوحة', 'اسم العمود', 'status']].head(10)
+        st.write("**عينة من اللوحات المصنفة كـ 'متاح مؤقتاً':**")
+        st.dataframe(temp_sample, use_container_width=True)
+        
+        # عرض عينة من اللوحات المصنفة كـ "محجوز مؤقتاً"
+        booked_temp_sample = df[df['status'] == '🟠 محجوز مؤقتاً'][['رقم اللوحة', 'اسم العمود', 'status']].head(10)
+        st.write("**عينة من اللوحات المصنفة كـ 'محجوز مؤقتاً':**")
+        st.dataframe(booked_temp_sample, use_container_width=True)
+        
+        # عرض عينة من bookings_df للفترة الحالية
+        current_bookings = bookings_df[bookings_df['period_num'] == target_period_num]
+        st.write(f"**عدد الحجوزات في الفترة {target_period_num}:** {len(current_bookings)}")
+        st.write("**عينة من الحجوزات في الفترة الحالية:**")
+        st.dataframe(current_bookings[['رقم اللوحة', 'فترة الحجز', 'period_num']].head(10), use_container_width=True)
+        
+        st.divider()
+        # ============================================================
+        # نهاية DEBUG
+        # ============================================================
         
         # عرض الإحصائيات
         st.subheader("📊 إحصائيات عامة")
