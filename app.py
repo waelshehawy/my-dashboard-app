@@ -98,18 +98,41 @@ def authenticate_user(username, password):
         """, (username,))
         user = cursor.fetchone()
         
-        if user:
-            # التحقق المباشر لكلمة المرور (للتجربة)
-            stored_password = user[2]
-            
-            # جرب التحقق العادي أولاً
-            if password == stored_password:
-                cursor.execute("""
-                    UPDATE users SET last_login = NOW() 
-                    WHERE id = %s
-                """, (user[0],))
+        if not user:
+            return None
+        
+        stored_password = user[2]
+        
+        # طريقة 1: مقارنة مباشرة (نص عادي)
+        if password == stored_password:
+            cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
+            conn.commit()
+            return {
+                'id': user[0],
+                'username': user[1],
+                'role': user[3],
+                'full_name': user[4],
+                'is_active': user[5]
+            }
+        
+        # طريقة 2: مقارنة SHA256 (بدون ملح)
+        if hashlib.sha256(password.encode()).hexdigest() == stored_password:
+            cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
+            conn.commit()
+            return {
+                'id': user[0],
+                'username': user[1],
+                'role': user[3],
+                'full_name': user[4],
+                'is_active': user[5]
+            }
+        
+        # طريقة 3: مقارنة مع ملح (تنسيق salt:hash)
+        try:
+            salt, hash_value = stored_password.split(':')
+            if hash_value == hashlib.sha256((salt + password).encode()).hexdigest():
+                cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
                 conn.commit()
-                
                 return {
                     'id': user[0],
                     'username': user[1],
@@ -117,34 +140,15 @@ def authenticate_user(username, password):
                     'full_name': user[4],
                     'is_active': user[5]
                 }
-            
-            # إذا فشل، جرب المقارنة المشفرة
-            try:
-                salt, hash_value = stored_password.split(':')
-                if hash_value == hashlib.sha256((salt + password).encode()).hexdigest():
-                    cursor.execute("""
-                        UPDATE users SET last_login = NOW() 
-                        WHERE id = %s
-                    """, (user[0],))
-                    conn.commit()
-                    
-                    return {
-                        'id': user[0],
-                        'username': user[1],
-                        'role': user[3],
-                        'full_name': user[4],
-                        'is_active': user[5]
-                    }
-            except:
-                pass
-            
-            # إذا كانت كلمة المرور مشفرة بدون ملح (SHA256 فقط)
-            if hashlib.sha256(password.encode()).hexdigest() == stored_password:
-                cursor.execute("""
-                    UPDATE users SET last_login = NOW() 
-                    WHERE id = %s
-                """, (user[0],))
-                conn.commit()
+        except:
+            pass
+        
+        return None
+    except Exception as e:
+        st.error(f"❌ خطأ في المصادقة: {str(e)}")
+        return None
+    finally:
+        cursor.close()
                 
                 return {
                     'id': user[0],
