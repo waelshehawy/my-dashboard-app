@@ -205,25 +205,6 @@ def load_available_boards(target_period_num, target_year):
     conn = get_connection()
     try:
         query = """
-        WITH booking_periods AS (
-            SELECT 
-                CAST("رقم اللوحة" AS TEXT) as board_id,
-                "فترة الحجز",
-                "العام",
-                period_num
-            FROM "حجوزات1"
-            WHERE "العام" >= %s
-        ),
-        board_aggregated AS (
-            SELECT 
-                board_id,
-                MAX(CASE WHEN "العام" = %s AND period_num = %s THEN 1 ELSE 0 END) as has_current,
-                MAX(CASE WHEN ("العام" > %s) OR ("العام" = %s AND period_num > %s) THEN 1 ELSE 0 END) as has_future,
-                MIN(CASE WHEN ("العام" > %s) OR ("العام" = %s AND period_num > %s) THEN period_num ELSE NULL END) as min_future_period,
-                MAX(CASE WHEN period_num <= %s THEN period_num ELSE NULL END) as max_current_period
-            FROM booking_periods
-            GROUP BY board_id
-        )
         SELECT 
             a."رقم اللوحة",
             a."اسم العمود",
@@ -232,23 +213,17 @@ def load_available_boards(target_period_num, target_year):
             a."الحجم",
             a."العدد",
             CASE 
-                WHEN b.has_current = 1 AND b.has_future = 1 THEN '🔴 محجوز بالكامل'
-                WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز مؤقتاً'
-                WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح مؤقتاً'
-                ELSE '🟢 متاح فوراً'
-            END as status,
-            b.min_future_period as next_booking_period,
-            b.max_current_period as end_booking_period
+                WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                ELSE '🟢 متاح'
+            END as status
         FROM "اعمدة انارة" a
-        LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b.board_id
+        LEFT JOIN "حجوزات1" h 
+            ON a."رقم اللوحة" = h."رقم اللوحة" 
+            AND h."العام" = %s
         ORDER BY a."المحافظة", a."رقم اللوحة"
         """
         
-        params = (target_year, target_year, target_period_num, target_year, 
-                  target_year, target_period_num, target_year, target_year, 
-                  target_period_num, target_period_num)
-        
-        return pd.read_sql_query(query, conn, params=params)
+        return pd.read_sql_query(query, conn, params=(target_year,))
     finally:
         conn.close()
 # ============================================================
