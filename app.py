@@ -496,7 +496,7 @@ if not st.session_state.auth:
     <div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
         <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 30px; padding: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
             <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
-                <span style="font-size: 40px;">🎯</span>
+                <span style="font-size: 40px;">📌</span>
             </div>
             <h1 style="color: white;">PreView Ads</h1>
             <p style="color: rgba(255,255,255,0.7);">نظام إدارة الإعلانات</p>
@@ -550,7 +550,7 @@ with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
         <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-            <span style="font-size: 40px;">🎯</span>
+            <span style="font-size: 40px;">📌</span>
         </div>
         <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
         <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
