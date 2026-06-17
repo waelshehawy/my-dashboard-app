@@ -496,7 +496,7 @@ if not st.session_state.auth:
     <div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
         <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 30px; padding: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
             <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
-                <span style="font-size: 40px;">📌</span>
+                <span style="font-size: 40px;">📅</span>
             </div>
             <h1 style="color: white;">PreView Ads</h1>
             <p style="color: rgba(255,255,255,0.7);">نظام إدارة الإعلانات</p>
@@ -550,7 +550,7 @@ with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
         <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-            <span style="font-size: 40px;">📌</span>
+            <span style="font-size: 40px;">📅</span>
         </div>
         <h2 style="color: white; margin-top: 15px;">PreView Ads</h2>
         <p style="color: #a0a0a0; font-size: 12px;">نظام إدارة الإعلانات v2.0</p>
@@ -829,7 +829,7 @@ if page == "🏢 لوحات الشركات":
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
+    st.info("📅 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
     
     # استخدام st.form لمنع إعادة التحميل التلقائي
     with st.form(key="filter_form"):
@@ -933,7 +933,7 @@ elif page == "📍 الأعمدة المتاحة":
 
 elif page == "📅 لوحة الفترات":
     st.title("📅 لوحة التحكم البصرية للفترات")
-    st.info("📌 عرض المتاح والمحجوز لكل فترة مع تفاصيل اللوحات المتاحة")
+    st.info("📅 عرض المتاح والمحجوز لكل فترة مع تفاصيل اللوحات المتاحة")
     
     # الحصول على الفترات
     PERIOD_ORDER = get_period_order()
@@ -1184,7 +1184,7 @@ elif page == "📋 تقرير الجرد":
 
 elif page == "📅 تقرير التوفر الشهري":
     st.title("📋 تقرير الأعمدة المتاحة")
-    st.info("📌 يعرض هذا التقرير الأعمدة المتاحة حالياً أو التي ستصبح متاحة بعد تاريخ محدد")
+    st.info("📅 يعرض هذا التقرير الأعمدة المتاحة حالياً أو التي ستصبح متاحة بعد تاريخ محدد")
     
     current_year = date.today().year
     today = date.today()
@@ -1230,7 +1230,7 @@ elif page == "📅 تقرير التوفر الشهري":
             # عرض إحصائيات سريعة
             col1, col2, col3 = st.columns(3)
             col1.metric("📍 المواقع المتاحة", total_available)
-            col2.metric("📌 اللوحات المتاحة", int(total_boards_count))
+            col2.metric("📅 اللوحات المتاحة", int(total_boards_count))
             col3.metric("🏙️ المحافظات", len(available_df['المحافظة'].unique()))
             
             st.subheader("📊 ملخص حسب المحافظة")
