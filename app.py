@@ -644,38 +644,17 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
     return valid
 #part7
 # ============================================================
-# صفحة: لوحات الشركات (مع تصحيحات)
+# بداية الهيكل الرئيسي للصفحات
 # ============================================================
 
-@st.cache_data(ttl=300)
-def create_company_map(company_name, locations_df):
-    """إنشاء خريطة للشركة مع تخزين مؤقت"""
-    if locations_df.empty:
-        return None
-    
-    m = folium.Map(location=[34.8, 38.9], zoom_start=7)
-    
-    for _, row in locations_df.iterrows():
-        folium.CircleMarker(
-            location=[row['Latitude'], row['Longitude']],
-            radius=8,
-            popup=f"""
-            <div dir="rtl" style="text-align:right; min-width:180px;">
-                <b>{row['اسم العمود']}</b><br>
-                📍 {row['المحافظة']}<br>
-                📏 {row['الحجم']}
-            </div>
-            """,
-            color='#22c55e',
-            fill=True,
-            fill_color='#22c55e',
-            fill_opacity=0.7,
-            weight=2
-        ).add_to(m)
-    
-    return m
+# الحصول على الصفحة المختارة من القائمة
+page = st.session_state.get("main_menu", "🏢 لوحات الشركات")
 
-elif page == "🏢 لوحات الشركات":
+# ============================================================
+# صفحة: لوحات الشركات
+# ============================================================
+
+if page == "🏢 لوحات الشركات":
     st.title("🏢 لوحات الشركات المعلنة")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
@@ -724,64 +703,10 @@ elif page == "🏢 لوحات الشركات":
         if st.button("🔙 إغلاق الخريطة"):
             st.session_state['show_company_map'] = False
             # تم إزالة st.rerun() غير الضروري
-#part8
-# ============================================================
-# صفحة: الأعمدة المتاحة (مع تصحيحات)
-# ============================================================
 
-@st.cache_data(ttl=300)
-def load_available_boards(target_period_num, target_year):
-    """جلب الأعمدة المتاحة مع تخزين مؤقت - تم نقلها خارج الشرط"""
-    conn = get_connection()
-    try:
-        # استعلام محسن باستخدام parameters بدلاً من f-string
-        query = """
-        WITH booking_periods AS (
-            SELECT 
-                CAST("رقم اللوحة" AS TEXT) as board_id,
-                "فترة الحجز",
-                "العام",
-                period_num
-            FROM "حجوزات1"
-            WHERE "العام" >= %s
-        ),
-        board_aggregated AS (
-            SELECT 
-                board_id,
-                MAX(CASE WHEN "العام" = %s AND period_num = %s THEN 1 ELSE 0 END) as has_current,
-                MAX(CASE WHEN ("العام" > %s) OR ("العام" = %s AND period_num > %s) THEN 1 ELSE 0 END) as has_future,
-                MIN(CASE WHEN ("العام" > %s) OR ("العام" = %s AND period_num > %s) THEN period_num ELSE NULL END) as min_future_period,
-                MAX(CASE WHEN period_num <= %s THEN period_num ELSE NULL END) as max_current_period
-            FROM booking_periods
-            GROUP BY board_id
-        )
-        SELECT 
-            a."رقم اللوحة",
-            a."اسم العمود",
-            a."المحافظة",
-            a."الشبكة",
-            a."الحجم",
-            a."العدد",
-            CASE 
-                WHEN b.has_current = 1 AND b.has_future = 1 THEN '🔴 محجوز بالكامل'
-                WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز مؤقتاً'
-                WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح مؤقتاً'
-                ELSE '🟢 متاح فوراً'
-            END as status,
-            b.min_future_period as next_booking_period,
-            b.max_current_period as end_booking_period
-        FROM "اعمدة انارة" a
-        LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b.board_id
-        ORDER BY a."المحافظة", a."رقم اللوحة"
-        """
-        
-        params = (target_year, target_year, target_period_num, target_year, 
-                  target_year, target_period_num, target_year, target_year, 
-                  target_period_num, target_period_num)
-        
-        return pd.read_sql_query(query, conn, params=params)
-    finally:
-        conn.close()
+# ============================================================
+# صفحة: الأعمدة المتاحة
+# ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
@@ -867,7 +792,7 @@ elif page == "📍 الأعمدة المتاحة":
                     
                     st.dataframe(
                         display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء', 'تاريخ الانتهاء']],
-                        use_container_width=True,  # تم التغيير إلى True
+                        use_container_width=True,
                         height=300
                     )
             
@@ -882,92 +807,127 @@ elif page == "📍 الأعمدة المتاحة":
                 "text/csv",
                 use_container_width=True
             )
-#part9
+
 # ============================================================
-# صفحة: Dashboard (مع تصحيحات)
+# صفحة: لوحة الفترات
 # ============================================================
 
-@st.cache_data(ttl=300)
-def calculate_dashboard_stats(df):
-    """حساب إحصائيات Dashboard مع تخزين مؤقت"""
-    total_boards = df['العدد'].sum()
-    booked_boards = df[df['الحالة'] == 'محجوز']['العدد'].sum()
-    available_boards = total_boards - booked_boards
-    occupancy_rate = (booked_boards / total_boards * 100) if total_boards > 0 else 0
+elif page == "📅 لوحة الفترات":
+    st.title("📅 لوحة التحكم البصرية للفترات")
+    st.info("📌 عرض المتاح والمحجوز لكل فترة مع تفاصيل اللوحات المتاحة")
     
-    city_stats = df.groupby('المحافظة').agg({
-        'العدد': 'sum',
-        'الحالة': lambda x: (x == 'محجوز').sum()
-    }).rename(columns={'العدد': 'total', 'الحالة': 'booked'})
+    # الحصول على الفترات
+    PERIOD_ORDER = get_period_order()
+    sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
+    all_period_names = [p[0] for p in sorted_periods]
     
-    city_stats['available'] = city_stats['total'] - city_stats['booked']
-    city_stats['occupancy_rate'] = (city_stats['booked'] / city_stats['total'] * 100).fillna(0)
+    # الفلاتر
+    filter_options = get_filter_options()
     
-    return {
-        'total_boards': total_boards,
-        'booked_boards': booked_boards,
-        'available_boards': available_boards,
-        'occupancy_rate': occupancy_rate,
-        'city_stats': city_stats
-    }
-
-@st.cache_data(ttl=300)
-def create_dashboard_charts(stats):
-    """إنشاء الرسوم البيانية مع تخزين مؤقت"""
-    fig_pie = go.Figure(data=[go.Pie(
-        labels=['محجوز', 'متاح'],
-        values=[stats['booked_boards'], stats['available_boards']],
-        hole=0.4,
-        marker_colors=['#dc2626', '#22c55e'],
-        textinfo='percent+label'
-    )])
-    fig_pie.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+    col_filter1, col_filter2 = st.columns(2)
+    with col_filter1:
+        selected_city = st.selectbox("🏙️ اختر المحافظة:", filter_options['cities'])
+    with col_filter2:
+        selected_size = st.selectbox("📏 اختر الحجم:", filter_options['sizes'])
     
-    city_df = stats['city_stats'].reset_index()
-    fig_bar = px.bar(
-        city_df, 
-        x='المحافظة', 
-        y='occupancy_rate', 
-        color='occupancy_rate',
-        color_continuous_scale='RdYlGn',
-        labels={'occupancy_rate': 'نسبة الإشغال (%)'}
-    )
-    fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+    with st.spinner("🔄 جاري تحميل بيانات الفترات..."):
+        boards_df, bookings_df = load_period_data(selected_city, selected_size, PERIOD_ORDER)
     
-    return fig_pie, fig_bar
-
-@st.cache_data(ttl=300)
-def create_dashboard_map(df):
-    """إنشاء خريطة Dashboard مع تخزين مؤقت"""
-    valid_df = filter_valid_coordinates(df)
+    # حساب الإحصائيات
+    total_boards = boards_df['العدد'].sum()
+    period_stats, period_details = calculate_period_stats(boards_df, bookings_df, sorted_periods)
     
-    if valid_df.empty:
-        return None
+    # عرض الإحصائيات العامة
+    st.subheader("📊 إحصائيات عامة")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🏢 إجمالي اللوحات", int(total_boards))
+    col2.metric("📅 عدد الفترات", len(all_period_names))
+    col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
     
-    m = folium.Map(location=[34.8, 38.9], zoom_start=7)
-    marker_cluster = MarkerCluster().add_to(m)
+    st.divider()
     
-    for _, row in valid_df.iterrows():
-        color = 'red' if row['الحالة'] == 'محجوز' else 'green'
+    # عرض الفترات
+    st.subheader("📋 الفترات")
+    
+    for i in range(0, len(all_period_names), 4):
+        cols = st.columns(4)
+        for j, col in enumerate(cols):
+            if i + j < len(all_period_names):
+                period_name = all_period_names[i + j]
+                stats = period_stats[i + j]
+                
+                with col:
+                    if stats['محجوز'] == 0:
+                        bg_color = "#e8f5e9"
+                        border_color = "#4CAF50"
+                    else:
+                        bg_color = "#fff3e0"
+                        border_color = "#FF9800"
+                    
+                    st.markdown(f"""
+                    <div style="background:{bg_color};border:2px solid {border_color};border-radius:12px;padding:15px;text-align:center;margin:5px 0;">
+                        <div style="font-size:14px;font-weight:bold;">{period_name}</div>
+                        <div style="font-size:12px;margin-top:5px;">🟢 {stats['متاح']} | 🔴 {stats['محجوز']}</div>
+                        <div style="font-size:11px;margin-top:5px;color:#666;">👥 {stats['الزبائن']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"📋 تفاصيل", key=f"detail_{i+j}"):
+                        st.session_state[f'selected_period_{i+j}'] = period_name
+                        st.session_state['show_period_detail'] = True
+    
+    # التفاصيل للفترة المختارة
+    if st.session_state.get('show_period_detail', False):
+        selected_period = None
+        for key in st.session_state:
+            if key.startswith('selected_period_'):
+                selected_period = st.session_state[key]
+                break
         
-        popup_html = f"""
-        <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;">
-            <b>🏢 {row['اسم العمود']}</b><br>
-            📍 {row['المحافظة']}<br>
-            📡 {row['الشبكة']}<br>
-            📏 {row['الحجم']}<br>
-            🔢 {row['العدد']} لوحة<br>
-            📊 {row['الحالة']}
-        </div>
-        """
-        
-        folium.Marker(
-            [row['Latitude'], row['Longitude']],
-            popup=folium.Popup(popup_html, max_width=350),
-            icon=folium.Icon(color=color)
-        ).add_to(marker_cluster)
+        if selected_period and selected_period in period_details:
+            details = period_details[selected_period]
+            
+            st.divider()
+            st.subheader(f"📋 تفاصيل الفترة: {selected_period}")
+            
+            period_stat = next(p for p in period_stats if p['الفترة'] == selected_period)
+            col1, col2, col3 = st.columns(3)
+            col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
+            col2.metric("🔴 محجوز", period_stat['محجوز'])
+            col3.metric("🟢 متاح", period_stat['متاح'])
+            
+            if len(details['customers']) > 0:
+                st.write("**👥 الزبائن في هذه الفترة:**")
+                st.write(", ".join(details['customers']))
+            else:
+                st.write("**👥 الزبائن في هذه الفترة:** لا يوجد")
+            
+            if not details['available_details'].empty:
+                st.write("**📋 اللوحات المتاحة في هذه الفترة:**")
+                st.dataframe(
+                    details['available_details'][['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
+                    use_container_width=True
+                )
+            else:
+                st.info("✅ لا توجد لوحات متاحة في هذه الفترة")
+            
+            if st.button("🔙 إغلاق التفاصيل", key="close_detail"):
+                st.session_state['show_period_detail'] = False
+                for key in list(st.session_state.keys()):
+                    if key.startswith('selected_period_'):
+                        del st.session_state[key]
     
-    return m
+    # الرسم البياني
+    st.divider()
+    st.subheader("📊 رسم بياني للمتاح والمحجوز")
+    
+    period_df = pd.DataFrame(period_stats)
+    fig = create_period_chart(period_df)
+    st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================
+# صفحة: Dashboard
+# ============================================================
 
 elif page == "📊 Dashboard":
     st.markdown("""
@@ -1024,98 +984,9 @@ elif page == "📊 Dashboard":
         else:
             st.warning("⚠️ لا توجد إحداثيات صالحة لعرضها على الخريطة")
 
-#part10
 # ============================================================
-# صفحة: تقرير الجرد (مع تصحيحات)
+# صفحة: تقرير الجرد
 # ============================================================
-
-@st.cache_data(ttl=3600)
-def get_periods():
-    """جلب الفترات مع تخزين مؤقت"""
-    return run_query('SELECT "no", "namee" FROM "الفترة" ORDER BY "no"')
-
-@st.cache_data(ttl=300)
-def get_all_boards_for_inventory():
-    """جلب جميع اللوحات للتقرير مع تخزين مؤقت"""
-    return run_query('SELECT "رقم اللوحة", "المحافظة", "الحجم", "العدد" FROM "اعمدة انارة"')
-
-@st.cache_data(ttl=120)
-def get_booked_boards_for_period(report_year, from_period, to_period):
-    """جلب اللوحات المحجوزة في نطاق الفترات مع تخزين مؤقت"""
-    conn = get_connection()
-    try:
-        query = '''
-            SELECT DISTINCT "رقم اللوحة" 
-            FROM "حجوزات1" 
-            WHERE "العام" = %s 
-            AND "فترة الحجز" IN (
-                SELECT "namee" FROM "الفترة" 
-                WHERE "no" BETWEEN %s AND %s
-            )
-        '''
-        return pd.read_sql_query(query, conn, params=(report_year, from_period, to_period))
-    finally:
-        conn.close()
-
-@st.cache_data(ttl=120)
-def calculate_inventory_stats(all_boards, booked_in_period):
-    """حساب إحصائيات الجرد مع تخزين مؤقت"""
-    booked_set = set(booked_in_period['رقم اللوحة'].tolist()) if not booked_in_period.empty else set()
-    all_boards['الحالة'] = all_boards['رقم اللوحة'].apply(
-        lambda x: 'محجوز' if x in booked_set else 'متاح'
-    )
-    
-    total_sites = len(all_boards)
-    booked_sites = len(booked_set)
-    available_sites = total_sites - booked_sites
-    
-    total_boards_count = all_boards['العدد'].sum()
-    booked_boards_count = all_boards[all_boards['الحالة'] == 'محجوز']['العدد'].sum()
-    available_boards_count = total_boards_count - booked_boards_count
-    
-    city_stats = all_boards.groupby('المحافظة').agg({
-        'العدد': 'sum',
-        'الحالة': lambda x: (x == 'محجوز').sum()
-    }).rename(columns={'العدد': 'total', 'الحالة': 'booked'})
-    
-    city_stats['available'] = city_stats['total'] - city_stats['booked']
-    city_stats['occupancy_rate'] = (city_stats['booked'] / city_stats['total'] * 100).fillna(0)
-    
-    return {
-        'total_sites': total_sites,
-        'booked_sites': booked_sites,
-        'available_sites': available_sites,
-        'total_boards_count': total_boards_count,
-        'booked_boards_count': booked_boards_count,
-        'available_boards_count': available_boards_count,
-        'city_stats': city_stats,
-        'all_boards': all_boards
-    }
-
-@st.cache_data(ttl=120)
-def create_inventory_charts(stats):
-    """إنشاء رسوم بيانية للتقرير مع تخزين مؤقت"""
-    fig_pie = go.Figure(data=[go.Pie(
-        labels=['محجوز', 'متاح'],
-        values=[stats['booked_boards_count'], stats['available_boards_count']],
-        hole=0.4,
-        marker_colors=['#dc2626', '#22c55e'],
-        textinfo='percent+label'
-    )])
-    fig_pie.update_layout(title="نسبة إشغال الأعمدة", height=400)
-    
-    city_df = stats['city_stats'].reset_index()
-    fig_bar = px.bar(
-        city_df, 
-        x='المحافظة', 
-        y='occupancy_rate', 
-        color='occupancy_rate',
-        color_continuous_scale='RdYlGn',
-        labels={'occupancy_rate': 'نسبة الإشغال (%)'}
-    )
-    fig_bar.update_layout(height=400)
-    
-    return fig_pie, fig_bar
 
 elif page == "📋 تقرير الجرد":
     st.title("📋 التقرير التجميعي - جرد اللوحات")
@@ -1187,9 +1058,9 @@ elif page == "📋 تقرير الجرد":
                 
     except Exception as e:
         st.error(f"حدث خطأ في التقرير: {str(e)}")
-#part11
+
 # ============================================================
-# صفحة: تقرير التوفر الشهري (مع تصحيحات)
+# صفحة: تقرير التوفر الشهري
 # ============================================================
 
 elif page == "📅 تقرير التوفر الشهري":
@@ -1285,7 +1156,7 @@ elif page == "📅 تقرير التوفر الشهري":
             )
 
 # ============================================================
-# صفحة: الإعدادات (مع تصحيحات)
+# صفحة: الإعدادات
 # ============================================================
 
 elif page == "⚙️ الإعدادات":
@@ -1465,6 +1336,11 @@ elif page == "⚙️ الإعدادات":
                             cursor.close()
                     else:
                         st.warning("⚠️ يرجى إدخال اسم المستخدم وكلمة المرور")
+
+# ============================================================
+# نهاية الملف - تم حذف conn.close() نهائياً
+# ============================================================
+# ✅ تم حذف conn.close() - الاتصال يدار بواسطة @st.cache_resource
 
 # ============================================================
 # نهاية الملف - تم حذف conn.close() نهائياً
