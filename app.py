@@ -50,12 +50,15 @@ def get_connection():
         ⚠️ **كلمة المرور غير موجودة!**
         
         يرجى إنشاء ملف `.env` في المجلد الرئيسي وإضافة:
+        SUPABASE_PASSWORD=كلمة_المرور_الحقيقية
+        """)
+        st.stop()
     
     return psycopg2.connect(
-        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
-        port=os.environ.get("SUPABASE_PORT", "6543"),
-        database=os.environ.get("SUPABASE_DB", "postgres"),
-        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
+        host=os.getenv("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
+        port=os.getenv("SUPABASE_PORT", "6543"),
+        database=os.getenv("SUPABASE_DB", "postgres"),
+        user=os.getenv("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
         password=password,
         sslmode="require",
         connect_timeout=30
