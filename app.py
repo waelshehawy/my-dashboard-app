@@ -43,32 +43,12 @@ load_dotenv()
 @st.cache_resource(ttl=3600)
 def get_connection():
     """اتصال مباشر بـ Supabase PostgreSQL"""
-    
-    # في Streamlit Cloud، استخدم st.secrets
-    try:
-        password = st.secrets["SUPABASE_PASSWORD"]
-        host = st.secrets.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com")
-        port = st.secrets.get("SUPABASE_PORT", "6543")
-        database = st.secrets.get("SUPABASE_DB", "postgres")
-        user = st.secrets.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman")
-    except:
-        # في البيئة المحلية، استخدم os.getenv
-        password = os.getenv("SUPABASE_PASSWORD")
-        host = os.getenv("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com")
-        port = os.getenv("SUPABASE_PORT", "6543")
-        database = os.getenv("SUPABASE_DB", "postgres")
-        user = os.getenv("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman")
-    
-    if not password:
-        st.error("⚠️ كلمة المرور غير موجودة")
-        st.stop()
-    
     return psycopg2.connect(
-        host=host,
-        port=port,
-        database=database,
-        user=user,
-        password=password,
+        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
+        port=os.environ.get("SUPABASE_PORT", "6543"),
+        database=os.environ.get("SUPABASE_DB", "postgres"),
+        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
+        password=os.environ.get("SUPABASE_PASSWORD", "W@elPreview2026"),
         sslmode="require",
         connect_timeout=30
     )
