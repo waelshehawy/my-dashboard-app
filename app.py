@@ -858,7 +858,7 @@ elif page == "📍 الأعمدة المتاحة":
             st.subheader("📊 إحصائيات عامة")
             
             status_colors = {
-                '🟢 متاح فوراً': ('🟢 متاح فوراً', '#d4edda'),
+                '(متاح) متاح فوراً': ('(متاح) متاح فوراً', '#d4edda'),
                 '🟡 متاح مؤقتاً': ('🟡 متاح مؤقتاً', '#fff3cd'),
                 '🟠 محجوز مؤقتاً': ('🟠 محجوز مؤقتاً', '#ffe5d0'),
                 '(متاح) محجوز بالكامل': ('(متاح) محجوز بالكامل', '#f8d7da')
@@ -986,7 +986,7 @@ elif page == "📅 لوحة الفترات":
                     st.markdown(f"""
                     <div style="background:{bg_color};border:2px solid {border_color};border-radius:12px;padding:15px;text-align:center;margin:5px 0;">
                         <div style="font-size:14px;font-weight:bold;">{period_name}</div>
-                        <div style="font-size:12px;margin-top:5px;">🟢 {stats['متاح']} | (متاح) {stats['محجوز']}</div>
+                        <div style="font-size:12px;margin-top:5px;">(متاح) {stats['متاح']} | (متاح) {stats['محجوز']}</div>
                         <div style="font-size:11px;margin-top:5px;color:#666;">👥 {stats['الزبائن']}</div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1013,7 +1013,7 @@ elif page == "📅 لوحة الفترات":
             col1, col2, col3 = st.columns(3)
             col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
             col2.metric("(متاح) محجوز", period_stat['محجوز'])
-            col3.metric("🟢 متاح", period_stat['متاح'])
+            col3.metric("(متاح) متاح", period_stat['متاح'])
             
             if len(details['customers']) > 0:
                 st.write("**👥 الزبائن في هذه الفترة:**")
@@ -1065,7 +1065,7 @@ elif page == "📊 Dashboard":
     metrics_data = [
         ("إجمالي اللوحات", stats['total_boards'], "🏢"),
         ("محجوز", stats['booked_boards'], "(متاح)"),
-        ("متاح", stats['available_boards'], "🟢"),
+        ("متاح", stats['available_boards'], "(متاح)"),
         ("نسبة الإشغال", f"{stats['occupancy_rate']:.1f}%", "📈")
     ]
     
@@ -1139,7 +1139,7 @@ elif page == "📋 تقرير الجرد":
                 metrics_data = [
                     ("🏢 إجمالي المواقع", stats['total_sites']),
                     ("(متاح) المواقع المحجوزة", stats['booked_sites']),
-                    ("🟢 المواقع المتاحة", stats['available_sites']),
+                    ("(متاح) المواقع المتاحة", stats['available_sites']),
                     ("📈 نسبة الإشغال", f"{(stats['booked_sites']/stats['total_sites']*100):.1f}%" if stats['total_sites'] > 0 else "0%")
                 ]
                 
