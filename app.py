@@ -572,7 +572,7 @@ with st.sidebar:
         "🏢 لوحات الشركات",
         "📍 الأعمدة المتاحة",
         "📅 لوحة الفترات",
-        "📊 Dashboard",
+        "(شكل) Dashboard",
         "📄 عرض سعر",
         "📋 تقرير الجرد",
         "📅 تقرير التوفر الشهري",
@@ -788,7 +788,7 @@ if page == "🏢 لوحات الشركات":
                 with col1:
                     st.subheader(f"🏢 {company['company_name']}")
                 with col2:
-                    st.metric("📊 اللوحات", company['total_boards'])
+                    st.metric("(شكل) اللوحات", company['total_boards'])
                     st.metric("🗓️ الفترات", company['total_periods'])
                 
                 if st.button("🗺️ عرض الخريطة", key=f"map_{idx}"):
@@ -855,7 +855,7 @@ elif page == "📍 الأعمدة المتاحة":
             }).rename(columns={'رقم اللوحة': 'sites', 'العدد': 'boards'})
             
             # عرض الإحصائيات
-            st.subheader("📊 إحصائيات عامة")
+            st.subheader("(شكل) إحصائيات عامة")
             
             status_colors = {
                 '(متاح) متاح فوراً': ('(متاح) متاح فوراً', '#d4edda'),
@@ -957,7 +957,7 @@ elif page == "📅 لوحة الفترات":
     period_stats, period_details = calculate_period_stats(boards_df, bookings_df, sorted_periods)
     
     # عرض الإحصائيات العامة
-    st.subheader("📊 إحصائيات عامة")
+    st.subheader("(شكل) إحصائيات عامة")
     col1, col2, col3 = st.columns(3)
     col1.metric("🏢 إجمالي اللوحات", int(total_boards))
     col2.metric("📅 عدد الفترات", len(all_period_names))
@@ -1011,7 +1011,7 @@ elif page == "📅 لوحة الفترات":
             
             period_stat = next(p for p in period_stats if p['الفترة'] == selected_period)
             col1, col2, col3 = st.columns(3)
-            col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
+            col1.metric("(شكل) إجمالي اللوحات", period_stat['إجمالي اللوحات'])
             col2.metric("(متاح) محجوز", period_stat['محجوز'])
             col3.metric("(متاح) متاح", period_stat['متاح'])
             
@@ -1038,7 +1038,7 @@ elif page == "📅 لوحة الفترات":
     
     # الرسم البياني
     st.divider()
-    st.subheader("📊 رسم بياني للمتاح والمحجوز")
+    st.subheader("(شكل) رسم بياني للمتاح والمحجوز")
     
     period_df = pd.DataFrame(period_stats)
     fig = create_period_chart(period_df)
@@ -1048,10 +1048,10 @@ elif page == "📅 لوحة الفترات":
 # صفحة: Dashboard
 # ============================================================
 
-elif page == "📊 Dashboard":
+elif page == "(شكل) Dashboard":
     st.markdown("""
     <div style="text-align: center; margin-bottom: 30px;">
-        <h1>📊 لوحة التحكم المتقدمة</h1>
+        <h1>(شكل) لوحة التحكم المتقدمة</h1>
         <p style="color: rgba(255,255,255,0.7);">نظرة شاملة على أداء النظام وإحصائيات الإعلانات</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1074,7 +1074,7 @@ elif page == "📊 Dashboard":
             st.metric(icon + " " + title, value)
     
     # شريط التقدم
-    st.markdown("📊 نسبة الإشغال الحالية")
+    st.markdown("(شكل) نسبة الإشغال الحالية")
     st.progress(stats['occupancy_rate'] / 100)
     st.caption(f"{stats['occupancy_rate']:.1f}%")
     
@@ -1089,7 +1089,7 @@ elif page == "📊 Dashboard":
         st.subheader("🥧 نسبة الإشغال الكلية")
         st.plotly_chart(fig_pie, use_container_width=True)
     with col_chart2:
-        st.subheader("📊 إحصائيات حسب المحافظة")
+        st.subheader("(شكل) إحصائيات حسب المحافظة")
         st.plotly_chart(fig_bar, use_container_width=True)
     
     st.divider()
@@ -1168,7 +1168,7 @@ elif page == "📋 تقرير الجرد":
                 # تصدير
                 csv_data = stats['all_boards'].to_csv(index=False, encoding='utf-8-sig')
                 st.download_button(
-                    "📊 تصدير إلى CSV", 
+                    "(شكل) تصدير إلى CSV", 
                     csv_data, 
                     f"Inventory_Report_{report_year}.csv", 
                     "text/csv", 
@@ -1233,7 +1233,7 @@ elif page == "📅 تقرير التوفر الشهري":
             col2.metric("📅 اللوحات المتاحة", int(total_boards_count))
             col3.metric("🏙️ المحافظات", len(available_df['المحافظة'].unique()))
             
-            st.subheader("📊 ملخص حسب المحافظة")
+            st.subheader("(شكل) ملخص حسب المحافظة")
             summary = available_df.groupby('المحافظة').agg({
                 'رقم اللوحة': 'count',
                 'العدد': 'sum'
