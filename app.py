@@ -588,7 +588,7 @@ with st.sidebar:
     with col_s1:
         st.metric("🗺️ اللوحات", total_boards_sidebar)
     with col_s2:
-        st.metric("👥 العملاء", total_clients)
+        st.metric("(الزبون) العملاء", total_clients)
     
     st.divider()
     
@@ -961,7 +961,7 @@ elif page == "📅 لوحة الفترات":
     col1, col2, col3 = st.columns(3)
     col1.metric("🏢 إجمالي اللوحات", int(total_boards))
     col2.metric("📅 عدد الفترات", len(all_period_names))
-    col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
+    col3.metric("(الزبون) عدد الزبائن", bookings_df['اسم الزبون'].nunique())
     
     st.divider()
     
@@ -987,7 +987,7 @@ elif page == "📅 لوحة الفترات":
                     <div style="background:{bg_color};border:2px solid {border_color};border-radius:12px;padding:15px;text-align:center;margin:5px 0;">
                         <div style="font-size:14px;font-weight:bold;">{period_name}</div>
                         <div style="font-size:12px;margin-top:5px;">(متاح) {stats['متاح']} | (متاح) {stats['محجوز']}</div>
-                        <div style="font-size:11px;margin-top:5px;color:#666;">👥 {stats['الزبائن']}</div>
+                        <div style="font-size:11px;margin-top:5px;color:#666;">(الزبون) {stats['الزبائن']}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -1016,10 +1016,10 @@ elif page == "📅 لوحة الفترات":
             col3.metric("(متاح) متاح", period_stat['متاح'])
             
             if len(details['customers']) > 0:
-                st.write("**👥 الزبائن في هذه الفترة:**")
+                st.write("**(الزبون) الزبائن في هذه الفترة:**")
                 st.write(", ".join(details['customers']))
             else:
-                st.write("**👥 الزبائن في هذه الفترة:** لا يوجد")
+                st.write("**(الزبون) الزبائن في هذه الفترة:** لا يوجد")
             
             if not details['available_details'].empty:
                 st.write("**📋 اللوحات المتاحة في هذه الفترة:**")
@@ -1354,7 +1354,7 @@ elif page == "⚙️ الإعدادات":
         finally:
             cursor.close()
     
-    tab1, tab2, tab3, tab4 = st.tabs(["🗄️ أعمدة الإنارة", "📅 سجل الحجوزات", "💰 أجور الرسم", "👥 المستخدمين"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🗄️ أعمدة الإنارة", "📅 سجل الحجوزات", "💰 أجور الرسم", "(الزبون) المستخدمين"])
     
     with tab1:
         st.subheader("إدارة بيانات أعمدة الإنارة")
@@ -1403,7 +1403,7 @@ elif page == "⚙️ الإعدادات":
                 st.warning("⚠️ يرجى تأكيد الحفظ أولاً")
     
     with tab4:
-        st.subheader("👥 إدارة المستخدمين")
+        st.subheader("(الزبون) إدارة المستخدمين")
         df_users = get_users_data()
         edited_users = st.data_editor(df_users, num_rows="dynamic", key="edit_users", use_container_width=True)
         
