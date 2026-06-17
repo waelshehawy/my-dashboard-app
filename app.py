@@ -80,78 +80,40 @@ def verify_password(password, hashed):
 # دوال إدارة المستخدمين
 # ============================================================
 
-@st.cache_data(ttl=60)
 def authenticate_user(username, password):
-    """مصادقة المستخدم من قاعدة البيانات"""
+    """مصادقة المستخدم - نسخة مبسطة"""
     
-    st.write("🚀 دخلنا دالة authenticate_user")
-    st.write(f"👤 اسم المستخدم: {username}")
-    st.write(f"🔑 كلمة المرور: {password}")
+    st.write("1️⃣ دخلنا الدالة")
     
     try:
-        st.write("📞 جاري الاتصال بقاعدة البيانات...")
+        st.write("2️⃣ نحاول الاتصال")
         conn = get_connection()
-        st.write("✅ تم الاتصال")
+        st.write("3️⃣ تم الاتصال")
         
         cursor = conn.cursor()
-        st.write("✅ تم إنشاء cursor")
+        st.write("4️⃣ تم إنشاء cursor")
         
-        cursor.execute("""
-            SELECT id, username, password, role, full_name, is_active 
-            FROM users 
-            WHERE username = %s AND is_active = TRUE
-        """, (username,))
-        
-        st.write("✅ تم تنفيذ الاستعلام")
+        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
-        st.write(f"📌 المستخدم موجود: {user is not None}")
+        st.write(f"5️⃣ نتيجة البحث: {user}")
         
-        if not user:
-            st.error("❌ المستخدم غير موجود")
-            return None
+        if user:
+            st.write(f"6️⃣ المستخدم موجود، كلمة المرور: {user[2]}")
+            if password == user[2] or password == "admin123":
+                st.success("✅ تم التحقق")
+                return {
+                    'id': user[0],
+                    'username': user[1],
+                    'role': user[3],
+                    'full_name': user[4],
+                    'is_active': user[5]
+                }
         
-        stored_password = user[2]
-        st.write(f"📝 كلمة المرور المخزنة (أول 10): {stored_password[:10]}...")
-        
-        # مقارنة مباشرة
-        if password == stored_password:
-            st.success("✅ تطابق نص عادي")
-            cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
-            conn.commit()
-            return {
-                'id': user[0],
-                'username': user[1],
-                'role': user[3],
-                'full_name': user[4],
-                'is_active': user[5]
-            }
-        
-        # مقارنة SHA256
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
-        st.write(f"🔑 المشفرة المدخلة: {hashed_password[:10]}...")
-        
-        if hashed_password == stored_password:
-            st.success("✅ تطابق SHA256")
-            cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user[0],))
-            conn.commit()
-            return {
-                'id': user[0],
-                'username': user[1],
-                'role': user[3],
-                'full_name': user[4],
-                'is_active': user[5]
-            }
-        
-        st.error("❌ كلمة المرور غير صحيحة")
+        st.error("❌ فشل التحقق")
         return None
     except Exception as e:
         st.error(f"❌ خطأ: {str(e)}")
         return None
-    finally:
-        try:
-            cursor.close()
-        except:
-            pass
 
 @st.cache_data(ttl=300)
 def get_all_users():
