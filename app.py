@@ -78,6 +78,128 @@ def verify_password(password, hashed):
         return hash_value == hashlib.sha256((salt + password).encode()).hexdigest()
     except:
         return False
+# ============================================================
+# دوال إدارة المستخدمين
+# ============================================================
+
+@st.cache_data(ttl=60)
+def authenticate_user(username, password):
+    """مصادقة المستخدم من قاعدة البيانات"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT id, username, password, role, full_name, is_active 
+            FROM users 
+            WHERE username = %s AND is_active = TRUE
+        """, (username,))
+        user = cursor.fetchone()
+        
+        if user and verify_password(password, user[2]):
+            # تحديث آخر تسجيل دخول
+            cursor.execute("""
+                UPDATE users SET last_login = NOW() 
+                WHERE id = %s
+            """, (user[0],))
+            conn.commit()
+            
+            return {
+                'id': user[0],
+                'username': user[1],
+                'role': user[3],
+                'full_name': user[4],
+                'is_active': user[5]
+            }
+        return None
+    except Exception as e:
+        st.error(f"❌ خطأ في المصادقة: {str(e)}")
+        return None
+    finally:
+        cursor.close()
+
+@st.cache_data(ttl=300)
+def get_all_users():
+    """جلب جميع المستخدمين (للوحة الإدارة)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT id, username, role, full_name, created_at, last_login, is_active 
+            FROM users 
+            ORDER BY id
+        """)
+        columns = [desc[0] for desc in cursor.description]
+        rows = cursor.fetchall()
+        return pd.DataFrame(rows, columns=columns)
+    finally:
+        cursor.close()
+
+def create_user(username, password, role, full_name):
+    """إنشاء مستخدم جديد"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # تشفير كلمة المرور
+        hashed_password = hash_password(password)
+        
+        cursor.execute("""
+            INSERT INTO users (username, password, role, full_name, created_at, is_active)
+            VALUES (%s, %s, %s, %s, NOW(), TRUE)
+            RETURNING id
+        """, (username, hashed_password, role, full_name))
+        
+        user_id = cursor.fetchone()[0]
+        conn.commit()
+        st.success(f"✅ تم إنشاء المستخدم {username} بنجاح")
+        st.cache_data.clear()  # مسح الكاش
+        return user_id
+    except Exception as e:
+        conn.rollback()
+        st.error(f"❌ خطأ في إنشاء المستخدم: {str(e)}")
+        return None
+    finally:
+        cursor.close()
+
+def update_user(user_id, username, role, full_name, is_active=True):
+    """تحديث بيانات المستخدم"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE users 
+            SET username = %s, role = %s, full_name = %s, is_active = %s
+            WHERE id = %s
+        """, (username, role, full_name, is_active, user_id))
+        conn.commit()
+        st.success(f"✅ تم تحديث المستخدم {username}")
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        conn.rollback()
+        st.error(f"❌ خطأ في تحديث المستخدم: {str(e)}")
+        return False
+    finally:
+        cursor.close()
+
+def reset_password(user_id, new_password):
+    """إعادة تعيين كلمة المرور"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        hashed_password = hash_password(new_password)
+        cursor.execute("""
+            UPDATE users SET password = %s WHERE id = %s
+        """, (hashed_password, user_id))
+        conn.commit()
+        st.success("✅ تم تحديث كلمة المرور")
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        conn.rollback()
+        st.error(f"❌ خطأ في تحديث كلمة المرور: {str(e)}")
+        return False
+    finally:
+        cursor.close()        
 
 # ============================================================
 # دوال الاستعلام المحسنة مع Cache
@@ -379,7 +501,7 @@ SYRIA_COORDS = {
 }
 #part4
 # ============================================================
-# صفحة تسجيل الدخول
+# صفحة تسجيل الدخول (مع تشفير كلمات المرور)
 # ============================================================
 
 if not st.session_state.auth:
@@ -399,29 +521,25 @@ if not st.session_state.auth:
         submitted = st.form_submit_button("🚪 دخول", use_container_width=True)
         
         if submitted:
-            try:
-                conn = get_connection()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT username, password, role FROM users WHERE username = %s",
-                    (username,)
-                )
-                user = cursor.fetchone()
-                cursor.close()
-                
-                if user and verify_password(password, user[1]):
-                    st.session_state.auth = True
-                    st.session_state.role = user[2]
-                    st.session_state.username = user[0]
-                    st.rerun()
-                else:
-                    st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
-            except Exception as e:
-                st.error(f"❌ خطأ في الاتصال: {str(e)}")
+            if not username or not password:
+                st.error("⚠️ يرجى إدخال اسم المستخدم وكلمة المرور")
+            else:
+                with st.spinner("🔄 جاري التحقق..."):
+                    user = authenticate_user(username, password)
+                    
+                    if user:
+                        st.session_state.auth = True
+                        st.session_state.role = user['role']
+                        st.session_state.username = user['username']
+                        st.session_state.user_id = user['id']
+                        st.session_state.full_name = user['full_name']
+                        st.success(f"✅ مرحباً {user['full_name']}!")
+                        st.rerun()
+                    else:
+                        st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
     
     st.markdown("</div></div>", unsafe_allow_html=True)
     st.stop()
-
 #part5
 # ============================================================
 # الشريط الجانبي (مع تخزين الإحصائيات)
