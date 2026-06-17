@@ -149,21 +149,6 @@ def authenticate_user(username, password):
         return None
     finally:
         cursor.close()
-                
-                return {
-                    'id': user[0],
-                    'username': user[1],
-                    'role': user[3],
-                    'full_name': user[4],
-                    'is_active': user[5]
-                }
-        
-        return None
-    except Exception as e:
-        st.error(f"❌ خطأ في المصادقة: {str(e)}")
-        return None
-    finally:
-        cursor.close()
 
 @st.cache_data(ttl=300)
 def get_all_users():
