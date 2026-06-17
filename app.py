@@ -227,16 +227,14 @@ def run_query(query, params=None, fetch=True):
         # لا نغلق conn لأنها مخزنة مؤقتاً
 #part2
 # ============================================================
-# التحسينات البصرية (تم تخفيف الـ animations)
+# التحسينات البصرية
 # ============================================================
 
-ADVANCED_CSS = """
+ADVANCED_CSS = r"""
 <style>
-    /* تم إزالة animation المتكررة لتقليل استهلاك CPU */
     .stApp {
         background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
         background-size: 400% 400%;
-        /* تم تعطيل animation لتقليل الـ CPU usage */
     }
     
     [data-testid="stSidebar"] {
@@ -279,7 +277,6 @@ ADVANCED_CSS = """
     .stat-number-3d {
         font-size: 48px;
         font-weight: bold;
-        /* تم إزالة animation لتقليل الـ CPU */
     }
     
     .stButton > button {
@@ -292,6 +289,51 @@ ADVANCED_CSS = """
         transition: all 0.3s ease !important;
         width: 100%;
     }
+    
+    .stButton > button:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 10px 20px rgba(102,126,234,0.4) !important;
+    }
+    
+    .badge-animated {
+        display: inline-block;
+        padding: 6px 16px;
+        border-radius: 30px;
+        font-size: 12px;
+        font-weight: bold;
+        margin: 3px;
+    }
+    
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, #667eea15, #764ba215);
+        border-radius: 16px;
+        padding: 16px;
+        backdrop-filter: blur(4px);
+        transition: all 0.3s ease;
+    }
+    
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-5px);
+    }
+    
+    .dataframe {
+        border-radius: 15px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+    }
+    
+    .dataframe th {
+        background: linear-gradient(135deg, #667eea, #764ba2) !important;
+        color: white !important;
+        font-weight: bold !important;
+        padding: 12px !important;
+    }
+    
+    .dataframe tr:hover {
+        background: rgba(102,126,234,0.1) !important;
+    }
+</style>
+"""
     
     .stButton > button:hover {
         transform: translateY(-3px) !important;
