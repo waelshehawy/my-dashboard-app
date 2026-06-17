@@ -103,6 +103,7 @@ def authenticate_user(username, password):
     except Exception as e:
         st.error(f"❌ خطأ: {str(e)}")
         return None
+    # لا تغلق الاتصال هنا!
 @st.cache_data(ttl=300)
 def get_all_users():
     """جلب جميع المستخدمين (للوحة الإدارة)"""
