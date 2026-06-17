@@ -120,7 +120,6 @@ def authenticate_user(username, password):
         return None
     finally:
         cursor.close()
-
 @st.cache_data(ttl=300)
 def get_all_users():
     """جلب جميع المستخدمين (للوحة الإدارة)"""
