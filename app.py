@@ -94,7 +94,7 @@ def verify_password(password, hashed):
 # ============================================================
 
 def authenticate_user(username, password):
-    """مصادقة المستخدم - نسخة مبسطة"""
+    """مصادقة المستخدم"""
     
     st.write("1️⃣ دخلنا الدالة")
     
@@ -104,14 +104,11 @@ def authenticate_user(username, password):
         st.write("3️⃣ تم الاتصال")
         
         cursor = conn.cursor()
-        st.write("4️⃣ تم إنشاء cursor")
-        
         cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
-        st.write(f"5️⃣ نتيجة البحث: {user}")
+        st.write(f"4️⃣ نتيجة البحث: {user is not None}")
         
         if user:
-            st.write(f"6️⃣ المستخدم موجود، كلمة المرور: {user[2]}")
             if password == user[2] or password == "admin123":
                 st.success("✅ تم التحقق")
                 return {
@@ -127,7 +124,6 @@ def authenticate_user(username, password):
     except Exception as e:
         st.error(f"❌ خطأ: {str(e)}")
         return None
-
 @st.cache_data(ttl=300)
 def get_all_users():
     """جلب جميع المستخدمين (للوحة الإدارة)"""
