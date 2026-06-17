@@ -39,7 +39,10 @@ load_dotenv()
 # دوال الاتصال والتشفير
 # ============================================================
 
-@st.cache_resource(ttl=3600)
+# ============================================================
+# دوال الاتصال (بدون Cache لتجنب مشكلة الإغلاق)
+# ============================================================
+
 def get_connection():
     """اتصال مباشر بـ Supabase PostgreSQL"""
     return psycopg2.connect(
@@ -103,7 +106,13 @@ def authenticate_user(username, password):
     except Exception as e:
         st.error(f"❌ خطأ: {str(e)}")
         return None
-    # لا تغلق الاتصال هنا!
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+            st.write("🔚 تم إغلاق الاتصال")
+        except:
+            pass
 @st.cache_data(ttl=300)
 def get_all_users():
     """جلب جميع المستخدمين (للوحة الإدارة)"""
