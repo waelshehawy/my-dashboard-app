@@ -4,17 +4,6 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
-def get_connection():
-    """اتصال مباشر بـ Supabase"""
-    return psycopg2.connect(
-        host="aws-1-eu-north-1.pooler.supabase.com",
-        port="6543",
-        database="postgres",
-        user="postgres.ncuofpvbaglwbdqnpman",
-        password="WaelPreview2026",
-        sslmode="require",
-        connect_timeout=30
-    )
 
 import os
 
