@@ -8,7 +8,6 @@ import psycopg2
 
 def show(start_date=None):
 
-    start_date = date.today()
     
     # ✅ اختبار الاتصال أولاً
     try:
