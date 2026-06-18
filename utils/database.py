@@ -13,6 +13,10 @@ conn = psycopg2.connect(
     connect_timeout=30
 )
 
+def get_connection():
+    """إرجاع الاتصال المفتوح (للتسجيل الدخول والاستعلامات)"""
+    return conn
+
 def run_query(query, params=None, fetch=True):
     """تنفيذ استعلام على Supabase"""
     cursor = conn.cursor()
