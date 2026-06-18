@@ -119,45 +119,15 @@ with st.sidebar:
 # استدعاء الصفحات (كل صفحة في ملف منفصل)
 # ============================================================
 
-if page == "📊 Dashboard":
-    from pages.dashboard import show
-    show()
 
-elif page == "🏢 لوحات الشركات":
+
+if page == "🏢 لوحات الشركات":
     from pages.company_boards import show
     show()
 
-elif page == "📍 الأعمدة المتاحة":
-    from pages.available_boards import show
-    show()
-
-elif page == "📅 لوحة الفترات":
-    from pages.period_board import show
-    show()
-
-elif page == "📄 عرض سعر":
-    from pages.offer_price import show
-    show()
-
-elif page == "📋 تقرير الجرد":
-    from pages.inventory_report import show
-    show()
-
-elif page == "📅 تقرير التوفر الشهري":
-    from pages.availability_report import show
-    show()
-
-elif page == "🗺️ تقرير جميع المواقع":
-    from pages.all_boards_report import show
-    show()
-
-elif page == "📐 تقرير تجميعي حسب الحجوم":
-    from pages.size_report import show
-    show()
-
-elif page == "⚙️ الإعدادات":
-    if st.session_state.get('role') != 'admin':
-        st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
-        st.stop()
-    from pages.settings import show
-    show()
+#elif page == "⚙️ الإعدادات":
+    #if st.session_state.get('role') != 'admin':
+        #st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
+        #st.stop()
+    #from pages.settings import show
+    #show()
