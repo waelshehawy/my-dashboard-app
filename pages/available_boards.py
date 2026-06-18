@@ -4,7 +4,18 @@ import pandas as pd
 from datetime import date
 from utils.database import get_connection, run_query
 from utils.helpers import safe_split, badge_animated, create_metric_card_3d
+import psycopg2
 
+def get_connection_direct():
+    return psycopg2.connect(
+        host="aws-1-eu-north-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+        user="postgres.ncuofpvbaglwbdqnpman",
+        password="W@elPreview2026",
+        sslmode="require",
+        connect_timeout=30
+    )
 def get_period_from_date(date_obj):
     """تحويل التاريخ إلى رقم الفترة (1-24) باستخدام أسماء الفترات من جدول الفترة"""
     day = date_obj.day
