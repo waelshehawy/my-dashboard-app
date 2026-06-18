@@ -46,17 +46,19 @@ def get_period_from_date(date_obj):
     if day <= 15:
         period_name = f"{month_name} 15-1"
     else:
-        # تحديد آخر يوم في الشهر
-        if month == 2:  # شباط
+        if month == 2:
             last_day = 28
-        elif month in [4, 6, 9, 11]:  # نيسان, حزيران, أيلول, تشرين الثاني
+        elif month in [4, 6, 9, 11]:
             last_day = 30
         else:
             last_day = 31
         period_name = f"{month_name} {last_day}-15"
     
-    # قراءة أسماء الفترات من قاعدة البيانات
-    periods_df = run_query('SELECT no, namee FROM "الفترة" ORDER BY no')
+    # ✅ استخدم get_connection مباشرة بدلاً من run_query
+    conn = get_connection()
+    periods_df = pd.read_sql_query('SELECT no, namee FROM "الفترة" ORDER BY no', conn)
+    conn.close()
+    
     period_map = {row['namee']: row['no'] for _, row in periods_df.iterrows()}
     
     return period_map.get(period_name, 99)
