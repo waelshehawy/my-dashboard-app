@@ -16,15 +16,17 @@ def get_connection():
         connect_timeout=30
     )
 
-def get_engine():
-    """محرك SQLAlchemy للاتصال بـ Supabase"""
-    url_obj = URL.create(
-        drivername="postgresql+psycopg2",
-        username="postgres.ncuofpvbaglwbdqnpman",
-        password="WaelPreview2026",
-        host="aws-1-eu-north-1.pooler.supabase.com",
-        port="6543",
-        database="postgres",
+import os
+
+def get_connection():
+    return psycopg2.connect(
+        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
+        port=os.environ.get("SUPABASE_PORT", "6543"),
+        database=os.environ.get("SUPABASE_DB", "postgres"),
+        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
+        password=os.environ.get("SUPABASE_PASSWORD", "WaelPreview2026"),
+        sslmode="require",
+        connect_timeout=30
     )
     return create_engine(url_obj, connect_args={'sslmode': 'require'})
 
