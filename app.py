@@ -121,13 +121,40 @@ with st.sidebar:
 
 
 
-if page == "🏢 لوحات الشركات":
-    from pages.company_boards import show
+# ============================================================
+# استدعاء الصفحات (كل صفحة في ملف منفصل)
+# ============================================================
+
+if page == "📊 Dashboard":
+    st.info("📊 صفحة Dashboard قيد التطوير")
+
+elif page == "🏢 لوحات الشركات":
+    st.info("🏢 صفحة لوحات الشركات قيد التطوير")
+
+elif page == "📍 الأعمدة المتاحة":
+    from pages.available_boards import show
     show()
 
-#elif page == "⚙️ الإعدادات":
-    #if st.session_state.get('role') != 'admin':
-        #st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
-        #st.stop()
-    #from pages.settings import show
-    #show()
+elif page == "📅 لوحة الفترات":
+    st.info("📅 صفحة لوحة الفترات قيد التطوير")
+
+elif page == "📄 عرض سعر":
+    st.info("📄 صفحة عرض سعر قيد التطوير")
+
+elif page == "📋 تقرير الجرد":
+    st.info("📋 صفحة تقرير الجرد قيد التطوير")
+
+elif page == "📅 تقرير التوفر الشهري":
+    st.info("📅 صفحة تقرير التوفر الشهري قيد التطوير")
+
+elif page == "🗺️ تقرير جميع المواقع":
+    st.info("🗺️ صفحة تقرير جميع المواقع قيد التطوير")
+
+elif page == "📐 تقرير تجميعي حسب الحجوم":
+    st.info("📐 صفحة تقرير تجميعي حسب الحجوم قيد التطوير")
+
+elif page == "⚙️ الإعدادات":
+    if st.session_state.get('role') != 'admin':
+        st.error("⛔ هذه الصفحة مخصصة للمديرين فقط")
+        st.stop()
+    st.info("⚙️ صفحة الإعدادات قيد التطوير")
