@@ -6,6 +6,20 @@ from utils.database import get_connection, run_query
 from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 import psycopg2
 
+def show(start_date=None):
+    """عرض صفحة الأعمدة المتاحة"""
+    
+    # ✅ اختبار الاتصال أولاً
+    try:
+        test_df = run_query("SELECT 1 as test")
+        st.success("✅ الاتصال بقاعدة البيانات ناجح!")
+    except Exception as e:
+        st.error(f"❌ فشل الاتصال: {e}")
+        st.stop()
+    
+    if start_date is None:
+        start_date = date.today()
+
 def get_connection_direct():
     return psycopg2.connect(
         host="aws-1-eu-north-1.pooler.supabase.com",
