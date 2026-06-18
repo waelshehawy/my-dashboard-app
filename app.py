@@ -21,6 +21,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# معرفة IP الخاص بالخادم
+import requests
+try:
+    ip = requests.get('https://api.ipify.org').text
+    st.write(f"🌐 IP الخاص بالخادم: {ip}")
+except:
+    st.write("⚠️ لا يمكن تحديد IP")
 # ============================================================
 # استيرادات الملفات الداخلية
 # ============================================================
