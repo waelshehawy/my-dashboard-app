@@ -133,6 +133,7 @@ elif page == "🏢 لوحات الشركات":
     show()
 
 elif page == "📍 الأعمدة المتاحة":
+    st.write("🔍 جاري تحميل صفحة الأعمدة المتاحة...")
     from pages.available_boards import show
     show()
 
