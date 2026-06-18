@@ -15,25 +15,8 @@ from docx.oxml import OxmlElement
 from datetime import datetime, timedelta, date
 import plotly.graph_objects as go
 import plotly.express as px
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from supabase import create_client
-from datetime import datetime
-#============================================================
-# إعدادات Supabase (من متغيرات البيئة)
-# ============================================================
 
-def get_connection():
-    """اتصال مباشر بـ Supabase PostgreSQL"""
-    return psycopg2.connect(
-        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
-        port=os.environ.get("SUPABASE_PORT", "6543"),
-        database=os.environ.get("SUPABASE_DB", "postgres"),
-        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
-        password=os.environ.get("SUPABASE_PASSWORD", "W@elPreview2026"),
-        sslmode="require",
-        connect_timeout=30
-    )
+
 
 # ============================================================
 # التحسينات البصرية
