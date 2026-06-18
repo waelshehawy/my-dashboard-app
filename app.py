@@ -140,7 +140,8 @@ if page == "📊 Dashboard":
     st.info("📊 صفحة Dashboard قيد التطوير")
 
 elif page == "🏢 لوحات الشركات":
-    st.info("🏢 صفحة لوحات الشركات قيد التطوير")
+    from pages.company_boards import show
+    show()
 
 elif page == "📍 الأعمدة المتاحة":
     from pages.available_boards import show
