@@ -26,17 +26,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ============================================================
-# اختبار الاتصال باستخدام get_connection
-# ============================================================
-
-try:
-    conn = get_connection()
-    st.success("✅ الاتصال باستخدام get_connection ناجح!")
-    conn.close()
-except Exception as e:
-    st.error(f"❌ فشل الاتصال باستخدام get_connection: {e}")
-    st.stop()
 
 
 # ============================================================
