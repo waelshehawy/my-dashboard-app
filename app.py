@@ -451,6 +451,8 @@ with st.sidebar:
         "📄 عرض سعر",
         "📋 تقرير الجرد",
         "📅 تقرير التوفر الشهري",
+        "🗺️ تقرير جميع المواقع",
+        "📐 تقرير تجميعي حسب الحجوم",
         "⚙️ الإعدادات"
     ], key="main_menu")
     
@@ -1874,9 +1876,7 @@ elif page == "📋 تقرير الجرد":
         
     except Exception as e:
         st.error(f"حدث خطأ في التقرير: {str(e)}")
-#=================
-#تقرير التوافر الشهري
-#=================
+
 elif page == "📅 تقرير التوفر الشهري":
     st.title("📋 تقرير الأعمدة المتاحة")
     st.info("📌 يعرض هذا التقرير الأعمدة المتاحة حالياً أو التي ستصبح متاحة بعد تاريخ محدد")
@@ -1927,6 +1927,129 @@ elif page == "📅 تقرير التوفر الشهري":
             
             csv_data = available_df.to_csv(index=False, encoding='utf-8-sig')
             st.download_button("📥 تحميل التقرير (CSV)", csv_data, f"available_columns_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+
+elif page == "🗺️ تقرير جميع المواقع":
+    st.title("🗺️ تقرير جميع المواقع والأعمدة")
+    st.info("📌 يعرض هذا التقرير جميع المواقع والأعمدة في النظام")
+    
+    # جلب البيانات
+    all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
+    
+    # تشخيص سريع
+    st.write(f"**Debug:** عدد السجلات = {len(all_columns) if all_columns is not None else 0}")
+    if all_columns is not None and not all_columns.empty:
+        st.write(f"**Debug:** الأعمدة الموجودة: {all_columns.columns.tolist()}")
+    
+    if all_columns is None or all_columns.empty:
+        st.warning("⚠️ لا توجد بيانات في جدول أعمدة الإنارة")
+        st.stop()
+    
+    # إحصائيات سريعة
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("إجمالي المواقع", len(all_columns))
+    with col2:
+        st.metric("إجمالي الأعمدة", int(all_columns['العدد'].sum()) if 'العدد' in all_columns.columns else len(all_columns))
+    with col3:
+        st.metric("عدد المحافظات", all_columns['المحافظة'].nunique() if 'المحافظة' in all_columns.columns else 0)
+    
+    st.divider()
+    
+    # عرض الجدول كاملاً أولاً (للتأكد من وجود بيانات)
+    st.subheader("📋 جميع البيانات (جدول كامل)")
+    st.dataframe(all_columns, use_container_width=True)
+    
+    st.divider()
+    
+    # عرض البيانات بشكل منظم حسب المحافظة
+    st.subheader("📋 تفصيل حسب المحافظة")
+    
+    for city in sorted(all_columns['المحافظة'].unique()):
+        city_df = all_columns[all_columns['المحافظة'] == city]
+        
+        with st.expander(f"📍 محافظة {city} ({len(city_df)} موقع - {city_df['العدد'].sum()} لوحة)"):
+            
+            # عرض جميع مواقع المحافظة
+            st.dataframe(city_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+            
+            # تفصيل حسب الشبكة
+            if 'الشبكة' in city_df.columns:
+                st.write("**📡 تفصيل حسب الشبكة:**")
+                network_summary = city_df.groupby('الشبكة').agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                st.dataframe(network_summary, use_container_width=True)
+    
+    # تصدير
+    st.divider()
+    csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
+    st.download_button("📊 تصدير CSV", csv_data, f"full_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+
+elif page == "📐 تقرير تجميعي حسب الحجوم":
+    st.title("📐 تقرير تجميعي حسب الحجوم")
+    st.info("📌 يعرض هذا التقرير توزع اللوحات حسب الحجوم المقسمة إلى ثلاث مجموعات")
+    
+    all_columns = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة" ORDER BY "المحافظة", "الشبكة"')
+    
+    if all_columns is None or all_columns.empty:
+        st.warning("⚠️ لا توجد بيانات في جدول الأعمدة")
+        st.stop()
+    
+    group1_sizes = ['3*6', '3x6', '3 × 6']
+    group2_sizes = ['2*1', '2x1', '2 × 1', '125*185', '125x185', '125 × 185']
+    
+    def classify_size(size):
+        size_str = str(size).strip()
+        if size_str in group1_sizes or size_str.replace(' ', '') in ['3*6', '3x6']:
+            return 'المجموعة الأولى: حجم 3×6'
+        elif size_str in group2_sizes or size_str.replace(' ', '') in ['2*1', '2x1', '125*185', '125x185']:
+            return 'المجموعة الثانية: حجمي 2×1 و 125×185'
+        else:
+            return 'المجموعة الثالثة: باقي الحجوم'
+    
+    all_columns['المجموعة'] = all_columns['الحجم'].apply(classify_size)
+    
+    cols = st.columns(3)
+    with cols[0]:
+        st.markdown(create_metric_card_3d("إجمالي الأعمدة", int(all_columns['العدد'].sum()), "📌", "primary"), unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown(create_metric_card_3d("إجمالي المواقع", len(all_columns), "🗺️", "success"), unsafe_allow_html=True)
+    with cols[2]:
+        st.markdown(create_metric_card_3d("عدد الأحجام", all_columns['الحجم'].nunique(), "📏", "warning"), unsafe_allow_html=True)
+    
+    st.divider()
+    
+    st.subheader("📊 ملخص المجموعات")
+    group_summary = all_columns.groupby('المجموعة').agg({
+        'رقم اللوحة': 'count',
+        'العدد': 'sum'
+    }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+    group_summary['عدد الأعمدة'] = group_summary['عدد الأعمدة'].astype(int)
+    st.dataframe(group_summary, use_container_width=True)
+    
+    st.divider()
+    
+    for group_name in ['المجموعة الأولى: حجم 3×6', 'المجموعة الثانية: حجمي 2×1 و 125×185', 'المجموعة الثالثة: باقي الحجوم']:
+        group_df = all_columns[all_columns['المجموعة'] == group_name]
+        if not group_df.empty:
+            with st.expander(f"📌 {group_name} - {len(group_df)} موقع - {int(group_df['العدد'].sum())} عمود", expanded=False):
+                st.subheader("📍 توزع حسب المحافظة")
+                city_summary = group_df.groupby('المحافظة').agg({
+                    'رقم اللوحة': 'count',
+                    'العدد': 'sum'
+                }).rename(columns={'رقم اللوحة': 'عدد المواقع', 'العدد': 'عدد الأعمدة'})
+                st.dataframe(city_summary, use_container_width=True)
+                
+                st.subheader("📋 قائمة المواقع")
+                st.dataframe(group_df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']], use_container_width=True)
+    
+    st.divider()
+    
+    csv_data = all_columns.to_csv(index=False, encoding='utf-8-sig')
+    st.download_button("📊 تصدير التقرير كاملاً (CSV)", csv_data, f"grouped_report_{date.today().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+
+
 
 #=============
 # التحكم
