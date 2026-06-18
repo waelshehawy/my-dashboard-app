@@ -13,7 +13,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 # استيرادات الملفات الداخلية
 # ============================================================
 
-from utils.database import get_connection, run_query
+from utils.database import  run_query
 from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 # ============================================================
 # إعدادات الصفحة (يجب أن تكون أول شيء)
