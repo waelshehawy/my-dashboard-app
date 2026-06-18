@@ -22,14 +22,15 @@ st.set_page_config(
 )
 
 # ============================================================
-# اختبار استيراد database.py
+# اختبار الاتصال باستخدام get_connection
 # ============================================================
 
 try:
-    from utils.database import get_connection
-    st.success("✅ تم استيراد get_connection بنجاح!")
+    conn = get_connection()
+    st.success("✅ الاتصال باستخدام get_connection ناجح!")
+    conn.close()
 except Exception as e:
-    st.error(f"❌ فشل استيراد get_connection: {e}")
+    st.error(f"❌ فشل الاتصال باستخدام get_connection: {e}")
     st.stop()
 # ============================================================
 # استيرادات الملفات الداخلية
