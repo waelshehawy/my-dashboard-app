@@ -20,7 +20,24 @@ import plotly.express as px
 from utils.database import get_connection, run_query
 from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 
+# في بداية app.py
+import psycopg2
 
+try:
+    conn = psycopg2.connect(
+        host="aws-1-eu-north-1.pooler.supabase.com",
+        port="6543",
+        database="postgres",
+        user="postgres.ncuofpvbaglwbdqnpman",
+        password="W@elPreview2026",
+        sslmode="require",
+        connect_timeout=10
+    )
+    st.success("✅ الاتصال بقاعدة البيانات ناجح!")
+    conn.close()
+except Exception as e:
+    st.error(f"❌ فشل الاتصال: {e}")
+    st.stop()
 # ============================================================
 # التحسينات البصرية
 # ============================================================
