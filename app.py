@@ -1,4 +1,4 @@
-# app.py - النسخة النهائية للإنترنت مع Supabase
+# app.py
 import streamlit as st
 import pandas as pd
 import os
@@ -16,6 +16,9 @@ from datetime import datetime, timedelta, date
 import plotly.graph_objects as go
 import plotly.express as px
 
+# ✅ أضف هذه الأسطر
+from utils.database import get_connection, run_query
+from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 
 
 # ============================================================
