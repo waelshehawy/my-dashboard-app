@@ -55,7 +55,6 @@ def get_period_from_date(date_obj):
     return PERIOD_ORDER.get(period_name, 99)
 
 @st.cache_data(ttl=300)
-@st.cache_data(ttl=300)
 def load_available_boards_data(target_period_num, target_year):
     """جلب بيانات الأعمدة المتاحة مع تصنيفها"""
     
@@ -127,7 +126,6 @@ def load_available_boards_data(target_period_num, target_year):
     # ✅ استخدم run_query بدلاً من get_connection
     df = run_query(query)
     return df
-
 def show(start_date=None):
     """عرض صفحة الأعمدة المتاحة"""
     if start_date is None:
