@@ -4,7 +4,14 @@ import pandas as pd
 from datetime import date
 from utils.database import get_connection, run_query
 from utils.helpers import safe_split, badge_animated, create_metric_card_3d
-
+from utils.helpers import (
+    convert_date_to_period_name,
+    get_period_number,
+    get_period_from_date,
+    safe_split,
+    badge_animated,
+    create_metric_card_3d
+)
 # ============================================================
 # دوال الفترات (من الكود الأساسي)
 # ============================================================
