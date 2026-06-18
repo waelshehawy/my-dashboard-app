@@ -7,9 +7,8 @@ from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 import psycopg2
 
 def show(start_date=None):
-    """عرض صفحة الأعمدة المتاحة"""
-    if start_date is None:
-        start_date = date.today()
+
+    start_date = date.today()
     
     # ✅ اختبار الاتصال أولاً
     try:
