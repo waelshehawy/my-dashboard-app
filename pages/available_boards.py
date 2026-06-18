@@ -4,34 +4,32 @@ import pandas as pd
 from datetime import date
 from utils.database import get_connection, run_query
 from utils.helpers import safe_split, badge_animated, create_metric_card_3d
-import psycopg2
 
-def show(start_date=None):
+# ============================================================
+# دوال تحويل الفترات (ثابتة)
+# ============================================================
 
-    
-    # ✅ اختبار الاتصال أولاً
-    try:
-        test_df = run_query("SELECT 1 as test")
-        st.success("✅ الاتصال بقاعدة البيانات ناجح!")
-    except Exception as e:
-        st.error(f"❌ فشل الاتصال: {e}")
-        st.stop()
-    
-    if start_date is None:
-        start_date = date.today()
+PERIOD_ORDER = {
+    'كانون الثاني 15-1': 1, 'كانون الثاني 31-16': 2,
+    'شباط 15-1': 3, 'شباط 28-16': 4,
+    'آذار 15-1': 5, 'آذار 31-16': 6,
+    'نيسان 15-1': 7, 'نيسان 30-16': 8,
+    'أيار 15-1': 9, 'أيار 31-16': 10,
+    'حزيران 15-1': 11, 'حزيران 30-16': 12,
+    'تموز 15-1': 13, 'تموز 31-16': 14,
+    'آب 15-1': 15, 'آب 31-16': 16,
+    'أيلول 15-1': 17, 'أيلول 30-16': 18,
+    'تشرين الأول 15-1': 19, 'تشرين الأول 31-16': 20,
+    'تشرين الثاني 15-1': 21, 'تشرين الثاني 30-16': 22,
+    'كانون الأول 15-1': 23, 'كانون الأول 31-16': 24
+}
 
-def get_connection_direct():
-    return psycopg2.connect(
-        host="aws-1-eu-north-1.pooler.supabase.com",
-        port="6543",
-        database="postgres",
-        user="postgres.ncuofpvbaglwbdqnpman",
-        password="W@elPreview2026",
-        sslmode="require",
-        connect_timeout=30
-    )
+def get_period_number(period_name):
+    if period_name is None:
+        return 99
+    return PERIOD_ORDER.get(period_name, 99)
+
 def get_period_from_date(date_obj):
-    """تحويل التاريخ إلى رقم الفترة (1-24) باستخدام أسماء الفترات من جدول الفترة"""
     day = date_obj.day
     month = date_obj.month
     
@@ -52,16 +50,9 @@ def get_period_from_date(date_obj):
             last_day = 30
         else:
             last_day = 31
-        period_name = f"{month_name} {last_day}-15"
+        period_name = f"{month_name} {last_day}-16"
     
-    # ✅ استخدم get_connection مباشرة بدلاً من run_query
-    conn = get_connection()
-    periods_df = pd.read_sql_query('SELECT no, namee FROM "الفترة" ORDER BY no', conn)
-    conn.close()
-    
-    period_map = {row['namee']: row['no'] for _, row in periods_df.iterrows()}
-    
-    return period_map.get(period_name, 99)
+    return PERIOD_ORDER.get(period_name, 99)
 
 @st.cache_data(ttl=300)
 def load_available_boards_data(target_period_num, target_year):
