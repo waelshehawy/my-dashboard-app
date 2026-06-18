@@ -8,6 +8,8 @@ import psycopg2
 
 def show(start_date=None):
     """عرض صفحة الأعمدة المتاحة"""
+    if start_date is None:
+        start_date = date.today()
     
     # ✅ اختبار الاتصال أولاً
     try:
