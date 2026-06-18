@@ -13,7 +13,7 @@ def get_connection():
         port=os.environ.get("SUPABASE_PORT", "6543"),
         database=os.environ.get("SUPABASE_DB", "postgres"),
         user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
-        password=os.environ.get("SUPABASE_PASSWORD", "WaelPreview2026"),
+        password=os.environ.get("SUPABASE_PASSWORD", "W@elPreview2026"),
         sslmode="require",
         connect_timeout=30
     )
