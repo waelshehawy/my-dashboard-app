@@ -9,7 +9,12 @@ from streamlit_folium import st_folium
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+# ============================================================
+# استيرادات الملفات الداخلية
+# ============================================================
 
+from utils.database import get_connection, run_query
+from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 # ============================================================
 # إعدادات الصفحة (يجب أن تكون أول شيء)
 # ============================================================
@@ -32,12 +37,7 @@ try:
 except Exception as e:
     st.error(f"❌ فشل الاتصال باستخدام get_connection: {e}")
     st.stop()
-# ============================================================
-# استيرادات الملفات الداخلية
-# ============================================================
 
-from utils.database import get_connection, run_query
-from utils.helpers import safe_split, badge_animated, create_metric_card_3d
 
 # ============================================================
 # تهيئة session_state
