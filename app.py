@@ -21,13 +21,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# معرفة IP الخاص بالخادم
-import requests
+# ============================================================
+# اختبار استيراد database.py
+# ============================================================
+
 try:
-    ip = requests.get('https://api.ipify.org').text
-    st.write(f"🌐 IP الخاص بالخادم: {ip}")
-except:
-    st.write("⚠️ لا يمكن تحديد IP")
+    from utils.database import get_connection
+    st.success("✅ تم استيراد get_connection بنجاح!")
+except Exception as e:
+    st.error(f"❌ فشل استيراد get_connection: {e}")
+    st.stop()
 # ============================================================
 # استيرادات الملفات الداخلية
 # ============================================================
