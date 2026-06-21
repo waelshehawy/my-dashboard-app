@@ -19,6 +19,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from supabase import create_client
 from datetime import datetime
+from datetime import datetime, timedelta
+from utils.database import get_connection, run_query
 #============================================================
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
@@ -34,7 +36,43 @@ def get_connection():
         sslmode="require",
         connect_timeout=30
     )
+# ============================================================
+# دوال المصادقة
+# ============================================================
 
+def is_authenticated():
+    """التحقق من المصادقة"""
+    return 'user_id' in st.session_state
+
+def get_current_user():
+    """الحصول على معلومات المستخدم الحالي"""
+    if 'user_id' not in st.session_state:
+        return None
+    
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, username, role, full_name, created_at 
+            FROM users 
+            WHERE id = %s
+        ''', (st.session_state.user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if user:
+            return {
+                'id': user[0],
+                'username': user[1],
+                'role': user[2],
+                'full_name': user[3],
+                'created_at': user[4]
+            }
+    except Exception as e:
+        st.error(f"❌ خطأ في جلب المستخدم: {e}")
+    
+    return None
 # ============================================================
 # التحسينات البصرية
 # ============================================================
