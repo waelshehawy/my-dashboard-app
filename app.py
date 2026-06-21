@@ -403,12 +403,10 @@ if "temp_cust" not in st.session_state:
 # ============================================================
 # صفحة تسجيل الدخول
 # ============================================================
-if user:
-    st.session_state.auth = True
-    st.session_state.role = user[1]
-    st.session_state.username = user[0]
-    st.session_state.user_id = user[2]  # ← أضف هذا
-    st.rerun()
+# ============================================================
+# صفحة تسجيل الدخول
+# ============================================================
+
 if not st.session_state.auth:
     st.markdown("""
     <div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
@@ -447,6 +445,9 @@ if not st.session_state.auth:
     st.markdown("</div></div>", unsafe_allow_html=True)
     st.stop()
 
+# ✅ هذا السطر يجب أن يكون هنا (بعد st.stop())
+# if user:  # ❌ لا تضعه هنا
+#     ...
 # ============================================================
 # الاتصال بقاعدة البيانات بعد تسجيل الدخول
 # ============================================================
