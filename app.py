@@ -2447,19 +2447,20 @@ elif page == "📝 الإدخال اليومي":
     
     # ========== تبويب عرض الحجوزات ==========
     tab_index = 1 if user_info and user_info.get('role') == 'admin' else 1
-    with tabs[tab_index]:
-        st.markdown('<div class="input-card">', unsafe_allow_html=True)
-        
-        if user_info and user_info.get('role') == 'admin':
-            st.subheader("📊 جميع الحجوزات")
-            df = run_query('SELECT * FROM "حجوزات1" ORDER BY "تاريخ الانشاء" DESC')
-        else:
-            st.subheader("📊 حجوزاتي")
-            df = run_query(f'''
-                SELECT * FROM "حجوزات1" 
-                WHERE "اسم الزبون" LIKE '%{user_info.get("full_name", "")}%'
-                ORDER BY "تاريخ الانشاء" DESC
-            ''')
+# ========== تبويب عرض الحجوزات ==========
+with tabs[tab_index]:
+    st.markdown('<div class="input-card">', unsafe_allow_html=True)
+    
+    if user_info and user_info.get('role') == 'admin':
+        st.subheader("📊 جميع الحجوزات")
+        df = run_query('SELECT * FROM "حجوزات1" ORDER BY "TimeOfTask" DESC NULLS LAST')
+    else:
+        st.subheader("📊 حجوزاتي")
+        df = run_query(f'''
+            SELECT * FROM "حجوزات1" 
+            WHERE "اسم الزبون" LIKE '%{user_info.get("full_name", "")}%'
+            ORDER BY "TimeOfTask" DESC NULLS LAST
+        ''')
         
         if not df.empty:
             # فلترة وتصفية
