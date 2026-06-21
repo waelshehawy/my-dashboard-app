@@ -2177,10 +2177,39 @@ elif page == "⚙️ الإعدادات":
 # =============
 # واجهة الإدخال الاحترافية
 # =============
+# =============
+# صفحة الإدخال اليومي (النسخة المعدلة)
+# =============
 elif page == "📝 الإدخال اليومي":
-    # التحقق من الصلاحيات (يمكن للمستخدمين والمديرين)
-    if not is_authenticated():
+    # التحقق من الصلاحيات
+    if 'user_id' not in st.session_state:
         st.error("⛔ يرجى تسجيل الدخول أولاً")
+        st.stop()
+    
+    # محاولة جلب معلومات المستخدم
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, username, role, full_name, created_at 
+            FROM users 
+            WHERE id = %s
+        ''', (st.session_state.user_id,))
+        user_data = cursor.fetchone()
+        cursor.close()
+        
+        if not user_data:
+            st.error("⛔ المستخدم غير موجود")
+            st.stop()
+            
+        user_info = {
+            'id': user_data[0],
+            'username': user_data[1],
+            'role': user_data[2],
+            'full_name': user_data[3],
+            'created_at': user_data[4]
+        }
+    except Exception as e:
+        st.error(f"❌ خطأ في جلب بيانات المستخدم: {str(e)}")
         st.stop()
     
     # تصميم الهيدر
@@ -2237,14 +2266,6 @@ elif page == "📝 الإدخال اليومي":
         transform: translateY(-2px);
         box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4);
     }
-    .success-badge {
-        background: #10b981;
-        color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        display: inline-block;
-    }
     .info-box {
         background: #f0f4ff;
         border-left: 4px solid #667eea;
@@ -2263,24 +2284,22 @@ elif page == "📝 الإدخال اليومي":
     </div>
     """, unsafe_allow_html=True)
     
-    # معلومات المستخدم الحالي
-    user_info = get_current_user()
-    if user_info:
-        st.sidebar.markdown(f"""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    padding: 1rem; border-radius: 10px; color: white; margin-bottom: 1rem;">
-            <strong>👤 {user_info.get('full_name', 'مستخدم')}</strong><br>
-            <small style="opacity: 0.8;">@ {user_info.get('username', '')} • {user_info.get('role', 'employee')}</small>
-        </div>
-        """, unsafe_allow_html=True)
+    # عرض معلومات المستخدم
+    st.sidebar.markdown(f"""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 1rem; border-radius: 10px; color: white; margin-bottom: 1rem;">
+        <strong>👤 {user_info.get('full_name', 'مستخدم')}</strong><br>
+        <small style="opacity: 0.8;">@ {user_info.get('username', '')} • {user_info.get('role', 'employee')}</small>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # تبويبات الإدخال حسب الصلاحيات
-    if user_info and user_info.get('role') == 'admin':
+    # تحديد التبويبات حسب الصلاحية
+    if user_info.get('role') == 'admin':
         tabs = st.tabs(["📅 حجز جديد", "🗺️ إضافة عمود", "📊 عرض الحجوزات", "⚡ إجراءات سريعة"])
     else:
         tabs = st.tabs(["📅 حجز جديد", "📊 عرض حجوزاتي"])
     
-    # ========== تبويب الحجز الجديد ==========
+    # ========== التبويب 1: حجز جديد ==========
     with tabs[0]:
         st.markdown('<div class="input-card">', unsafe_allow_html=True)
         st.subheader("🆕 إنشاء حجز جديد")
@@ -2289,94 +2308,62 @@ elif page == "📝 الإدخال اليومي":
             col1, col2 = st.columns(2)
             
             with col1:
-                # اختيار العمود
-                df_boards = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
-                board_options = df_boards.apply(lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['المحافظة']})", axis=1).tolist()
+                # جلب بيانات الأعمدة
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
+                    boards_data = cursor.fetchall()
+                    cursor.close()
+                    
+                    if boards_data:
+                        board_options = [f"{row[0]} - {row[1]} ({row[2]})" for row in boards_data]
+                        selected_board = st.selectbox("🏷️ اختيار اللوحة", board_options)
+                        board_number = selected_board.split(' - ')[0] if selected_board else ""
+                    else:
+                        st.warning("⚠️ لا توجد أعمدة متاحة. يرجى إضافة أعمدة أولاً.")
+                        board_number = ""
+                        selected_board = None
+                except Exception as e:
+                    st.error(f"❌ خطأ في جلب الأعمدة: {str(e)}")
+                    board_number = ""
+                    selected_board = None
                 
-                selected_board = st.selectbox(
-                    "🏷️ اختيار اللوحة",
-                    board_options,
-                    help="اختر اللوحة التي تريد حجزها"
-                )
-                
-                # استخراج رقم اللوحة
-                board_number = selected_board.split(' - ')[0] if selected_board else ""
-                
-                # اسم الزبون
-                customer_name = st.text_input(
-                    "👤 اسم الزبون",
-                    placeholder="أدخل اسم الزبون كاملاً",
-                    help="الاسم كما سيظهر في الفاتورة"
-                )
+                customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
             
             with col2:
-                # السنة
-                year = st.number_input(
-                    "📅 العام",
-                    min_value=2020,
-                    max_value=2030,
-                    value=2026,
-                    step=1
-                )
+                year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
                 
-                # فترة الحجز
                 from datetime import datetime, timedelta
                 today = datetime.now().date()
                 
-                booking_start = st.date_input(
-                    "📆 بداية الحجز",
-                    value=today,
-                    min_value=today
-                )
-                
-                booking_end = st.date_input(
-                    "📆 نهاية الحجز",
-                    value=today + timedelta(days=30),
-                    min_value=booking_start
-                )
+                booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
+                booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
             
             # تفاصيل إضافية
             col3, col4 = st.columns(2)
             with col3:
-                board_type = st.selectbox(
-                    "📋 نوع اللوحة",
-                    ["عادية", "سكوتش"],
-                    help="نوع مادة اللوحة"
-                )
-            
+                board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
             with col4:
-                board_size = st.selectbox(
-                    "📐 حجم اللوحة",
-                    ["صغير", "متوسط", "كبير", "ضخم"],
-                    help="حجم اللوحة المطلوبة"
-                )
+                board_size = st.selectbox("📐 حجم اللوحة", ["صغير", "متوسط", "كبير", "ضخم"])
             
-            # ملاحظات
-            notes = st.text_area(
-                "📝 ملاحظات إضافية",
-                placeholder="أي معلومات إضافية عن الحجز...",
-                height=80
-            )
+            notes = st.text_area("📝 ملاحظات إضافية", placeholder="أي معلومات إضافية عن الحجز...", height=80)
             
-            # معلومات الاتصال
             col5, col6 = st.columns(2)
             with col5:
                 phone = st.text_input("📞 رقم الهاتف", placeholder="05xxxxxxxx")
             with col6:
                 email = st.text_input("✉️ البريد الإلكتروني", placeholder="example@email.com")
             
-            # زر الحفظ
             submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
             
             if submitted:
                 if not board_number or not customer_name:
                     st.error("⚠️ يرجى ملء جميع الحقول المطلوبة")
                 else:
-                    # تحويل التواريخ إلى نص
-                    start_str = booking_start.strftime("%Y-%m-%d")
-                    end_str = booking_end.strftime("%Y-%m-%d")
-                    
                     try:
+                        start_str = booking_start.strftime("%Y-%m-%d")
+                        end_str = booking_end.strftime("%Y-%m-%d")
+                        
                         cursor = conn.cursor()
                         cursor.execute('''
                             INSERT INTO "حجوزات1" 
@@ -2391,7 +2378,6 @@ elif page == "📝 الإدخال اليومي":
                         st.success("✅ تم إنشاء الحجز بنجاح!")
                         st.balloons()
                         
-                        # عرض تفاصيل الحجز
                         st.info(f"""
                         📋 **تفاصيل الحجز:**
                         - رقم اللوحة: {board_number}
@@ -2406,8 +2392,8 @@ elif page == "📝 الإدخال اليومي":
         
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # ========== تبويب إضافة عمود (للمدير فقط) ==========
-    if len(tabs) > 1 and user_info and user_info.get('role') == 'admin':
+    # ========== التبويب 2: إضافة عمود (للمدير فقط) ==========
+    if len(tabs) > 1 and user_info.get('role') == 'admin':
         with tabs[1]:
             st.markdown('<div class="input-card">', unsafe_allow_html=True)
             st.subheader("🗺️ إضافة عمود إنارة جديد")
@@ -2418,20 +2404,13 @@ elif page == "📝 الإدخال اليومي":
                 with col1:
                     board_number = st.text_input("🔢 رقم اللوحة", placeholder="مثال: B001")
                     board_name = st.text_input("🏷️ اسم العمود", placeholder="مثال: شارع الملك فهد")
-                    governorate = st.selectbox(
-                        "📍 المحافظة",
-                        ["الرياض", "جدة", "مكة", "المدينة", "الدمام", "الخبر", "الظهران", "أخرى"]
-                    )
+                    governorate = st.selectbox("📍 المحافظة", ["الرياض", "جدة", "مكة", "المدينة", "الدمام", "الخبر", "الظهران", "أخرى"])
                 
                 with col2:
                     network = st.text_input("🌐 الشبكة", placeholder="اسم الشبكة")
-                    size = st.selectbox(
-                        "📐 الحجم",
-                        ["صغير", "متوسط", "كبير", "ضخم"]
-                    )
+                    size = st.selectbox("📐 الحجم", ["صغير", "متوسط", "كبير", "ضخم"])
                     quantity = st.number_input("🔢 العدد", min_value=1, value=1)
                 
-                # الموقع الجغرافي
                 st.markdown("---")
                 st.markdown("📍 **الموقع الجغرافي (اختياري)**")
                 col3, col4 = st.columns(2)
@@ -2464,72 +2443,88 @@ elif page == "📝 الإدخال اليومي":
             
             st.markdown('</div>', unsafe_allow_html=True)
     
-    # ========== تبويب عرض الحجوزات ==========
-    tab_index = 1 if user_info and user_info.get('role') == 'admin' else 1
-    with tabs[tab_index]:
-        st.markdown('<div class="input-card">', unsafe_allow_html=True)
-        
-        if user_info and user_info.get('role') == 'admin':
-            st.subheader("📊 جميع الحجوزات")
-            df = run_query('SELECT * FROM "حجوزات1" ORDER BY "تاريخ الانشاء" DESC')
-        else:
-            st.subheader("📊 حجوزاتي")
-            # للموظفين نعرض الحجوزات التي أنشأوها (حسب اسم المستخدم)
-            df = run_query(f'''
-                SELECT * FROM "حجوزات1" 
-                WHERE "اسم الزبون" LIKE '%{user_info.get("full_name", "")}%'
-                ORDER BY "تاريخ الانشاء" DESC
-            ''')
-        
-        if not df.empty:
-            # فلترة وتصفية
-            col_filter1, col_filter2, col_filter3 = st.columns(3)
-            with col_filter1:
-                search = st.text_input("🔍 بحث", placeholder="بحث بالزبون أو اللوحة...")
-            with col_filter2:
-                status_filter = st.selectbox("📌 الحالة", ["الكل", "نشط", "منتهي", "قادم"])
-            with col_filter3:
-                date_filter = st.date_input("📅 من تاريخ")
+    # ========== التبويب 3 أو 2: عرض الحجوزات ==========
+    tab_index = 1 if user_info.get('role') == 'admin' else 1
+    if len(tabs) > tab_index:
+        with tabs[tab_index]:
+            st.markdown('<div class="input-card">', unsafe_allow_html=True)
             
-            # تطبيق الفلترة
-            if search:
-                df = df[df['اسم الزبون'].str.contains(search, case=False) | 
-                       df['رقم اللوحة'].str.contains(search, case=False)]
+            if user_info.get('role') == 'admin':
+                st.subheader("📊 جميع الحجوزات")
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT * FROM "حجوزات1" ORDER BY "تاريخ الانشاء" DESC')
+                    data = cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    cursor.close()
+                    df = pd.DataFrame(data, columns=columns) if data else pd.DataFrame(columns=columns if columns else [])
+                except Exception as e:
+                    st.error(f"❌ خطأ في جلب البيانات: {str(e)}")
+                    df = pd.DataFrame()
+            else:
+                st.subheader("📊 حجوزاتي")
+                try:
+                    # للموظفين نعرض الحجوزات التي أنشأوها
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        SELECT * FROM "حجوزات1" 
+                        WHERE "اسم الزبون" LIKE %s
+                        ORDER BY "تاريخ الانشاء" DESC
+                    ''', (f'%{user_info.get("full_name", "")}%',))
+                    data = cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    cursor.close()
+                    df = pd.DataFrame(data, columns=columns) if data else pd.DataFrame(columns=columns if columns else [])
+                except Exception as e:
+                    st.error(f"❌ خطأ في جلب البيانات: {str(e)}")
+                    df = pd.DataFrame()
             
-            # عرض الجدول
-            display_cols = ['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'تاريخ النهاية', 'نوع اللوحة']
-            available_cols = [col for col in display_cols if col in df.columns]
+            if not df.empty:
+                # فلترة
+                col_filter1, col_filter2 = st.columns(2)
+                with col_filter1:
+                    search = st.text_input("🔍 بحث", placeholder="بحث بالزبون أو اللوحة...")
+                
+                # تطبيق الفلترة
+                if search:
+                    try:
+                        df = df[df['اسم الزبون'].str.contains(search, case=False) | 
+                               df['رقم اللوحة'].str.contains(search, case=False)]
+                    except:
+                        pass
+                
+                # عرض الجدول
+                display_cols = ['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'تاريخ النهاية']
+                available_cols = [col for col in display_cols if col in df.columns]
+                
+                if available_cols:
+                    st.dataframe(df[available_cols], use_container_width=True, height=400)
+                
+                # إحصائيات سريعة
+                col_stat1, col_stat2, col_stat3 = st.columns(3)
+                with col_stat1:
+                    st.metric("📊 إجمالي الحجوزات", len(df))
+                
+                # حساب الحجوزات النشطة
+                try:
+                    if 'تاريخ النهاية' in df.columns:
+                        df['تاريخ النهاية'] = pd.to_datetime(df['تاريخ النهاية'])
+                        active = len(df[df['تاريخ النهاية'] >= datetime.now()])
+                        with col_stat2:
+                            st.metric("🟢 حجوزات نشطة", active)
+                        
+                        expiring_soon = len(df[df['تاريخ النهاية'] <= datetime.now() + timedelta(days=7)])
+                        with col_stat3:
+                            st.metric("⏰ تنتهي قريباً", expiring_soon)
+                except:
+                    pass
+            else:
+                st.info("📭 لا توجد حجوزات لعرضها")
             
-            st.dataframe(
-                df[available_cols],
-                use_container_width=True,
-                height=400,
-                column_config={
-                    "رقم اللوحة": "🏷️ رقم اللوحة",
-                    "اسم الزبون": "👤 الزبون",
-                    "فترة الحجز": "📅 بداية الحجز",
-                    "تاريخ النهاية": "📅 نهاية الحجز",
-                    "نوع اللوحة": "📋 النوع"
-                }
-            )
-            
-            # إحصائيات سريعة
-            col_stat1, col_stat2, col_stat3 = st.columns(3)
-            with col_stat1:
-                st.metric("📊 إجمالي الحجوزات", len(df))
-            with col_stat2:
-                active = len(df[pd.to_datetime(df['تاريخ النهاية']) >= datetime.now()])
-                st.metric("🟢 حجوزات نشطة", active)
-            with col_stat3:
-                expiring_soon = len(df[pd.to_datetime(df['تاريخ النهاية']) <= datetime.now() + timedelta(days=7)])
-                st.metric("⏰ تنتهي قريباً", expiring_soon)
-        else:
-            st.info("📭 لا توجد حجوزات لعرضها")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
     
-    # ========== تبويب الإجراءات السريعة (للمدير فقط) ==========
-    if len(tabs) > 3 and user_info and user_info.get('role') == 'admin':
+    # ========== التبويب 4: إجراءات سريعة (للمدير فقط) ==========
+    if len(tabs) > 3 and user_info.get('role') == 'admin':
         with tabs[3]:
             st.markdown('<div class="input-card">', unsafe_allow_html=True)
             st.subheader("⚡ إجراءات سريعة")
@@ -2540,26 +2535,36 @@ elif page == "📝 الإدخال اليومي":
                 st.markdown("#### 📥 استيراد بيانات")
                 uploaded_file = st.file_uploader("رفع ملف Excel", type=['xlsx', 'xls'])
                 if uploaded_file:
-                    if st.button("📤 استيراد"):
-                        try:
-                            df_import = pd.read_excel(uploaded_file)
-                            st.success(f"✅ تم استيراد {len(df_import)} سجل")
-                            st.dataframe(df_import.head())
-                        except Exception as e:
-                            st.error(f"❌ خطأ: {str(e)}")
+                    try:
+                        df_import = pd.read_excel(uploaded_file)
+                        st.success(f"✅ تم استيراد {len(df_import)} سجل")
+                        st.dataframe(df_import.head())
+                    except Exception as e:
+                        st.error(f"❌ خطأ في الاستيراد: {str(e)}")
             
             with col2:
                 st.markdown("#### 📤 تصدير بيانات")
                 if st.button("📥 تصدير الحجوزات"):
-                    df_export = run_query('SELECT * FROM "حجوزات1"')
-                    if not df_export.empty:
-                        csv = df_export.to_csv(index=False)
-                        st.download_button(
-                            label="⬇️ تحميل CSV",
-                            data=csv,
-                            file_name=f"الحجوزات_{datetime.now().strftime('%Y%m%d')}.csv",
-                            mime="text/csv"
-                        )
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute('SELECT * FROM "حجوزات1"')
+                        data = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+                        cursor.close()
+                        df_export = pd.DataFrame(data, columns=columns) if data else pd.DataFrame(columns=columns if columns else [])
+                        
+                        if not df_export.empty:
+                            csv = df_export.to_csv(index=False)
+                            st.download_button(
+                                label="⬇️ تحميل CSV",
+                                data=csv,
+                                file_name=f"الحجوزات_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.warning("⚠️ لا توجد بيانات للتصدير")
+                    except Exception as e:
+                        st.error(f"❌ خطأ في التصدير: {str(e)}")
             
             st.markdown("---")
             st.markdown("#### 🗑️ إدارة البيانات")
@@ -2577,50 +2582,32 @@ elif page == "📝 الإدخال اليومي":
                         conn.commit()
                         cursor.close()
                         st.success(f"✅ تم حذف {deleted_count} حجز منتهي")
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ خطأ: {str(e)}")
             
             with col4:
                 if st.button("📊 تقرير الأداء", use_container_width=True):
-                    df_bookings = run_query('SELECT * FROM "حجوزات1"')
-                    if not df_bookings.empty:
-                        st.info(f"""
-                        📈 **إحصائيات الأداء:**
-                        - إجمالي الحجوزات: {len(df_bookings)}
-                        - متوسط مدة الحجز: {pd.to_numeric(pd.to_datetime(df_bookings['تاريخ النهاية']) - pd.to_datetime(df_bookings['فترة الحجز']), errors='coerce').mean().days if 'تاريخ النهاية' in df_bookings.columns and 'فترة الحجز' in df_bookings.columns else 'N/A'} يوم
-                        - أكثر العمود طلباً: {df_bookings['رقم اللوحة'].mode().iloc[0] if 'رقم اللوحة' in df_bookings.columns and not df_bookings['رقم اللوحة'].empty else 'N/A'}
-                        """)
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute('SELECT * FROM "حجوزات1"')
+                        data = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+                        cursor.close()
+                        df_report = pd.DataFrame(data, columns=columns) if data else pd.DataFrame(columns=columns if columns else [])
+                        
+                        if not df_report.empty:
+                            st.info(f"""
+                            📈 **إحصائيات الأداء:**
+                            - إجمالي الحجوزات: {len(df_report)}
+                            - أكثر العمود طلباً: {df_report['رقم اللوحة'].mode().iloc[0] if 'رقم اللوحة' in df_report.columns and not df_report['رقم اللوحة'].empty else 'N/A'}
+                            """)
+                        else:
+                            st.warning("⚠️ لا توجد بيانات لعرض التقرير")
+                    except Exception as e:
+                        st.error(f"❌ خطأ: {str(e)}")
             
             st.markdown('</div>', unsafe_allow_html=True)
-
-# ========== دوال مساعدة ==========
-def get_current_user():
-    """الحصول على معلومات المستخدم الحالي"""
-    if 'user_id' in st.session_state:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT id, username, role, full_name, created_at 
-                FROM users 
-                WHERE id = %s
-            ''', (st.session_state.user_id,))
-            user = cursor.fetchone()
-            cursor.close()
-            if user:
-                return {
-                    'id': user[0],
-                    'username': user[1],
-                    'role': user[2],
-                    'full_name': user[3],
-                    'created_at': user[4]
-                }
-        except:
-            pass
-    return None
-
-def is_authenticated():
-    """التحقق من المصادقة"""
-    return 'user_id' in st.session_state
 # ============================================================
 # إغلاق الاتصال
 # ============================================================
