@@ -404,25 +404,46 @@ if "temp_cust" not in st.session_state:
 # صفحة تسجيل الدخول
 # ============================================================
 
-if submitted:
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s AND password = %s", (username, password))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
+
+if not st.session_state.auth:
+    st.markdown("""
+    <div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
+        <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 30px; padding: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                <span style="font-size: 40px;">🎯</span>
+            </div>
+            <h1 style="color: white;">PreView Ads</h1>
+            <p style="color: rgba(255,255,255,0.7);">نظام إدارة الإعلانات</p>
+    """, unsafe_allow_html=True)
+    
+    with st.form("login_form"):
+        username = st.text_input("👤 اسم المستخدم", placeholder="أدخل اسم المستخدم")
+        password = st.text_input("🔑 كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
+        submitted = st.form_submit_button("🚪 دخول", use_container_width=True)
         
-        if user:
-            st.session_state.auth = True
-            st.session_state.role = user[3]
-            st.session_state.username = user[1]
-            st.session_state.user_id = user[0]
-            st.rerun()
-        else:
-            st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
-    except Exception as e:
-        st.error(f"❌ خطأ في الاتصال: {str(e)}")
+        # ✅ الكود هنا داخل with st.form()
+        if submitted:
+            try:
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s AND password = %s", (username, password))
+                user = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                
+                if user:
+                    st.session_state.auth = True
+                    st.session_state.role = user[3]
+                    st.session_state.username = user[1]
+                    st.session_state.user_id = user[0]
+                    st.rerun()
+                else:
+                    st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
+            except Exception as e:
+                st.error(f"❌ خطأ في الاتصال: {str(e)}")
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.stop()
 # ============================================================
 # الاتصال بقاعدة البيانات بعد تسجيل الدخول
 # ============================================================
