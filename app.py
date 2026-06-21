@@ -40,8 +40,8 @@ def get_connection():
 # ============================================================
 
 def is_authenticated():
-    """التحقق من المصادقة"""
-    return 'user_id' in st.session_state
+    """التحقق من مصادقة المستخدم"""
+    return st.session_state.get('auth', False) and st.session_state.get('user_id') is not None
 
 def get_current_user():
     """الحصول على معلومات المستخدم الحالي"""
@@ -403,7 +403,9 @@ if "temp_cust" not in st.session_state:
 # ============================================================
 # صفحة تسجيل الدخول
 # ============================================================
-
+# ============================================================
+# صفحة تسجيل الدخول
+# ============================================================
 
 if not st.session_state.auth:
     st.markdown("""
@@ -421,12 +423,14 @@ if not st.session_state.auth:
         password = st.text_input("🔑 كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submitted = st.form_submit_button("🚪 دخول", use_container_width=True)
         
-        # ✅ الكود هنا داخل with st.form()
         if submitted:
             try:
                 conn = get_connection()
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s AND password = %s", (username, password))
+                cursor.execute(
+                    "SELECT id, username, password, role FROM users WHERE username = %s AND password = %s",
+                    (username, password)
+                )
                 user = cursor.fetchone()
                 cursor.close()
                 conn.close()
@@ -2213,9 +2217,7 @@ elif page == "⚙️ الإعدادات":
                         st.rerun()
                     except Exception as e:
                         st.error(f"خطأ: {e}")
-# =============
-# واجهة الإدخال الاحترافية
-# =============
+
 # =============
 # صفحة الإدخال اليومي (النسخة المعدلة)
 # =============
