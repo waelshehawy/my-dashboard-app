@@ -403,9 +403,6 @@ if "temp_cust" not in st.session_state:
 # ============================================================
 # صفحة تسجيل الدخول
 # ============================================================
-# ============================================================
-# صفحة تسجيل الدخول
-# ============================================================
 
 if not st.session_state.auth:
     st.markdown("""
@@ -432,11 +429,15 @@ if not st.session_state.auth:
                 cursor.close()
                 conn.close()
                 
+cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s AND password = %s", (username, password))
+user = cursor.fetchone()
+
                 if user:
-                    st.session_state.auth = True
-                    st.session_state.role = user[2]
-                    st.session_state.username = user[0]
-                    st.rerun()
+                st.session_state.auth = True
+                st.session_state.role = user[3]
+                st.session_state.username = user[1]
+                st.session_state.user_id = user[0]  # ✅ id من قاعدة البيانات
+                st.rerun()
                 else:
                     st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
             except Exception as e:
