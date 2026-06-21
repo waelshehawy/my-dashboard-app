@@ -20,7 +20,6 @@ from psycopg2.extras import RealDictCursor
 from supabase import create_client
 from datetime import datetime
 from datetime import datetime, timedelta
-from utils.database import get_connection, run_query
 #============================================================
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
