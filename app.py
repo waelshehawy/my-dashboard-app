@@ -420,14 +420,12 @@ if not st.session_state.auth:
         password = st.text_input("🔑 كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submitted = st.form_submit_button("🚪 دخول", use_container_width=True)
         
-        if submitted:
-            try:
-                conn = get_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT username, password, role FROM users WHERE username = %s AND password = %s", (username, password))
-                user = cursor.fetchone()
-                cursor.close()
-                conn.close()
+        if user:
+            st.session_state.auth = True
+            st.session_state.role = user[3]
+            st.session_state.username = user[1]
+            st.session_state.user_id = user[0]
+            st.rerun()
                 
 cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s AND password = %s", (username, password))
 user = cursor.fetchone()
