@@ -454,7 +454,7 @@ with st.sidebar:
         "🗺️ تقرير جميع المواقع",
         "📐 تقرير تجميعي حسب الحجوم",
         "⚙️ الإعدادات"
-        "📝 الإدخال اليومي
+        "📝 الإدخال اليومي"
     ], key="main_menu")
     
     st.divider()
@@ -472,7 +472,7 @@ with st.sidebar:
         st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
     with col_s2:
         st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
-    
+
     st.divider()
     
     if st.button("🚪 تسجيل الخروج", use_container_width=True):
