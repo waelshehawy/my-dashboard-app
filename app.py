@@ -2279,7 +2279,7 @@ with tabs[0]:
                         SELECT DISTINCT "الشبكة" 
                         FROM "اعمدة انارة" 
                         WHERE "المحافظة" = '{selected_city}' 
-                        AND "الشبكة" IS NOT NULL AND "الشبكة" != 0
+                        AND "الشبكة" != 0
                         ORDER BY "الشبكة"
                     ''')
                     network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
