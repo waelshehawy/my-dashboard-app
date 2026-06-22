@@ -2809,7 +2809,7 @@ elif page == "📋 كتالوج عام":
             )
             
             # ============================================================
-            # 7. تصدير الكتالوج - بنفس تنسيق عرض السعر مع القالب
+            # 7. تصدير الكتالوج - مع جدول 4 أعمدة (لوحتان في السطر)
             # ============================================================
             
             st.divider()
@@ -2822,7 +2822,7 @@ elif page == "📋 كتالوج عام":
                         with st.spinner("جاري إنشاء الكتالوج..."):
                             # استيراد المكتبات
                             from docx import Document
-                            from docx.shared import Inches, Pt, RGBColor
+                            from docx.shared import Inches, Pt, RGBColor, Cm
                             from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
                             from docx.oxml import OxmlElement
                             from docx.oxml.ns import qn
@@ -2842,7 +2842,7 @@ elif page == "📋 كتالوج عام":
                             PURPLE_COLOR = "660099"
                             
                             # ============================================
-                            # دالة مساعدة لتنسيق RTL
+                            # دالة لتطبيق RTL على الفقرة
                             # ============================================
                             def set_rtl_paragraph(paragraph):
                                 """تطبيق تنسيق RTL على الفقرة"""
@@ -2886,70 +2886,108 @@ elif page == "📋 كتالوج عام":
                             
                             # مقدمة
                             p_stat = doc.add_paragraph()
-                            p_stat.add_run(f"اللوحات المتاحة للإيجار في محافظة {selected_city} من فترة ({start_p}) ولغاية ({end_p})")
+                            p_stat.add_run(f"نقدم لكم اللوحات المتاحة في محافظة {selected_city} من فترة ({start_p}) ولغاية ({end_p})")
                             set_rtl_paragraph(p_stat)
                             
+                            # معلومات القياس
+                            p_size = doc.add_paragraph()
+                            p_size.add_run(f"لوحات قياس {selected_size}")
+                            set_rtl_paragraph(p_size)
+                            
                             # ============================================
-                            # عرض اللوحات حسب الشبكة
+                            # عرض اللوحات حسب الشبكة - مع جدول 4 أعمدة
                             # ============================================
                             for network in available_columns['الشبكة'].unique():
                                 network_df = available_columns[available_columns['الشبكة'] == network]
                                 
                                 # عنوان الشبكة
-                                p_city = doc.add_paragraph()
-                                p_city.add_run(f"■ شبكة: {network}").bold = True
-                                set_rtl_paragraph(p_city)
+                                p_network = doc.add_paragraph()
+                                p_network.add_run(f"الشبكة رقم {network}").bold = True
+                                set_rtl_paragraph(p_network)
                                 
                                 # ============================================
-                                # جدول اللوحات
+                                # جدول بـ 4 أعمدة (لوحتان في السطر)
                                 # ============================================
-                                table = doc.add_table(rows=1, cols=3)
+                                # إنشاء جدول بـ 4 أعمدة
+                                table = doc.add_table(rows=1, cols=4)
                                 table.style = 'Table Grid'
-                                set_table_rtl(table)
+                                
+                                # تعيين عرض الأعمدة
+                                for cell in table.columns:
+                                    cell.width = Cm(4.5)
                                 
                                 # رأس الجدول
                                 hdr = table.rows[0].cells
-                                hdr[0].text = "رقم اللوحة"
-                                hdr[1].text = "اسم الموقع"
+                                hdr[0].text = "العدد"
+                                hdr[1].text = "رقم الشبكة"
                                 hdr[2].text = "العدد"
+                                hdr[3].text = "رقم الشبكة"
                                 
+                                # تنسيق رأس الجدول
                                 for cell in hdr:
                                     for p in cell.paragraphs:
-                                        p.runs[0].bold = True
-                                        p.runs[0].font.color.rgb = RGBColor(255, 255, 255)
-                                    # خلفية أرجوانية مثل عرض السعر
+                                        if p.runs:
+                                            p.runs[0].bold = True
+                                            p.runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                                    # خلفية أرجوانية
                                     tc_pr = cell._element.get_or_add_tcPr()
                                     shd = OxmlElement('w:shd')
                                     shd.set(qn('w:fill'), PURPLE_COLOR)
                                     tc_pr.append(shd)
+                                    set_rtl_paragraph(p)
                                 
-                                # بيانات الجدول
-                                for _, row in network_df.iterrows():
+                                # ============================================
+                                # ملء الجدول: لوحتان في كل سطر
+                                # ============================================
+                                rows_data = network_df.to_dict('records')
+                                
+                                # تجميع البيانات في أزواج
+                                paired_data = []
+                                for i in range(0, len(rows_data), 2):
+                                    if i + 1 < len(rows_data):
+                                        paired_data.append((rows_data[i], rows_data[i+1]))
+                                    else:
+                                        paired_data.append((rows_data[i], None))
+                                
+                                for pair in paired_data:
                                     row_cells = table.add_row().cells
-                                    row_cells[0].text = str(row['رقم اللوحة'])
-                                    row_cells[1].text = str(row['الموقع'])
-                                    row_cells[2].text = str(row['العدد'])
+                                    
+                                    # العمود الأول (اللوحة الأولى)
+                                    if pair[0]:
+                                        row_cells[0].text = str(pair[0]['العدد'])
+                                        row_cells[1].text = str(pair[0]['الموقع'])
+                                    else:
+                                        row_cells[0].text = ""
+                                        row_cells[1].text = ""
+                                    
+                                    # العمود الثاني (اللوحة الثانية)
+                                    if pair[1]:
+                                        row_cells[2].text = str(pair[1]['العدد'])
+                                        row_cells[3].text = str(pair[1]['الموقع'])
+                                    else:
+                                        row_cells[2].text = ""
+                                        row_cells[3].text = ""
+                                    
+                                    # تطبيق RTL على جميع الخلايا
                                     for cell in row_cells:
                                         for p in cell.paragraphs:
                                             set_rtl_paragraph(p)
                                 
                                 # إجمالي الشبكة
                                 total_units = int(network_df['العدد'].sum())
-                                p_fin = doc.add_paragraph()
-                                txt = f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}"
-                                p_fin.add_run(txt).bold = True
-                                set_rtl_paragraph(p_fin)
+                                p_total = doc.add_paragraph()
+                                p_total.add_run(f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}").bold = True
+                                set_rtl_paragraph(p_total)
                                 
                                 doc.add_paragraph()
                             
                             # ============================================
-                            # ملاحظات ختامية
+                            # الإجمالي النهائي للكتالوج
                             # ============================================
                             doc.add_paragraph()
                             
-                            # إجمالي الكتالوج
                             p_grand = doc.add_paragraph()
-                            run_g = p_grand.add_run(f"الإجمالي النهائي للوحات المتاحة: {len(available_columns)} لوحة | {int(available_columns['العدد'].sum())} وحدة")
+                            run_g = p_grand.add_run(f"العدد الإجمالي: {int(available_columns['العدد'].sum())}")
                             run_g.bold = True
                             run_g.font.size = Pt(14)
                             run_g.font.color.rgb = RGBColor(102, 0, 153)
@@ -2957,9 +2995,11 @@ elif page == "📋 كتالوج عام":
                             
                             doc.add_paragraph()
                             
-                            # ملاحظة
+                            # ============================================
+                            # ملاحظة ختامية
+                            # ============================================
                             p_note = doc.add_paragraph()
-                            run_note = p_note.add_run("• ملاحظة: هذه اللوحات متاحة للإيجار للفترة المحددة.")
+                            run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة للفترة المحددة.")
                             run_note.bold = True
                             set_rtl_paragraph(p_note)
                             
@@ -2990,7 +3030,6 @@ elif page == "📋 كتالوج عام":
             with st.expander("⚙️ خيارات متقدمة", expanded=False):
                 st.caption("خيارات إضافية لعرض الكتالوج")
                 
-                # استخدام دالة is_admin() بدلاً من user_info
                 if is_admin():
                     show_prices = st.checkbox("💰 إظهار الأسعار (للمديرين فقط)")
                     if show_prices:
@@ -3003,15 +3042,6 @@ elif page == "📋 كتالوج عام":
                             """)
                         except:
                             st.warning("⚠️ لا يمكن جلب الأسعار حالياً")
-                
-                # خيار تصدير بتنسيق إضافي
-                export_format = st.selectbox(
-                    "تنسيق التصدير:",
-                    ["Word (.docx)", "PDF (قريباً)", "Excel (قريباً)"]
-                )
-                
-                if export_format == "Word (.docx)":
-                    st.caption("📄 سيتم تصدير الكتالوج بتنسيق Word مع تنسيق احترافي")
     
     except Exception as e:
         st.error(f"❌ حدث خطأ: {str(e)}")
