@@ -2453,68 +2453,6 @@ with tabs[0]:
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # ============================================================
-    # نموذج الحجز (فقط للحفظ)
-    # ============================================================
-    
-    with st.form("booking_save_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
-            year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
-        
-        with col2:
-            today = datetime.now().date()
-            booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
-            booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
-            board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
-        
-        notes = st.text_area("📝 ملاحظات", placeholder="أي معلومات إضافية...", height=80)
-        
-        col5, col6 = st.columns(2)
-        with col5:
-            phone = st.text_input("📞 الهاتف", placeholder="05xxxxxxxx")
-        with col6:
-            email = st.text_input("✉️ البريد", placeholder="example@email.com")
-        
-        if selected_board_numbers:
-            st.info(f"📋 عدد اللوحات المختارة: {len(selected_board_numbers)}")
-        
-        submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
-        
-        if submitted:
-            if not selected_board_numbers:
-                st.error("⚠️ يرجى اختيار لوحة واحدة على الأقل")
-            elif not customer_name:
-                st.error("⚠️ يرجى إدخال اسم الزبون")
-            else:
-                start_str = booking_start.strftime("%Y-%m-%d")
-                end_str = booking_end.strftime("%Y-%m-%d")
-                
-                try:
-                    cursor = conn.cursor()
-                    inserted = 0
-                    
-                    for board_number in selected_board_numbers:
-                        cursor.execute('''
-                            INSERT INTO "حجوزات1" 
-                            ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
-                             "نوع اللوحة", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                        ''', (board_number, customer_name, year, start_str, end_str,
-                              board_type, notes, phone, email))
-                        inserted += 1
-                    
-                    conn.commit()
-                    cursor.close()
-                    st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
-                    st.balloons()
-                    
-                except Exception as e:
-                    st.error(f"❌ حدث خطأ: {str(e)}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
     
     # ========== تبويب إضافة عمود (للمدير فقط) ==========
     if len(tabs) > 1 and user_info and user_info.get('role') == 'admin':
