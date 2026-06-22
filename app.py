@@ -2809,7 +2809,7 @@ elif page == "📋 كتالوج عام":
             )
             
             # ============================================================
-            # 7. تصدير الكتالوج - بنفس تنسيق عرض السعر
+            # 7. تصدير الكتالوج - بنفس تنسيق عرض السعر مع القالب
             # ============================================================
             
             st.divider()
@@ -2823,91 +2823,91 @@ elif page == "📋 كتالوج عام":
                             # استيراد المكتبات
                             from docx import Document
                             from docx.shared import Inches, Pt, RGBColor
-                            from docx.enum.text import WD_ALIGN_PARAGRAPH
+                            from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
                             from docx.oxml import OxmlElement
                             from docx.oxml.ns import qn
                             import io
                             from datetime import datetime
-                            
-                            # إنشاء مستند جديد
-                            doc = Document()
+                            import os
                             
                             # ============================================
-                            # إعدادات الصفحة مثل عرض السعر
+                            # استخدام القالب إذا كان موجوداً
                             # ============================================
-                            section = doc.sections[0]
-                            section.top_margin = Inches(1)
-                            section.bottom_margin = Inches(1)
-                            section.left_margin = Inches(1)
-                            section.right_margin = Inches(1)
+                            template_path = 'template.docx'
+                            if os.path.exists(template_path):
+                                doc = Document(template_path)
+                            else:
+                                doc = Document()
                             
                             PURPLE_COLOR = "660099"
                             
                             # ============================================
-                            # العنوان الرئيسي
+                            # دالة مساعدة لتنسيق RTL
                             # ============================================
-                            title = doc.add_heading('كتالوج اللوحات الإعلانية المتاحة', 0)
-                            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            def set_rtl_paragraph(paragraph):
+                                """تطبيق تنسيق RTL على الفقرة"""
+                                paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+                                p = paragraph._element
+                                pPr = p.get_or_add_pPr()
+                                bidi = OxmlElement('w:bidi')
+                                bidi.set(qn('w:val'), '1')
+                                pPr.append(bidi)
+                            
+                            def set_table_rtl(table):
+                                """تطبيق RTL على الجدول"""
+                                for row in table.rows:
+                                    for cell in row.cells:
+                                        tc = cell._element
+                                        tcPr = tc.get_or_add_tcPr()
+                                        # إضافة اتجاه النص
+                                        textDirection = OxmlElement('w:textDirection')
+                                        textDirection.set(qn('w:val'), 'rl')
+                                        tcPr.append(textDirection)
+                                        # تطبيق RTL على كل فقرة في الخلية
+                                        for p in cell.paragraphs:
+                                            set_rtl_paragraph(p)
                             
                             # ============================================
-                            # التاريخ
+                            # إضافة المحتوى
                             # ============================================
+                            
+                            # التاريخ
                             today_date = datetime.now().strftime("%d / %m / %Y")
                             p_date = doc.add_paragraph()
-                            p_date.alignment = WD_ALIGN_PARAGRAPH.CENTER
                             p_date.add_run(f"التاريخ: {today_date}")
+                            set_rtl_paragraph(p_date)
                             
                             doc.add_paragraph()
                             
-                            # ============================================
-                            # مقدمة الكتالوج
-                            # ============================================
-                            p_intro = doc.add_paragraph()
-                            p_intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            intro_run = p_intro.add_run(f"كتالوج اللوحات المتاحة للإيجار في محافظة {selected_city}")
-                            intro_run.bold = True
-                            intro_run.font.size = Pt(14)
+                            # العنوان الرئيسي
+                            p_cust = doc.add_paragraph()
+                            p_cust.add_run(f"كتالوج اللوحات الإعلانية المتاحة").bold = True
+                            set_rtl_paragraph(p_cust)
                             
-                            p_period = doc.add_paragraph()
-                            p_period.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            p_period.add_run(f"الفترة: من {start_p} إلى {end_p} | العام: {year}")
-                            
-                            doc.add_paragraph()
+                            # مقدمة
+                            p_stat = doc.add_paragraph()
+                            p_stat.add_run(f"اللوحات المتاحة للإيجار في محافظة {selected_city} من فترة ({start_p}) ولغاية ({end_p})")
+                            set_rtl_paragraph(p_stat)
                             
                             # ============================================
-                            # إحصاءات سريعة
+                            # عرض اللوحات حسب الشبكة
                             # ============================================
-                            p_stats = doc.add_paragraph()
-                            p_stats.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            p_stats.add_run(f"إجمالي اللوحات المتاحة: {len(available_columns)} | إجمالي الوحدات: {int(available_columns['العدد'].sum())}")
-                            
-                            doc.add_page_break()
-                            
-                            # ============================================
-                            # عرض اللوحات حسب الشبكة (بنفس تنسيق عرض السعر)
-                            # ============================================
-                            doc.add_heading('اللوحات المتاحة حسب الشبكة', level=1)
-                            
                             for network in available_columns['الشبكة'].unique():
                                 network_df = available_columns[available_columns['الشبكة'] == network]
                                 
                                 # عنوان الشبكة
-                                p_network = doc.add_paragraph()
-                                p_network.add_run(f"■ شبكة: {network}").bold = True
-                                p_network.runs[0].font.size = Pt(14)
-                                
-                                # إجمالي الشبكة
-                                total_units = int(network_df['العدد'].sum())
-                                p_total = doc.add_paragraph()
-                                p_total.add_run(f"إجمالي الوحدات: {total_units} | عدد الأعمدة: {len(network_df)}")
+                                p_city = doc.add_paragraph()
+                                p_city.add_run(f"■ شبكة: {network}").bold = True
+                                set_rtl_paragraph(p_city)
                                 
                                 # ============================================
-                                # جدول اللوحات (بنفس تنسيق عرض السعر)
+                                # جدول اللوحات
                                 # ============================================
                                 table = doc.add_table(rows=1, cols=3)
                                 table.style = 'Table Grid'
+                                set_table_rtl(table)
                                 
-                                # رأس الجدول - بنفس لون عرض السعر
+                                # رأس الجدول
                                 hdr = table.rows[0].cells
                                 hdr[0].text = "رقم اللوحة"
                                 hdr[1].text = "اسم الموقع"
@@ -2929,29 +2929,39 @@ elif page == "📋 كتالوج عام":
                                     row_cells[0].text = str(row['رقم اللوحة'])
                                     row_cells[1].text = str(row['الموقع'])
                                     row_cells[2].text = str(row['العدد'])
+                                    for cell in row_cells:
+                                        for p in cell.paragraphs:
+                                            set_rtl_paragraph(p)
+                                
+                                # إجمالي الشبكة
+                                total_units = int(network_df['العدد'].sum())
+                                p_fin = doc.add_paragraph()
+                                txt = f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}"
+                                p_fin.add_run(txt).bold = True
+                                set_rtl_paragraph(p_fin)
                                 
                                 doc.add_paragraph()
                             
                             # ============================================
                             # ملاحظات ختامية
                             # ============================================
-                            doc.add_page_break()
-                            doc.add_heading('معلومات الاتصال', level=1)
-                            
-                            p_contact = doc.add_paragraph()
-                            p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            p_contact.add_run('للحجز والاستفسار، يرجى التواصل معنا:\n\n')
-                            p_contact.add_run('الهاتف: 0XXX XXXXXXX\n')
-                            p_contact.add_run('البريد الإلكتروني: info@company.com\n')
-                            p_contact.add_run('الموقع الإلكتروني: www.company.com')
-                            
-                            # ============================================
-                            # ملاحظة إضافية (مثل عرض السعر)
-                            # ============================================
                             doc.add_paragraph()
+                            
+                            # إجمالي الكتالوج
+                            p_grand = doc.add_paragraph()
+                            run_g = p_grand.add_run(f"الإجمالي النهائي للوحات المتاحة: {len(available_columns)} لوحة | {int(available_columns['العدد'].sum())} وحدة")
+                            run_g.bold = True
+                            run_g.font.size = Pt(14)
+                            run_g.font.color.rgb = RGBColor(102, 0, 153)
+                            set_rtl_paragraph(p_grand)
+                            
+                            doc.add_paragraph()
+                            
+                            # ملاحظة
                             p_note = doc.add_paragraph()
                             run_note = p_note.add_run("• ملاحظة: هذه اللوحات متاحة للإيجار للفترة المحددة.")
                             run_note.bold = True
+                            set_rtl_paragraph(p_note)
                             
                             # ============================================
                             # حفظ وتحميل الملف
