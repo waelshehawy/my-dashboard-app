@@ -2657,7 +2657,6 @@ elif page == "📝 الإدخال اليومي":
 
 
 # ============================
-# ============================
 # كتالوج عام
 # ============================
 
@@ -2672,6 +2671,8 @@ elif page == "📋 كتالوج عام":
         st.session_state.catalog_selected_boards = {}  # {city: [list of boards]}
     if 'catalog_cities_added' not in st.session_state:
         st.session_state.catalog_cities_added = []  # list of cities added
+    if 'catalog_temp_boards' not in st.session_state:
+        st.session_state.catalog_temp_boards = {}  # {city: [list of all available boards]}
     
     try:
         # ============================================================
@@ -2766,99 +2767,55 @@ elif page == "📋 كتالوج عام":
                 st.metric("المحافظة", selected_city)
             
             # ============================================================
-            # 5. اختيار الشبكة وإضافة لوحاتها
+            # 5. إضافة جميع الشبكات دفعة واحدة
             # ============================================================
             
-            st.subheader("📍 اختيار الشبكة")
+            st.subheader("📍 إضافة الشبكات")
             
-            # قائمة الشبكات المتاحة
-            network_list = available_columns['الشبكة'].unique().tolist()
-            selected_network = st.selectbox("اختر الشبكة:", network_list)
+            # عرض ملخص الشبكات
+            network_summary = available_columns.groupby('الشبكة').agg({
+                'رقم اللوحة': 'count',
+                'العدد': 'sum'
+            }).reset_index()
+            network_summary.columns = ['الشبكة', 'عدد اللوحات', 'إجمالي الوحدات']
             
-            if selected_network:
-                # جلب لوحات الشبكة المختارة
-                network_boards = available_columns[available_columns['الشبكة'] == selected_network]
-                
-                st.markdown(f"**📡 الشبكة رقم {selected_network}** - عدد اللوحات: {len(network_boards)}")
-                
-                # عرض اللوحات مع خيارات
-                board_options = network_boards.apply(
-                    lambda row: f"{row['رقم اللوحة']} - {row['الموقع']} (العدد: {row['العدد']})", 
-                    axis=1
-                ).tolist()
-                
-                # ============================================================
-                # خيار إضافة الشبكة كاملة مع استثناءات
-                # ============================================================
-                
-                st.markdown("**🔄 خيارات الإضافة:**")
-                
-                col_add1, col_add2 = st.columns(2)
-                
-                with col_add1:
-                    # زر إضافة الشبكة كاملة
-                    if st.button(f"➕ إضافة شبكة {selected_network} كاملة", use_container_width=True):
-                        # جلب جميع لوحات الشبكة
-                        all_board_numbers = network_boards['رقم اللوحة'].tolist()
-                        
-                        if selected_city not in st.session_state.catalog_selected_boards:
-                            st.session_state.catalog_selected_boards[selected_city] = []
-                        
-                        # إضافة جميع اللوحات
-                        for board in all_board_numbers:
-                            if board not in st.session_state.catalog_selected_boards[selected_city]:
-                                st.session_state.catalog_selected_boards[selected_city].append(board)
-                        
-                        if selected_city not in st.session_state.catalog_cities_added:
-                            st.session_state.catalog_cities_added.append(selected_city)
-                        
-                        st.success(f"✅ تم إضافة شبكة {selected_network} كاملة ({len(all_board_numbers)} لوحة)")
-                        st.rerun()
-                
-                with col_add2:
-                    # اختيار لوحات محددة من الشبكة
-                    st.markdown("**أو اختر لوحات محددة:**")
-                    selected_boards = st.multiselect(
-                        f"اختر لوحات من شبكة {selected_network}:",
-                        board_options,
-                        key=f"select_boards_{selected_network}"
-                    )
+            st.dataframe(
+                network_summary,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "الشبكة": "رقم الشبكة",
+                    "عدد اللوحات": st.column_config.NumberColumn("عدد اللوحات"),
+                    "إجمالي الوحدات": st.column_config.NumberColumn("إجمالي الوحدات")
+                }
+            )
+            
+            # ============================================================
+            # زر إضافة جميع الشبكات
+            # ============================================================
+            
+            col_add_all1, col_add_all2, col_add_all3 = st.columns([1, 2, 1])
+            with col_add_all2:
+                if st.button("📦 إضافة جميع الشبكات للكتالوج", use_container_width=True, type="primary"):
+                    # جلب جميع لوحات المحافظة
+                    all_board_numbers = available_columns['رقم اللوحة'].tolist()
                     
-                    if selected_boards and st.button(f"📍 إضافة {len(selected_boards)} لوحة محددة", use_container_width=True):
-                        board_numbers = [b.split(' - ')[0] for b in selected_boards]
-                        
-                        if selected_city not in st.session_state.catalog_selected_boards:
-                            st.session_state.catalog_selected_boards[selected_city] = []
-                        
-                        for board in board_numbers:
-                            if board not in st.session_state.catalog_selected_boards[selected_city]:
-                                st.session_state.catalog_selected_boards[selected_city].append(board)
-                        
-                        if selected_city not in st.session_state.catalog_cities_added:
-                            st.session_state.catalog_cities_added.append(selected_city)
-                        
-                        st.success(f"✅ تم إضافة {len(board_numbers)} لوحة")
-                        st.rerun()
-                
-                # ============================================================
-                # عرض لوحات الشبكة الحالية للاختيار
-                # ============================================================
-                st.markdown("---")
-                st.markdown(f"**📋 لوحات شبكة {selected_network}:**")
-                
-                st.dataframe(
-                    network_boards[['رقم اللوحة', 'الموقع', 'العدد']],
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "رقم اللوحة": "رقم اللوحة",
-                        "الموقع": "اسم الموقع",
-                        "العدد": st.column_config.NumberColumn("العدد")
-                    }
-                )
+                    if selected_city not in st.session_state.catalog_selected_boards:
+                        st.session_state.catalog_selected_boards[selected_city] = []
+                    
+                    # إضافة جميع اللوحات
+                    for board in all_board_numbers:
+                        if board not in st.session_state.catalog_selected_boards[selected_city]:
+                            st.session_state.catalog_selected_boards[selected_city].append(board)
+                    
+                    if selected_city not in st.session_state.catalog_cities_added:
+                        st.session_state.catalog_cities_added.append(selected_city)
+                    
+                    st.success(f"✅ تم إضافة جميع الشبكات ({len(all_board_numbers)} لوحة)")
+                    st.rerun()
             
             # ============================================================
-            # 6. عرض اللوحات المختارة حالياً
+            # 6. عرض اللوحات المختارة وإدارة الحذف
             # ============================================================
             
             if st.session_state.catalog_selected_boards:
@@ -2881,56 +2838,88 @@ elif page == "📋 كتالوج عام":
                         ''')
                         
                         if boards_details is not None and not boards_details.empty:
-                            # عرض حسب الشبكة
-                            for network in boards_details['الشبكة'].unique():
-                                network_boards = boards_details[boards_details['الشبكة'] == network]
-                                st.caption(f"الشبكة رقم {network}: {len(network_boards)} لوحة")
+                            # عرض اللوحات مع خيارات الحذف
+                            st.markdown("**🗑️ اختر اللوحات لحذفها من الكتالوج:**")
                             
-                            # عرض الجدول
-                            st.dataframe(
-                                boards_details,
+                            # خيار حذف شبكة كاملة
+                            networks_in_city = boards_details['الشبكة'].unique().tolist()
+                            if networks_in_city:
+                                network_to_remove = st.selectbox(
+                                    f"اختر شبكة لحذفها بالكامل من محافظة {city}:",
+                                    ["اختر الشبكة"] + networks_in_city,
+                                    key=f"remove_network_{city}"
+                                )
+                                
+                                if network_to_remove != "اختر الشبكة" and st.button(f"🗑️ حذف شبكة {network_to_remove} بالكامل", key=f"remove_network_btn_{city}"):
+                                    # جلب لوحات هذه الشبكة
+                                    network_boards = boards_details[boards_details['الشبكة'] == network_to_remove]['رقم اللوحة'].tolist()
+                                    for board in network_boards:
+                                        if board in st.session_state.catalog_selected_boards[city]:
+                                            st.session_state.catalog_selected_boards[city].remove(board)
+                                    st.rerun()
+                            
+                            # عرض الجدول مع خيارات حذف فردية
+                            st.markdown("**أو حذف لوحات محددة:**")
+                            
+                            # إضافة عمود للاختيار
+                            boards_details['حذف'] = False
+                            
+                            # عرض الجدول مع checkbox للحذف
+                            edited_df = st.data_editor(
+                                boards_details[['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']],
                                 use_container_width=True,
-                                hide_index=True
+                                hide_index=True,
+                                column_config={
+                                    "رقم اللوحة": "رقم اللوحة",
+                                    "الموقع": "اسم الموقع",
+                                    "العدد": st.column_config.NumberColumn("العدد"),
+                                    "الشبكة": "رقم الشبكة"
+                                },
+                                key=f"editor_{city}"
                             )
                             
-                            # زر إزالة لوحات محددة
-                            remove_options = boards_details.apply(
-                                lambda row: f"{row['رقم اللوحة']} - {row['الموقع']}", 
-                                axis=1
-                            ).tolist()
-                            
-                            boards_to_remove = st.multiselect(
-                                f"اختر لوحات لإزالتها من محافظة {city}:",
-                                remove_options,
-                                key=f"remove_{city}"
-                            )
-                            
-                            if boards_to_remove and st.button(f"🗑️ إزالة {len(boards_to_remove)} لوحة من {city}", key=f"remove_btn_{city}"):
-                                board_numbers_to_remove = [b.split(' - ')[0] for b in boards_to_remove]
-                                for board in board_numbers_to_remove:
-                                    if board in st.session_state.catalog_selected_boards[city]:
-                                        st.session_state.catalog_selected_boards[city].remove(board)
-                                st.rerun()
+                            # إضافة أزرار الحذف الفردي
+                            col_remove1, col_remove2, col_remove3 = st.columns([1, 1, 1])
+                            with col_remove2:
+                                board_to_remove = st.selectbox(
+                                    "اختر لوحة لحذفها:",
+                                    boards_details['رقم اللوحة'].tolist(),
+                                    key=f"select_remove_{city}"
+                                )
+                                
+                                if board_to_remove and st.button(f"🗑️ حذف اللوحة {board_to_remove}", key=f"remove_board_{city}"):
+                                    if board_to_remove in st.session_state.catalog_selected_boards[city]:
+                                        st.session_state.catalog_selected_boards[city].remove(board_to_remove)
+                                        st.rerun()
                             
                             total_selected += len(boards)
                 
                 st.info(f"📊 إجمالي اللوحات المختارة: {total_selected}")
                 
-                # زر مسح الكتالوج
-                col_clear1, col_clear2, col_clear3 = st.columns([1, 2, 1])
-                with col_clear2:
-                    if st.button("🗑️ مسح جميع اللوحات المختارة", use_container_width=True):
+                # أزرار التحكم
+                col_controls1, col_controls2, col_controls3 = st.columns(3)
+                with col_controls1:
+                    if st.button("🔄 تحديث القائمة", use_container_width=True):
+                        st.rerun()
+                with col_controls2:
+                    if st.button("🗑️ مسح جميع اللوحات", use_container_width=True):
                         st.session_state.catalog_selected_boards = {}
                         st.session_state.catalog_cities_added = []
                         st.rerun()
+                with col_controls3:
+                    # زر تصدير الكتالوج
+                    if total_selected > 0:
+                        if st.button("📄 تصدير الكتالوج", use_container_width=True, type="primary"):
+                            st.session_state.export_catalog = True
+                            st.rerun()
             else:
-                st.info("📭 لم يتم اختيار أي لوحات بعد")
+                st.info("📭 لم يتم اختيار أي لوحات بعد - استخدم زر 'إضافة جميع الشبكات'")
             
             # ============================================================
             # 7. تصدير الكتالوج
             # ============================================================
             
-            if st.session_state.catalog_selected_boards:
+            if st.session_state.get('export_catalog', False) and st.session_state.catalog_selected_boards:
                 st.divider()
                 st.subheader("📤 تصدير الكتالوج")
                 
@@ -2953,7 +2942,7 @@ elif page == "📋 كتالوج عام":
                     if all_boards_details is not None and not all_boards_details.empty:
                         col_exp1, col_exp2, col_exp3 = st.columns([1, 2, 1])
                         with col_exp2:
-                            if st.button("📄 تصدير الكتالوج كـ Word", use_container_width=True):
+                            if st.button("📥 تحميل الكتالوج (Word)", use_container_width=True):
                                 try:
                                     with st.spinner("جاري إنشاء الكتالوج..."):
                                         from docx import Document
@@ -3124,6 +3113,9 @@ elif page == "📋 كتالوج عام":
                                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                             use_container_width=True
                                         )
+                                        
+                                        # إعادة تعيين حالة التصدير
+                                        st.session_state.export_catalog = False
                                         
                                 except Exception as e:
                                     st.error(f"❌ حدث خطأ أثناء إنشاء الكتالوج: {str(e)}")
