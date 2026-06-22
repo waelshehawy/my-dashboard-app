@@ -2656,494 +2656,119 @@ elif page == "📝 الإدخال اليومي":
 
 
 
-# ============================
-# كتالوج عام
-# ============================
+# داخل زر تصدير الكتالوج، استبدل الجزء الخاص بعرض الشبكات بهذا:
 
-elif page == "📋 كتالوج عام":
-    st.title("📋 كتالوج اللوحات المتاحة")
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+# عرض حسب المحافظة
+for city in all_boards_details['المحافظة'].unique():
+    city_df = all_boards_details[all_boards_details['المحافظة'] == city]
     
-    st.info("ℹ️ هذا الكتالوج يعرض جميع اللوحات المتاحة حالياً - بدون أسعار - للعرض العام")
+    p_city = doc.add_paragraph()
+    p_city.add_run(f"محافظة {city}").bold = True
+    _force_rtl_style(p_city)
     
-    # تهيئة session_state
-    if 'catalog_selected_boards' not in st.session_state:
-        st.session_state.catalog_selected_boards = {}  # {city: [list of boards]}
-    if 'catalog_cities_added' not in st.session_state:
-        st.session_state.catalog_cities_added = []  # list of cities added
-    if 'catalog_temp_boards' not in st.session_state:
-        st.session_state.catalog_temp_boards = {}  # {city: [list of all available boards]}
+    p_size = doc.add_paragraph()
+    p_size.add_run(f"لوحات قياس {selected_size}")
+    _force_rtl_style(p_size)
     
-    try:
+    # عرض حسب الشبكة
+    for network in city_df['الشبكة'].unique():
+        network_df = city_df[city_df['الشبكة'] == network]
+        
         # ============================================================
-        # 1. اختيار المحافظة والحجم والفترة
+        # جدول 4 أعمدة مع هيكل الشبكة
         # ============================================================
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Table Grid'
         
-        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+        # تعيين عرض الأعمدة
+        for cell in table.columns:
+            cell.width = Cm(4.5)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"')['المحافظة'].tolist()
-            selected_city = st.selectbox("📍 اختر المحافظة:", cities)
+        # رأس الجدول
+        hdr = table.rows[0].cells
+        hdr[0].text = "العدد"
+        hdr[1].text = "رقم الشبكة"
+        hdr[2].text = "العدد"
+        hdr[3].text = "رقم الشبكة"
         
-        with col2:
-            if not draw_df.empty:
-                selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
+        for cell in hdr:
+            for p in cell.paragraphs:
+                if p.runs:
+                    p.runs[0].bold = True
+                    p.runs[0].font.color.rgb = RGBColor(255, 255, 255)
+            tc_pr = cell._element.get_or_add_tcPr()
+            shd = OxmlElement('w:shd')
+            shd.set(qn('w:fill'), PURPLE_COLOR)
+            tc_pr.append(shd)
+            _force_rtl_style(p)
+        
+        # ============================================================
+        # ملء الجدول بالبيانات
+        # ============================================================
+        rows_data = network_df.to_dict('records')
+        total_units = int(network_df['العدد'].sum())
+        total_boards = len(network_df)
+        
+        # تجميع البيانات في أزواج (لوحتان في كل سطر)
+        paired_data = []
+        for i in range(0, len(rows_data), 2):
+            if i + 1 < len(rows_data):
+                paired_data.append((rows_data[i], rows_data[i+1]))
             else:
-                st.error("❌ لا توجد بيانات في جدول أسماء الرسم")
-                st.stop()
+                paired_data.append((rows_data[i], None))
         
         # ============================================================
-        # 2. اختيار الفترة
+        # الصف الأول: عنوان الشبكة والعدد الإجمالي
         # ============================================================
+        first_row = table.add_row().cells
         
-        periods_df = run_query('SELECT namee, no FROM "الفترة" ORDER BY no')
-        period_names = periods_df['namee'].tolist() if periods_df is not None and not periods_df.empty else []
+        # العمود الأول: العدد الإجمالي للشبكة
+        first_row[0].text = str(total_units)
         
-        if not period_names:
-            st.error("❌ لا توجد فترات في جدول الفترة")
-            st.stop()
+        # العمود الثاني: عنوان الشبكة
+        first_row[1].text = f"الشبكة رقم {network}"
         
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            start_p = st.selectbox("📅 من فترة:", period_names, key="catalog_start_period")
-        with col_p2:
-            end_p = st.selectbox("📅 إلى فترة:", period_names, index=len(period_names)-1, key="catalog_end_period")
-        with col_p3:
-            year = st.number_input("📅 العام:", min_value=2024, max_value=2030, value=2026)
+        # العمود الثالث: فارغ
+        first_row[2].text = ""
         
-        start_idx = period_names.index(start_p)
-        end_idx = period_names.index(end_p)
-        selected_periods = period_names[start_idx:end_idx+1]
+        # العمود الرابع: فارغ
+        first_row[3].text = ""
         
-        st.info(f"📅 الفترة المحددة: من {start_p} إلى {end_p}")
+        # تطبيق RTL على الصف الأول وتنسيقه
+        for cell in first_row:
+            for p in cell.paragraphs:
+                _force_rtl_style(p)
+                if p.runs:
+                    p.runs[0].bold = True
         
         # ============================================================
-        # 3. جلب الأعمدة المتاحة
+        # الصفوف المتبقية: اللوحات الفردية (لوحتان في كل سطر)
         # ============================================================
-        
-        all_columns = run_query('''
-            SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم", "المحافظة"
-            FROM "اعمدة انارة" 
-            WHERE "المحافظة" = %s AND "الحجم" = %s
-        ''', (selected_city, selected_size))
-        
-        if all_columns is None or all_columns.empty:
-            st.warning("⚠️ لا توجد أعمدة في هذه المحافظة والحجم")
-            st.stop()
-        
-        # تحديد الأعمدة المحجوزة
-        period_placeholders = ','.join([f"'{p}'" for p in selected_periods])
-        booked_query = f'''
-            SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
-            WHERE "العام" = %s 
-            AND "فترة الحجز" IN ({period_placeholders})
-        '''
-        booked_df = run_query(booked_query, (year,))
-        booked_boards = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
-        
-        # تصفية الأعمدة المتاحة
-        available_columns = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
-        
-        if available_columns.empty:
-            st.warning("⚠️ لا توجد لوحات متاحة في هذه المحافظة والحجم للفترة المحددة")
-        else:
-            # ============================================================
-            # 4. عرض الإحصائيات
-            # ============================================================
+        for pair in paired_data:
+            row_cells = table.add_row().cells
             
-            st.subheader("📊 إحصائيات اللوحات المتاحة")
-            
-            col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-            with col_stat1:
-                st.metric("إجمالي اللوحات", len(available_columns))
-            with col_stat2:
-                total_boards = available_columns['العدد'].sum()
-                st.metric("إجمالي الوحدات", int(total_boards))
-            with col_stat3:
-                networks_count = available_columns['الشبكة'].nunique()
-                st.metric("عدد الشبكات", networks_count)
-            with col_stat4:
-                st.metric("المحافظة", selected_city)
-            
-            # ============================================================
-            # 5. إضافة جميع الشبكات دفعة واحدة
-            # ============================================================
-            
-            st.subheader("📍 إضافة الشبكات")
-            
-            # عرض ملخص الشبكات
-            network_summary = available_columns.groupby('الشبكة').agg({
-                'رقم اللوحة': 'count',
-                'العدد': 'sum'
-            }).reset_index()
-            network_summary.columns = ['الشبكة', 'عدد اللوحات', 'إجمالي الوحدات']
-            
-            st.dataframe(
-                network_summary,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "الشبكة": "رقم الشبكة",
-                    "عدد اللوحات": st.column_config.NumberColumn("عدد اللوحات"),
-                    "إجمالي الوحدات": st.column_config.NumberColumn("إجمالي الوحدات")
-                }
-            )
-            
-            # ============================================================
-            # زر إضافة جميع الشبكات
-            # ============================================================
-            
-            col_add_all1, col_add_all2, col_add_all3 = st.columns([1, 2, 1])
-            with col_add_all2:
-                if st.button("📦 إضافة جميع الشبكات للكتالوج", use_container_width=True, type="primary"):
-                    # جلب جميع لوحات المحافظة
-                    all_board_numbers = available_columns['رقم اللوحة'].tolist()
-                    
-                    if selected_city not in st.session_state.catalog_selected_boards:
-                        st.session_state.catalog_selected_boards[selected_city] = []
-                    
-                    # إضافة جميع اللوحات
-                    for board in all_board_numbers:
-                        if board not in st.session_state.catalog_selected_boards[selected_city]:
-                            st.session_state.catalog_selected_boards[selected_city].append(board)
-                    
-                    if selected_city not in st.session_state.catalog_cities_added:
-                        st.session_state.catalog_cities_added.append(selected_city)
-                    
-                    st.success(f"✅ تم إضافة جميع الشبكات ({len(all_board_numbers)} لوحة)")
-                    st.rerun()
-            
-            # ============================================================
-            # 6. عرض اللوحات المختارة وإدارة الحذف
-            # ============================================================
-            
-            if st.session_state.catalog_selected_boards:
-                st.divider()
-                st.subheader("📋 اللوحات المختارة للكتالوج")
-                
-                # عرض اللوحات المختارة لكل محافظة
-                total_selected = 0
-                for city, boards in st.session_state.catalog_selected_boards.items():
-                    if boards:
-                        st.markdown(f"**📍 محافظة {city}:** {len(boards)} لوحة")
-                        
-                        # جلب تفاصيل اللوحات المختارة
-                        board_placeholders = ','.join([f"'{b}'" for b in boards])
-                        boards_details = run_query(f'''
-                            SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة"
-                            FROM "اعمدة انارة" 
-                            WHERE "رقم اللوحة" IN ({board_placeholders})
-                            ORDER BY "الشبكة", "رقم اللوحة"
-                        ''')
-                        
-                        if boards_details is not None and not boards_details.empty:
-                            # عرض اللوحات مع خيارات الحذف
-                            st.markdown("**🗑️ اختر اللوحات لحذفها من الكتالوج:**")
-                            
-                            # خيار حذف شبكة كاملة
-                            networks_in_city = boards_details['الشبكة'].unique().tolist()
-                            if networks_in_city:
-                                network_to_remove = st.selectbox(
-                                    f"اختر شبكة لحذفها بالكامل من محافظة {city}:",
-                                    ["اختر الشبكة"] + networks_in_city,
-                                    key=f"remove_network_{city}"
-                                )
-                                
-                                if network_to_remove != "اختر الشبكة" and st.button(f"🗑️ حذف شبكة {network_to_remove} بالكامل", key=f"remove_network_btn_{city}"):
-                                    # جلب لوحات هذه الشبكة
-                                    network_boards = boards_details[boards_details['الشبكة'] == network_to_remove]['رقم اللوحة'].tolist()
-                                    for board in network_boards:
-                                        if board in st.session_state.catalog_selected_boards[city]:
-                                            st.session_state.catalog_selected_boards[city].remove(board)
-                                    st.rerun()
-                            
-                            # عرض الجدول مع خيارات حذف فردية
-                            st.markdown("**أو حذف لوحات محددة:**")
-                            
-                            # إضافة عمود للاختيار
-                            boards_details['حذف'] = False
-                            
-                            # عرض الجدول مع checkbox للحذف
-                            edited_df = st.data_editor(
-                                boards_details[['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']],
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "رقم اللوحة": "رقم اللوحة",
-                                    "الموقع": "اسم الموقع",
-                                    "العدد": st.column_config.NumberColumn("العدد"),
-                                    "الشبكة": "رقم الشبكة"
-                                },
-                                key=f"editor_{city}"
-                            )
-                            
-                            # إضافة أزرار الحذف الفردي
-                            col_remove1, col_remove2, col_remove3 = st.columns([1, 1, 1])
-                            with col_remove2:
-                                board_to_remove = st.selectbox(
-                                    "اختر لوحة لحذفها:",
-                                    boards_details['رقم اللوحة'].tolist(),
-                                    key=f"select_remove_{city}"
-                                )
-                                
-                                if board_to_remove and st.button(f"🗑️ حذف اللوحة {board_to_remove}", key=f"remove_board_{city}"):
-                                    if board_to_remove in st.session_state.catalog_selected_boards[city]:
-                                        st.session_state.catalog_selected_boards[city].remove(board_to_remove)
-                                        st.rerun()
-                            
-                            total_selected += len(boards)
-                
-                st.info(f"📊 إجمالي اللوحات المختارة: {total_selected}")
-                
-                # أزرار التحكم
-                col_controls1, col_controls2, col_controls3 = st.columns(3)
-                with col_controls1:
-                    if st.button("🔄 تحديث القائمة", use_container_width=True):
-                        st.rerun()
-                with col_controls2:
-                    if st.button("🗑️ مسح جميع اللوحات", use_container_width=True):
-                        st.session_state.catalog_selected_boards = {}
-                        st.session_state.catalog_cities_added = []
-                        st.rerun()
-                with col_controls3:
-                    # زر تصدير الكتالوج
-                    if total_selected > 0:
-                        if st.button("📄 تصدير الكتالوج", use_container_width=True, type="primary"):
-                            st.session_state.export_catalog = True
-                            st.rerun()
+            # العمود الأول والثاني (اللوحة الأولى)
+            if pair[0]:
+                row_cells[0].text = str(pair[0]['العدد'])
+                row_cells[1].text = str(pair[0]['الموقع'])
             else:
-                st.info("📭 لم يتم اختيار أي لوحات بعد - استخدم زر 'إضافة جميع الشبكات'")
+                row_cells[0].text = ""
+                row_cells[1].text = ""
             
-            # ============================================================
-            # 7. تصدير الكتالوج
-            # ============================================================
+            # العمود الثالث والرابع (اللوحة الثانية)
+            if pair[1]:
+                row_cells[2].text = str(pair[1]['العدد'])
+                row_cells[3].text = str(pair[1]['الموقع'])
+            else:
+                row_cells[2].text = ""
+                row_cells[3].text = ""
             
-            if st.session_state.get('export_catalog', False) and st.session_state.catalog_selected_boards:
-                st.divider()
-                st.subheader("📤 تصدير الكتالوج")
-                
-                # جمع كل اللوحات المختارة
-                all_selected_boards = []
-                for city, boards in st.session_state.catalog_selected_boards.items():
-                    for board in boards:
-                        all_selected_boards.append(board)
-                
-                if all_selected_boards:
-                    # جلب تفاصيل جميع اللوحات المختارة
-                    board_placeholders = ','.join([f"'{b}'" for b in all_selected_boards])
-                    all_boards_details = run_query(f'''
-                        SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "المحافظة"
-                        FROM "اعمدة انارة" 
-                        WHERE "رقم اللوحة" IN ({board_placeholders})
-                        ORDER BY "المحافظة", "الشبكة", "رقم اللوحة"
-                    ''')
-                    
-                    if all_boards_details is not None and not all_boards_details.empty:
-                        col_exp1, col_exp2, col_exp3 = st.columns([1, 2, 1])
-                        with col_exp2:
-                            if st.button("📥 تحميل الكتالوج (Word)", use_container_width=True):
-                                try:
-                                    with st.spinner("جاري إنشاء الكتالوج..."):
-                                        from docx import Document
-                                        from docx.shared import Inches, Pt, RGBColor, Cm
-                                        from docx.enum.text import WD_ALIGN_PARAGRAPH
-                                        from docx.oxml import OxmlElement
-                                        from docx.oxml.ns import qn
-                                        import io
-                                        from datetime import datetime
-                                        import os
-                                        
-                                        # دوال التنسيق
-                                        def _force_rtl_style(p):
-                                            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                                            pPr = p._element.get_or_add_pPr()
-                                            bidi = OxmlElement('w:bidi')
-                                            bidi.set(qn('w:val'), '1')
-                                            pPr.append(bidi)
-                                            for run in p.runs:
-                                                rPr = run._element.get_or_add_rPr()
-                                                rtl = OxmlElement('w:rtl')
-                                                rtl.set(qn('w:val'), '1')
-                                                rPr.append(rtl)
-                                        
-                                        def set_table_rtl(table):
-                                            tblPr = table._element.xpath('w:tblPr')[0]
-                                            bidi = OxmlElement('w:bidiVisual')
-                                            tblPr.append(bidi)
-                                        
-                                        # استخدام القالب
-                                        template_path = 'template.docx'
-                                        if os.path.exists(template_path):
-                                            doc = Document(template_path)
-                                        else:
-                                            doc = Document()
-                                        
-                                        PURPLE_COLOR = "660099"
-                                        
-                                        # التاريخ
-                                        today_date = datetime.now().strftime("%d / %m / %Y")
-                                        p_date = doc.add_paragraph()
-                                        p_date.add_run(f"التاريخ: {today_date}")
-                                        _force_rtl_style(p_date)
-                                        
-                                        doc.add_paragraph()
-                                        
-                                        # العنوان
-                                        p_title = doc.add_paragraph()
-                                        p_title.add_run(f"كتالوج اللوحات الإعلانية المتاحة").bold = True
-                                        _force_rtl_style(p_title)
-                                        
-                                        # مقدمة
-                                        p_intro = doc.add_paragraph()
-                                        p_intro.add_run(f"نقدم لكم اللوحات المتاحة من فترة ({start_p}) ولغاية ({end_p})")
-                                        _force_rtl_style(p_intro)
-                                        
-                                        # عرض حسب المحافظة
-                                        for city in all_boards_details['المحافظة'].unique():
-                                            city_df = all_boards_details[all_boards_details['المحافظة'] == city]
-                                            
-                                            p_city = doc.add_paragraph()
-                                            p_city.add_run(f"محافظة {city}").bold = True
-                                            _force_rtl_style(p_city)
-                                            
-                                            p_size = doc.add_paragraph()
-                                            p_size.add_run(f"لوحات قياس {selected_size}")
-                                            _force_rtl_style(p_size)
-                                            
-                                            # عرض حسب الشبكة
-                                            for network in city_df['الشبكة'].unique():
-                                                network_df = city_df[city_df['الشبكة'] == network]
-                                                
-                                                p_network = doc.add_paragraph()
-                                                p_network.add_run(f"الشبكة رقم {network}").bold = True
-                                                _force_rtl_style(p_network)
-                                                
-                                                # جدول 4 أعمدة
-                                                table = doc.add_table(rows=1, cols=4)
-                                                table.style = 'Table Grid'
-                                                
-                                                for cell in table.columns:
-                                                    cell.width = Cm(4.5)
-                                                
-                                                # رأس الجدول
-                                                hdr = table.rows[0].cells
-                                                hdr[0].text = "العدد"
-                                                hdr[1].text = "رقم الشبكة"
-                                                hdr[2].text = "العدد"
-                                                hdr[3].text = "رقم الشبكة"
-                                                
-                                                for cell in hdr:
-                                                    for p in cell.paragraphs:
-                                                        if p.runs:
-                                                            p.runs[0].bold = True
-                                                            p.runs[0].font.color.rgb = RGBColor(255, 255, 255)
-                                                    tc_pr = cell._element.get_or_add_tcPr()
-                                                    shd = OxmlElement('w:shd')
-                                                    shd.set(qn('w:fill'), PURPLE_COLOR)
-                                                    tc_pr.append(shd)
-                                                    _force_rtl_style(p)
-                                                
-                                                # ملء الجدول
-                                                rows_data = network_df.to_dict('records')
-                                                paired_data = []
-                                                for i in range(0, len(rows_data), 2):
-                                                    if i + 1 < len(rows_data):
-                                                        paired_data.append((rows_data[i], rows_data[i+1]))
-                                                    else:
-                                                        paired_data.append((rows_data[i], None))
-                                                
-                                                for pair in paired_data:
-                                                    row_cells = table.add_row().cells
-                                                    
-                                                    if pair[0]:
-                                                        row_cells[0].text = str(pair[0]['العدد'])
-                                                        row_cells[1].text = str(pair[0]['الموقع'])
-                                                    else:
-                                                        row_cells[0].text = ""
-                                                        row_cells[1].text = ""
-                                                    
-                                                    if pair[1]:
-                                                        row_cells[2].text = str(pair[1]['العدد'])
-                                                        row_cells[3].text = str(pair[1]['الموقع'])
-                                                    else:
-                                                        row_cells[2].text = ""
-                                                        row_cells[3].text = ""
-                                                    
-                                                    for cell in row_cells:
-                                                        for p in cell.paragraphs:
-                                                            _force_rtl_style(p)
-                                                
-                                                # إجمالي الشبكة
-                                                total_units = int(network_df['العدد'].sum())
-                                                p_total = doc.add_paragraph()
-                                                p_total.add_run(f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}").bold = True
-                                                _force_rtl_style(p_total)
-                                                
-                                                doc.add_paragraph()
-                                        
-                                        # الإجمالي النهائي
-                                        doc.add_paragraph()
-                                        total_all = int(all_boards_details['العدد'].sum())
-                                        p_grand = doc.add_paragraph()
-                                        run_g = p_grand.add_run(f"العدد الإجمالي: {total_all}")
-                                        run_g.bold = True
-                                        run_g.font.size = Pt(14)
-                                        run_g.font.color.rgb = RGBColor(102, 0, 153)
-                                        _force_rtl_style(p_grand)
-                                        
-                                        doc.add_paragraph()
-                                        
-                                        # ملاحظة
-                                        p_note = doc.add_paragraph()
-                                        run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة للفترة المحددة.")
-                                        run_note.bold = True
-                                        _force_rtl_style(p_note)
-                                        
-                                        # حفظ وتحميل
-                                        target = io.BytesIO()
-                                        doc.save(target)
-                                        target.seek(0)
-                                        
-                                        st.success("✅ تم إنشاء الكتالوج بنجاح!")
-                                        st.download_button(
-                                            label="📥 تحميل الكتالوج",
-                                            data=target,
-                                            file_name=f"كتالوج_{datetime.now().strftime('%Y%m%d')}.docx",
-                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                            use_container_width=True
-                                        )
-                                        
-                                        # إعادة تعيين حالة التصدير
-                                        st.session_state.export_catalog = False
-                                        
-                                except Exception as e:
-                                    st.error(f"❌ حدث خطأ أثناء إنشاء الكتالوج: {str(e)}")
-                                    st.exception(e)
-            
-            # ============================================================
-            # 8. خيارات إضافية
-            # ============================================================
-            
-            with st.expander("⚙️ خيارات متقدمة", expanded=False):
-                st.caption("خيارات إضافية لعرض الكتالوج")
-                
-                if is_admin():
-                    show_prices = st.checkbox("💰 إظهار الأسعار (للمديرين فقط)")
-                    if show_prices:
-                        try:
-                            fee_print, fee_ads = get_fees(draw_df, selected_size, "عادي", False)
-                            st.info(f"""
-                            💰 **تفاصيل الأسعار (للمديرين فقط):**
-                            - سعر الطباعة الثابت: {fee_print}$
-                            - سعر العرض الشهري: {fee_ads}$
-                            """)
-                        except:
-                            st.warning("⚠️ لا يمكن جلب الأسعار حالياً")
-    
-    except Exception as e:
-        st.error(f"❌ حدث خطأ: {str(e)}")
-        st.exception(e)
+            # تطبيق RTL على الصف
+            for cell in row_cells:
+                for p in cell.paragraphs:
+                    _force_rtl_style(p)
+        
+        doc.add_paragraph()
 # ============================================================
 # إغلاق الاتصال
 # ============================================================
