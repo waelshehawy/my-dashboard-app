@@ -2648,6 +2648,329 @@ with tabs[tab_index]:
                         """)
             
             st.markdown('</div>', unsafe_allow_html=True)
+
+#============================
+# كتالوج عام
+#=============================
+
+elif page == "📋 كتالوج عام":
+    st.title("📋 كتالوج اللوحات المتاحة")
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    
+    st.info("ℹ️ هذا الكتالوج يعرض جميع اللوحات المتاحة حالياً - بدون أسعار - للعرض العام")
+    
+    try:
+        # ============================================================
+        # 1. اختيار المحافظة والحجم
+        # ============================================================
+        
+        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة"')['المحافظة'].tolist()
+            selected_city = st.selectbox("📍 اختر المحافظة:", cities)
+        
+        with col2:
+            selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
+        
+        # ============================================================
+        # 2. اختيار الفترة (للتأكد من توفر اللوحات)
+        # ============================================================
+        
+        periods_df = run_query('SELECT namee, no FROM "الفترة" ORDER BY no')
+        period_names = periods_df['namee'].tolist()
+        
+        if not period_names:
+            st.error("❌ لا توجد فترات في جدول الفترة")
+            st.stop()
+        
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            start_p = st.selectbox("📅 من فترة:", period_names, key="catalog_start_period")
+        with col_p2:
+            end_p = st.selectbox("📅 إلى فترة:", period_names, index=len(period_names)-1, key="catalog_end_period")
+        with col_p3:
+            year = st.number_input("📅 العام:", min_value=2024, max_value=2030, value=2026)
+        
+        start_idx = period_names.index(start_p)
+        end_idx = period_names.index(end_p)
+        selected_periods = period_names[start_idx:end_idx+1]
+        
+        st.info(f"📅 الفترة المحددة: من {start_p} إلى {end_p}")
+        
+        # ============================================================
+        # 3. جلب جميع الأعمدة في المحافظة والحجم المختارين
+        # ============================================================
+        
+        all_columns = run_query('''
+            SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "الحجم", "المحافظة"
+            FROM "اعمدة انارة" 
+            WHERE "المحافظة" = %s AND "الحجم" = %s
+        ''', (selected_city, selected_size))
+        
+        # ============================================================
+        # 4. تحديد الأعمدة المحجوزة في الفترات المحددة
+        # ============================================================
+        
+        period_placeholders = ','.join([f"'{p}'" for p in selected_periods])
+        booked_query = f'''
+            SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" 
+            WHERE "العام" = %s 
+            AND "فترة الحجز" IN ({period_placeholders})
+        '''
+        booked_df = run_query(booked_query, (year,))
+        booked_boards = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
+        
+        # ============================================================
+        # 5. تصفية الأعمدة المتاحة (غير المحجوزة)
+        # ============================================================
+        
+        available_columns = all_columns[~all_columns['رقم اللوحة'].isin(booked_boards)]
+        
+        if available_columns.empty:
+            st.warning("⚠️ لا توجد لوحات متاحة في هذه المحافظة والحجم للفترة المحددة")
+        else:
+            # ============================================================
+            # 6. عرض إحصائيات سريعة
+            # ============================================================
+            
+            st.subheader("📊 إحصائيات اللوحات المتاحة")
+            
+            col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+            with col_stat1:
+                st.metric("إجمالي اللوحات", len(available_columns))
+            with col_stat2:
+                total_boards = available_columns['العدد'].sum()
+                st.metric("إجمالي الوحدات", int(total_boards))
+            with col_stat3:
+                networks_count = available_columns['الشبكة'].nunique()
+                st.metric("عدد الشبكات", networks_count)
+            with col_stat4:
+                st.metric("المحافظة", selected_city)
+            
+            # ============================================================
+            # 7. عرض اللوحات حسب الشبكات
+            # ============================================================
+            
+            st.subheader("📡 اللوحات المتاحة حسب الشبكة")
+            
+            # تجميع الشبكات مع عدد الأعمدة المتاحة فيها
+            network_summary = available_columns.groupby('الشبكة').agg({
+                'رقم اللوحة': 'count',
+                'العدد': 'sum'
+            }).reset_index()
+            network_summary.columns = ['الشبكة', 'عدد الأعمدة', 'إجمالي اللوحات']
+            
+            # عرض ملخص الشبكات
+            st.dataframe(
+                network_summary,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "الشبكة": "اسم الشبكة",
+                    "عدد الأعمدة": st.column_config.NumberColumn("عدد الأعمدة"),
+                    "إجمالي اللوحات": st.column_config.NumberColumn("إجمالي الوحدات")
+                }
+            )
+            
+            # ============================================================
+            # 8. عرض تفاصيل اللوحات
+            # ============================================================
+            
+            st.subheader("📍 تفاصيل اللوحات المتاحة")
+            
+            # اختيار شبكة لعرض تفاصيلها
+            selected_network = st.selectbox(
+                "اختر الشبكة لعرض تفاصيلها:",
+                ["جميع الشبكات"] + network_summary['الشبكة'].tolist()
+            )
+            
+            if selected_network == "جميع الشبكات":
+                display_df = available_columns[['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']]
+            else:
+                display_df = available_columns[available_columns['الشبكة'] == selected_network][['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']]
+            
+            # عرض تفاصيل اللوحات
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "رقم اللوحة": "رقم اللوحة",
+                    "الموقع": "اسم الموقع",
+                    "العدد": st.column_config.NumberColumn("العدد"),
+                    "الشبكة": "الشبكة"
+                },
+                height=400
+            )
+            
+            # ============================================================
+            # 9. عرض معاينة للكتالوج
+            # ============================================================
+            
+            st.subheader("👁️ معاينة الكتالوج")
+            
+            with st.expander("📄 معاينة الكتالوج قبل التصدير", expanded=False):
+                # عرض عينة من اللوحات
+                st.write("**عينة من اللوحات المتاحة:**")
+                sample_df = display_df.head(5) if len(display_df) > 5 else display_df
+                
+                for _, row in sample_df.iterrows():
+                    with st.container():
+                        st.write(f"📍 **رقم اللوحة:** {row['رقم اللوحة']}")
+                        st.write(f"📌 **الموقع:** {row['الموقع']}")
+                        st.write(f"📊 **العدد:** {row['العدد']}")
+                        if 'الشبكة' in row:
+                            st.write(f"📡 **الشبكة:** {row['الشبكة']}")
+                        st.markdown("---")
+                
+                if len(display_df) > 5:
+                    st.caption(f"... و {len(display_df) - 5} لوحات أخرى")
+            
+            # ============================================================
+            # 10. تصدير الكتالوج
+            # ============================================================
+            
+            st.divider()
+            
+            st.subheader("📤 تصدير الكتالوج")
+            
+            col_exp1, col_exp2, col_exp3 = st.columns([1, 2, 1])
+            with col_exp2:
+                if st.button("📄 تصدير الكتالوج كـ Word", use_container_width=True):
+                    try:
+                        with st.spinner("جاري إنشاء الكتالوج..."):
+                            # إنشاء مستند Word
+                            doc = Document()
+                            
+                            # إعدادات الصفحة
+                            section = doc.sections[0]
+                            section.top_margin = Inches(1)
+                            section.bottom_margin = Inches(1)
+                            section.left_margin = Inches(1)
+                            section.right_margin = Inches(1)
+                            
+                            # العنوان الرئيسي
+                            title = doc.add_heading('كتالوج اللوحات الإعلانية المتاحة', 0)
+                            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            
+                            # تاريخ الإصدار
+                            date_paragraph = doc.add_paragraph()
+                            date_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            date_run = date_paragraph.add_run(f'تاريخ الإصدار: {datetime.now().strftime("%Y/%m/%d")}')
+                            date_run.font.size = Pt(12)
+                            
+                            doc.add_paragraph()
+                            
+                            # معلومات الكتالوج
+                            info = doc.add_paragraph()
+                            info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            info_run = info.add_run(f'محافظة: {selected_city} | قياس: {selected_size} | الفترة: {start_p} - {end_p}')
+                            info_run.font.size = Pt(14)
+                            info_run.bold = True
+                            
+                            doc.add_paragraph()
+                            
+                            # إحصاءات
+                            stats = doc.add_paragraph()
+                            stats.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            stats.add_run(f'إجمالي اللوحات المتاحة: {len(available_columns)} | إجمالي الوحدات: {int(available_columns["العدد"].sum())}')
+                            
+                            doc.add_page_break()
+                            
+                            # عرض اللوحات حسب الشبكة
+                            doc.add_heading('اللوحات المتاحة حسب الشبكة', level=1)
+                            
+                            for network in available_columns['الشبكة'].unique():
+                                network_df = available_columns[available_columns['الشبكة'] == network]
+                                
+                                # عنوان الشبكة
+                                doc.add_heading(f'شبكة: {network}', level=2)
+                                total_units = int(network_df['العدد'].sum())
+                                doc.add_paragraph(f'إجمالي الوحدات: {total_units} | عدد الأعمدة: {len(network_df)}')
+                                
+                                # جدول اللوحات
+                                table = doc.add_table(rows=1, cols=3)
+                                table.style = 'Table Grid'
+                                
+                                # رأس الجدول
+                                hdr = table.rows[0].cells
+                                hdr[0].text = 'رقم اللوحة'
+                                hdr[1].text = 'اسم الموقع'
+                                hdr[2].text = 'العدد'
+                                
+                                for cell in hdr:
+                                    for paragraph in cell.paragraphs:
+                                        paragraph.runs[0].bold = True
+                                
+                                # بيانات الجدول
+                                for _, row in network_df.iterrows():
+                                    row_cells = table.add_row().cells
+                                    row_cells[0].text = str(row['رقم اللوحة'])
+                                    row_cells[1].text = str(row['الموقع'])
+                                    row_cells[2].text = str(row['العدد'])
+                                
+                                doc.add_paragraph()
+                            
+                            # صفحة خاتمة
+                            doc.add_page_break()
+                            doc.add_heading('معلومات الاتصال', level=1)
+                            
+                            contact = doc.add_paragraph()
+                            contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            contact.add_run('للحجز والاستفسار، يرجى التواصل معنا:\n\n')
+                            contact.add_run('الهاتف: 0XXX XXXXXXX\n')
+                            contact.add_run('البريد الإلكتروني: info@company.com\n')
+                            contact.add_run('الموقع الإلكتروني: www.company.com')
+                            
+                            # حفظ المستند
+                            target = io.BytesIO()
+                            doc.save(target)
+                            target.seek(0)
+                            
+                            # زر التحميل
+                            st.success("✅ تم إنشاء الكتالوج بنجاح!")
+                            st.download_button(
+                                label="📥 تحميل الكتالوج",
+                                data=target,
+                                file_name=f"كتالوج_{selected_city}_{datetime.now().strftime('%Y%m%d')}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True
+                            )
+                            
+                    except Exception as e:
+                        st.error(f"❌ حدث خطأ أثناء إنشاء الكتالوج: {str(e)}")
+            
+            # ============================================================
+            # 11. خيارات إضافية
+            # ============================================================
+            
+            st.divider()
+            
+            with st.expander("⚙️ خيارات متقدمة", expanded=False):
+                st.caption("خيارات إضافية لعرض الكتالوج")
+                
+                # خيار إظهار الأسعار (للمديرين فقط)
+                if is_admin():
+                    show_prices = st.checkbox("💰 إظهار الأسعار (للمديرين فقط)")
+                    if show_prices:
+                        # جلب الأسعار
+                        fee_print, fee_ads = get_fees(draw_df, selected_size, "عادي", False)
+                        st.info(f"سعر الطباعة: {fee_print}$ | سعر العرض الشهري: {fee_ads}$")
+                
+                # خيار تصدير بتنسيق إضافي
+                export_format = st.selectbox(
+                    "تنسيق التصدير:",
+                    ["Word (.docx)", "PDF (قريباً)", "Excel (قريباً)"]
+                )
+                
+                if export_format == "Word (.docx)":
+                    st.caption("📄 سيتم تصدير الكتالوج بتنسيق Word")
+    
+    except Exception as e:
+        st.error(f"❌ حدث خطأ: {str(e)}")
+        st.exception(e)
 # ============================================================
 # إغلاق الاتصال
 # ============================================================
