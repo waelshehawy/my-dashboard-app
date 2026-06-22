@@ -2657,6 +2657,7 @@ elif page == "📝 الإدخال اليومي":
 
 
 # ============================
+# ============================
 # كتالوج عام
 # ============================
 
@@ -2765,33 +2766,65 @@ elif page == "📋 كتالوج عام":
                 st.metric("المحافظة", selected_city)
             
             # ============================================================
-            # 5. اختيار اللوحات وإضافتها للكتالوج
+            # 5. اختيار الشبكة وإضافة لوحاتها
             # ============================================================
             
-            st.subheader("📍 اختيار اللوحات لإضافتها للكتالوج")
+            st.subheader("📍 اختيار الشبكة")
             
-            # عرض اللوحات حسب الشبكة للاختيار
-            for network in available_columns['الشبكة'].unique():
-                network_df = available_columns[available_columns['الشبكة'] == network]
+            # قائمة الشبكات المتاحة
+            network_list = available_columns['الشبكة'].unique().tolist()
+            selected_network = st.selectbox("اختر الشبكة:", network_list)
+            
+            if selected_network:
+                # جلب لوحات الشبكة المختارة
+                network_boards = available_columns[available_columns['الشبكة'] == selected_network]
                 
-                st.markdown(f"**📡 الشبكة رقم {network}**")
+                st.markdown(f"**📡 الشبكة رقم {selected_network}** - عدد اللوحات: {len(network_boards)}")
                 
-                # خيارات اللوحات لهذه الشبكة
-                board_options = network_df.apply(
+                # عرض اللوحات مع خيارات
+                board_options = network_boards.apply(
                     lambda row: f"{row['رقم اللوحة']} - {row['الموقع']} (العدد: {row['العدد']})", 
                     axis=1
                 ).tolist()
                 
-                # اختيار اللوحات من هذه الشبكة
-                selected_boards = st.multiselect(
-                    f"اختر اللوحات من الشبكة {network}:",
-                    board_options,
-                    key=f"catalog_select_{selected_city}_{network}"
-                )
+                # ============================================================
+                # خيار إضافة الشبكة كاملة مع استثناءات
+                # ============================================================
                 
-                # زر إضافة اللوحات من هذه الشبكة
-                if selected_boards:
-                    if st.button(f"➕ إضافة {len(selected_boards)} لوحة من الشبكة {network}", key=f"add_{selected_city}_{network}"):
+                st.markdown("**🔄 خيارات الإضافة:**")
+                
+                col_add1, col_add2 = st.columns(2)
+                
+                with col_add1:
+                    # زر إضافة الشبكة كاملة
+                    if st.button(f"➕ إضافة شبكة {selected_network} كاملة", use_container_width=True):
+                        # جلب جميع لوحات الشبكة
+                        all_board_numbers = network_boards['رقم اللوحة'].tolist()
+                        
+                        if selected_city not in st.session_state.catalog_selected_boards:
+                            st.session_state.catalog_selected_boards[selected_city] = []
+                        
+                        # إضافة جميع اللوحات
+                        for board in all_board_numbers:
+                            if board not in st.session_state.catalog_selected_boards[selected_city]:
+                                st.session_state.catalog_selected_boards[selected_city].append(board)
+                        
+                        if selected_city not in st.session_state.catalog_cities_added:
+                            st.session_state.catalog_cities_added.append(selected_city)
+                        
+                        st.success(f"✅ تم إضافة شبكة {selected_network} كاملة ({len(all_board_numbers)} لوحة)")
+                        st.rerun()
+                
+                with col_add2:
+                    # اختيار لوحات محددة من الشبكة
+                    st.markdown("**أو اختر لوحات محددة:**")
+                    selected_boards = st.multiselect(
+                        f"اختر لوحات من شبكة {selected_network}:",
+                        board_options,
+                        key=f"select_boards_{selected_network}"
+                    )
+                    
+                    if selected_boards and st.button(f"📍 إضافة {len(selected_boards)} لوحة محددة", use_container_width=True):
                         board_numbers = [b.split(' - ')[0] for b in selected_boards]
                         
                         if selected_city not in st.session_state.catalog_selected_boards:
@@ -2804,11 +2837,28 @@ elif page == "📋 كتالوج عام":
                         if selected_city not in st.session_state.catalog_cities_added:
                             st.session_state.catalog_cities_added.append(selected_city)
                         
-                        st.success(f"✅ تم إضافة {len(board_numbers)} لوحة من الشبكة {network}")
+                        st.success(f"✅ تم إضافة {len(board_numbers)} لوحة")
                         st.rerun()
+                
+                # ============================================================
+                # عرض لوحات الشبكة الحالية للاختيار
+                # ============================================================
+                st.markdown("---")
+                st.markdown(f"**📋 لوحات شبكة {selected_network}:**")
+                
+                st.dataframe(
+                    network_boards[['رقم اللوحة', 'الموقع', 'العدد']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "رقم اللوحة": "رقم اللوحة",
+                        "الموقع": "اسم الموقع",
+                        "العدد": st.column_config.NumberColumn("العدد")
+                    }
+                )
             
             # ============================================================
-            # 6. عرض اللوحات المختارة
+            # 6. عرض اللوحات المختارة حالياً
             # ============================================================
             
             if st.session_state.catalog_selected_boards:
@@ -2820,7 +2870,8 @@ elif page == "📋 كتالوج عام":
                 for city, boards in st.session_state.catalog_selected_boards.items():
                     if boards:
                         st.markdown(f"**📍 محافظة {city}:** {len(boards)} لوحة")
-                        # جلب تفاصيل اللوحات
+                        
+                        # جلب تفاصيل اللوحات المختارة
                         board_placeholders = ','.join([f"'{b}'" for b in boards])
                         boards_details = run_query(f'''
                             SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة"
@@ -2828,25 +2879,50 @@ elif page == "📋 كتالوج عام":
                             WHERE "رقم اللوحة" IN ({board_placeholders})
                             ORDER BY "الشبكة", "رقم اللوحة"
                         ''')
+                        
                         if boards_details is not None and not boards_details.empty:
                             # عرض حسب الشبكة
                             for network in boards_details['الشبكة'].unique():
                                 network_boards = boards_details[boards_details['الشبكة'] == network]
                                 st.caption(f"الشبكة رقم {network}: {len(network_boards)} لوحة")
+                            
+                            # عرض الجدول
                             st.dataframe(
                                 boards_details,
                                 use_container_width=True,
                                 hide_index=True
                             )
+                            
+                            # زر إزالة لوحات محددة
+                            remove_options = boards_details.apply(
+                                lambda row: f"{row['رقم اللوحة']} - {row['الموقع']}", 
+                                axis=1
+                            ).tolist()
+                            
+                            boards_to_remove = st.multiselect(
+                                f"اختر لوحات لإزالتها من محافظة {city}:",
+                                remove_options,
+                                key=f"remove_{city}"
+                            )
+                            
+                            if boards_to_remove and st.button(f"🗑️ إزالة {len(boards_to_remove)} لوحة من {city}", key=f"remove_btn_{city}"):
+                                board_numbers_to_remove = [b.split(' - ')[0] for b in boards_to_remove]
+                                for board in board_numbers_to_remove:
+                                    if board in st.session_state.catalog_selected_boards[city]:
+                                        st.session_state.catalog_selected_boards[city].remove(board)
+                                st.rerun()
+                            
                             total_selected += len(boards)
                 
                 st.info(f"📊 إجمالي اللوحات المختارة: {total_selected}")
                 
                 # زر مسح الكتالوج
-                if st.button("🗑️ مسح جميع اللوحات المختارة", use_container_width=True):
-                    st.session_state.catalog_selected_boards = {}
-                    st.session_state.catalog_cities_added = []
-                    st.rerun()
+                col_clear1, col_clear2, col_clear3 = st.columns([1, 2, 1])
+                with col_clear2:
+                    if st.button("🗑️ مسح جميع اللوحات المختارة", use_container_width=True):
+                        st.session_state.catalog_selected_boards = {}
+                        st.session_state.catalog_cities_added = []
+                        st.rerun()
             else:
                 st.info("📭 لم يتم اختيار أي لوحات بعد")
             
@@ -2882,7 +2958,7 @@ elif page == "📋 كتالوج عام":
                                     with st.spinner("جاري إنشاء الكتالوج..."):
                                         from docx import Document
                                         from docx.shared import Inches, Pt, RGBColor, Cm
-                                        from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
+                                        from docx.enum.text import WD_ALIGN_PARAGRAPH
                                         from docx.oxml import OxmlElement
                                         from docx.oxml.ns import qn
                                         import io
@@ -2924,7 +3000,7 @@ elif page == "📋 كتالوج عام":
                                         
                                         doc.add_paragraph()
                                         
-                                        # العنوان الرئيسي
+                                        # العنوان
                                         p_title = doc.add_paragraph()
                                         p_title.add_run(f"كتالوج اللوحات الإعلانية المتاحة").bold = True
                                         _force_rtl_style(p_title)
@@ -2938,32 +3014,26 @@ elif page == "📋 كتالوج عام":
                                         for city in all_boards_details['المحافظة'].unique():
                                             city_df = all_boards_details[all_boards_details['المحافظة'] == city]
                                             
-                                            # عنوان المحافظة
                                             p_city = doc.add_paragraph()
                                             p_city.add_run(f"محافظة {city}").bold = True
                                             _force_rtl_style(p_city)
                                             
-                                            # معلومات القياس
                                             p_size = doc.add_paragraph()
                                             p_size.add_run(f"لوحات قياس {selected_size}")
                                             _force_rtl_style(p_size)
                                             
-                                            # عرض حسب الشبكة - مع جدول 4 أعمدة
+                                            # عرض حسب الشبكة
                                             for network in city_df['الشبكة'].unique():
                                                 network_df = city_df[city_df['الشبكة'] == network]
                                                 
-                                                # عنوان الشبكة
                                                 p_network = doc.add_paragraph()
                                                 p_network.add_run(f"الشبكة رقم {network}").bold = True
                                                 _force_rtl_style(p_network)
                                                 
-                                                # ============================================
-                                                # جدول 4 أعمدة (العدد - رقم الشبكة - العدد - رقم الشبكة)
-                                                # ============================================
+                                                # جدول 4 أعمدة
                                                 table = doc.add_table(rows=1, cols=4)
                                                 table.style = 'Table Grid'
                                                 
-                                                # تعيين عرض الأعمدة
                                                 for cell in table.columns:
                                                     cell.width = Cm(4.5)
                                                 
@@ -2985,7 +3055,7 @@ elif page == "📋 كتالوج عام":
                                                     tc_pr.append(shd)
                                                     _force_rtl_style(p)
                                                 
-                                                # ملء الجدول: لوحتان في كل سطر
+                                                # ملء الجدول
                                                 rows_data = network_df.to_dict('records')
                                                 paired_data = []
                                                 for i in range(0, len(rows_data), 2):
