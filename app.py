@@ -2265,8 +2265,12 @@ with tabs[0]:
     st.markdown('<div class="input-card">', unsafe_allow_html=True)
     st.subheader("🆕 إنشاء حجز جديد")
     
+    # تهيئة السلة في session_state
+    if 'booking_cart' not in st.session_state:
+        st.session_state.booking_cart = []
+    
     # ============================================================
-    # الفلاتر خارج الـ form (تتحدث عند التغيير)
+    # الفلاتر خارج الـ form
     # ============================================================
     
     col_filters = st.columns(3)
@@ -2329,7 +2333,7 @@ with tabs[0]:
         df_boards = pd.DataFrame()
     
     # ============================================================
-    # عرض اللوحات
+    # اختيار اللوحات
     # ============================================================
     
     if not df_boards.empty:
@@ -2339,16 +2343,115 @@ with tabs[0]:
             axis=1
         ).tolist()
         
-        select_all = st.checkbox("✅ اختيار جميع الأعمدة", key="select_all_boards_outside")
-        if select_all:
-            selected_boards = board_options
-        else:
-            selected_boards = st.multiselect("🏷️ اختيار اللوحات", board_options, key="boards_select_outside")
+        # ✅ استخدام st.columns لعرض زر الإضافة بجانب القائمة
+        col_select, col_btn = st.columns([3, 1])
         
-        selected_board_numbers = [b.split(' - ')[0] for b in selected_boards] if selected_boards else []
+        with col_select:
+            selected_boards = st.multiselect(
+                "🏷️ اختيار اللوحات",
+                board_options,
+                key="boards_select_outside",
+                placeholder="اختر لوحة أو أكثر..."
+            )
+        
+        with col_btn:
+            st.write("")
+            st.write("")
+            if st.button("➕ إضافة إلى السلة", key="add_to_cart_btn", use_container_width=True):
+                if selected_boards:
+                    new_boards = [b.split(' - ')[0] for b in selected_boards]
+                    st.session_state.booking_cart.extend(new_boards)
+                    st.success(f"✅ تم إضافة {len(new_boards)} لوحة")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ يرجى اختيار لوحة أولاً")
     else:
         st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
-        selected_board_numbers = []
+    
+    # ============================================================
+    # عرض سلة اللوحات المختارة
+    # ============================================================
+    
+    if st.session_state.booking_cart:
+        st.divider()
+        st.subheader(f"🛒 سلة اللوحات المختارة ({len(st.session_state.booking_cart)})")
+        
+        # عرض اللوحات في السلة
+        cart_df = pd.DataFrame(st.session_state.booking_cart, columns=['رقم اللوحة'])
+        st.dataframe(cart_df, use_container_width=True, height=150)
+        
+        # زر تفريغ السلة
+        if st.button("🗑️ تفريغ السلة", key="clear_cart_btn"):
+            st.session_state.booking_cart = []
+            st.rerun()
+    
+    # ============================================================
+    # نموذج الحجز (فقط للحفظ)
+    # ============================================================
+    
+    with st.form("booking_save_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
+            year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
+        
+        with col2:
+            today = datetime.now().date()
+            booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
+            booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
+            board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
+        
+        notes = st.text_area("📝 ملاحظات", placeholder="أي معلومات إضافية...", height=80)
+        
+        col5, col6 = st.columns(2)
+        with col5:
+            phone = st.text_input("📞 الهاتف", placeholder="05xxxxxxxx")
+        with col6:
+            email = st.text_input("✉️ البريد", placeholder="example@email.com")
+        
+        if st.session_state.booking_cart:
+            st.info(f"📋 عدد اللوحات المراد حجزها: {len(st.session_state.booking_cart)}")
+        
+        submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
+        
+        if submitted:
+            if not st.session_state.booking_cart:
+                st.error("⚠️ يرجى إضافة لوحات إلى السلة أولاً")
+            elif not customer_name:
+                st.error("⚠️ يرجى إدخال اسم الزبون")
+            else:
+                start_str = booking_start.strftime("%Y-%m-%d")
+                end_str = booking_end.strftime("%Y-%m-%d")
+                
+                try:
+                    cursor = conn.cursor()
+                    inserted = 0
+                    
+                    for board_number in st.session_state.booking_cart:
+                        cursor.execute('''
+                            INSERT INTO "حجوزات1" 
+                            ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
+                             "نوع اللوحة", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        ''', (board_number, customer_name, year, start_str, end_str,
+                              board_type, notes, phone, email))
+                        inserted += 1
+                    
+                    conn.commit()
+                    cursor.close()
+                    
+                    # تفريغ السلة بعد الحجز
+                    st.session_state.booking_cart = []
+                    
+                    st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
+                    st.balloons()
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ حدث خطأ: {str(e)}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     # ============================================================
     # نموذج الحجز (فقط للحفظ)
