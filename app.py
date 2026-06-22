@@ -2260,76 +2260,133 @@ elif page == "📝 الإدخال اليومي":
     else:
         tabs = st.tabs(["📅 حجز جديد", "📊 عرض حجوزاتي"])
     
-    # ========== تبويب الحجز الجديد ==========
-    with tabs[0]:
-        st.markdown('<div class="input-card">', unsafe_allow_html=True)
-        st.subheader("🆕 إنشاء حجز جديد")
+# ========== تبويب الحجز الجديد ==========
+with tabs[0]:
+    st.markdown('<div class="input-card">', unsafe_allow_html=True)
+    st.subheader("🆕 إنشاء حجز جديد")
+    
+    with st.form("new_booking_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
         
-        with st.form("new_booking_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
+        with col1:
+            # 1. اختيار المحافظة
+            df_cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
+            city_options = df_cities['المحافظة'].tolist() if not df_cities.empty else []
+            selected_city = st.selectbox(
+                "📍 اختيار المحافظة",
+                city_options,
+                help="اختر المحافظة لعرض اللوحات المتاحة فيها"
+            )
             
-            with col1:
-                # اختيار العمود
-                df_boards = run_query('SELECT "رقم اللوحة", "اسم العمود", "المحافظة", "الشبكة", "الجاهزية" FROM "اعمدة انارة" ORDER BY "المحافظة"')
-                board_options = df_boards.apply(lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['المحافظة']}) - {row.get('الجاهزية', 'جاهز')}", axis=1).tolist()
+            # 2. اختيار الشبكة (بعد اختيار المحافظة)
+            if selected_city:
+                df_networks = run_query(f'''
+                    SELECT DISTINCT "الشبكة" 
+                    FROM "اعمدة انارة" 
+                    WHERE "المحافظة" = '{selected_city}' 
+                    AND "الشبكة" IS NOT NULL AND "الشبكة" != ''
+                    ORDER BY "الشبكة"
+                ''')
+                network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
                 
-                selected_board = st.selectbox(
-                    "🏷️ اختيار اللوحة",
-                    board_options,
-                    help="اختر اللوحة التي تريد حجزها"
-                )
-                
-                # استخراج رقم اللوحة
-                board_number = selected_board.split(' - ')[0] if selected_board else ""
-                
-                # اسم الزبون
-                customer_name = st.text_input(
-                    "👤 اسم الزبون",
-                    placeholder="أدخل اسم الزبون كاملاً",
-                    help="الاسم كما سيظهر في الفاتورة"
-                )
+                if network_options:
+                    selected_network = st.selectbox(
+                        "🌐 اختيار الشبكة",
+                        ["جميع الشبكات"] + network_options,
+                        help="اختر الشبكة لعرض أعمدةها"
+                    )
+                else:
+                    selected_network = "جميع الشبكات"
+                    st.info("ℹ️ لا توجد شبكات في هذه المحافظة")
             
-            with col2:
-                # السنة
-                year = st.number_input(
-                    "📅 العام",
-                    min_value=2020,
-                    max_value=2030,
-                    value=2026,
-                    step=1
-                )
+            # 3. اختيار اللوحات (حسب المحافظة والشبكة)
+            if selected_city:
+                if selected_network and selected_network != "جميع الشبكات":
+                    boards_query = f'''
+                        SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
+                        FROM "اعمدة انارة" 
+                        WHERE "المحافظة" = '{selected_city}' 
+                        AND "الشبكة" = '{selected_network}'
+                        ORDER BY "رقم اللوحة"
+                    '''
+                else:
+                    boards_query = f'''
+                        SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
+                        FROM "اعمدة انارة" 
+                        WHERE "المحافظة" = '{selected_city}'
+                        ORDER BY "رقم اللوحة"
+                    '''
                 
-                # فترة الحجز
-                today = datetime.now().date()
+                df_boards = run_query(boards_query)
                 
-                booking_start = st.date_input(
-                    "📆 بداية الحجز",
-                    value=today,
-                    min_value=today
-                )
-                
-                booking_end = st.date_input(
-                    "📆 نهاية الحجز",
-                    value=today + timedelta(days=30),
-                    min_value=booking_start
-                )
+                if not df_boards.empty:
+                    # عرض عدد الأعمدة
+                    st.caption(f"📊 عدد الأعمدة المتاحة: {len(df_boards)}")
+                    
+                    # خيار اختيار الكل
+                    select_all = st.checkbox("✅ اختيار جميع الأعمدة", key="select_all_boards")
+                    
+                    # إنشاء خيارات اللوحات
+                    board_options = df_boards.apply(
+                        lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", 
+                        axis=1
+                    ).tolist()
+                    
+                    if select_all:
+                        selected_boards = board_options
+                    else:
+                        selected_boards = st.multiselect(
+                            "🏷️ اختيار اللوحات",
+                            board_options,
+                            help="اختر لوحة أو أكثر للحجز"
+                        )
+                    
+                    # استخراج أرقام اللوحات المختارة
+                    selected_board_numbers = [b.split(' - ')[0] for b in selected_boards] if selected_boards else []
+                else:
+                    st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
+                    selected_board_numbers = []
+            else:
+                selected_board_numbers = []
+        
+        with col2:
+            # اسم الزبون
+            customer_name = st.text_input(
+                "👤 اسم الزبون",
+                placeholder="أدخل اسم الزبون كاملاً",
+                help="الاسم كما سيظهر في الفاتورة"
+            )
+            
+            # السنة
+            year = st.number_input(
+                "📅 العام",
+                min_value=2020,
+                max_value=2030,
+                value=2026,
+                step=1
+            )
+            
+            # فترة الحجز
+            today = datetime.now().date()
+            
+            booking_start = st.date_input(
+                "📆 بداية الحجز",
+                value=today,
+                min_value=today
+            )
+            
+            booking_end = st.date_input(
+                "📆 نهاية الحجز",
+                value=today + timedelta(days=30),
+                min_value=booking_start
+            )
             
             # تفاصيل إضافية
-            col3, col4 = st.columns(2)
-            with col3:
-                board_type = st.selectbox(
-                    "📋 نوع اللوحة",
-                    ["عادية", "سكوتش"],
-                    help="نوع مادة اللوحة"
-                )
-            
-            with col4:
-                # ✅ استخدام قائمة الحجوم من قاعدة البيانات
-                board_size = st.selectbox(
-                    "📐 حجم اللوحة",
-                    size_options if size_options else ["صغير", "متوسط", "كبير"],
-                    help="اختر حجم اللوحة من القائمة"
-                )
+            board_type = st.selectbox(
+                "📋 نوع اللوحة",
+                ["عادية", "سكوتش"],
+                help="نوع مادة اللوحة"
+            )
             
             # ملاحظات
             notes = st.text_area(
@@ -2337,44 +2394,55 @@ elif page == "📝 الإدخال اليومي":
                 placeholder="أي معلومات إضافية عن الحجز...",
                 height=80
             )
-            
-            # معلومات الاتصال
-            col5, col6 = st.columns(2)
-            with col5:
-                phone = st.text_input("📞 رقم الهاتف", placeholder="05xxxxxxxx")
-            with col6:
-                email = st.text_input("✉️ البريد الإلكتروني", placeholder="example@email.com")
-            
-            # زر الحفظ
-            submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
-            
-            if submitted:
-                if not board_number or not customer_name:
-                    st.error("⚠️ يرجى ملء جميع الحقول المطلوبة")
-                else:
-                    # تحويل التواريخ إلى نص
-                    start_str = booking_start.strftime("%Y-%m-%d")
-                    end_str = booking_end.strftime("%Y-%m-%d")
+        
+        # معلومات الاتصال
+        col5, col6 = st.columns(2)
+        with col5:
+            phone = st.text_input("📞 رقم الهاتف", placeholder="05xxxxxxxx")
+        with col6:
+            email = st.text_input("✉️ البريد الإلكتروني", placeholder="example@email.com")
+        
+        # عرض ملخص اللوحات المختارة
+        if selected_board_numbers:
+            st.info(f"📋 عدد اللوحات المختارة: {len(selected_board_numbers)}")
+            st.caption(f"الأرقام: {', '.join(selected_board_numbers[:10])}{' ...' if len(selected_board_numbers) > 10 else ''}")
+        
+        # زر الحفظ
+        submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
+        
+        if submitted:
+            if not selected_board_numbers:
+                st.error("⚠️ يرجى اختيار لوحة واحدة على الأقل")
+            elif not customer_name:
+                st.error("⚠️ يرجى إدخال اسم الزبون")
+            else:
+                start_str = booking_start.strftime("%Y-%m-%d")
+                end_str = booking_end.strftime("%Y-%m-%d")
+                
+                try:
+                    cursor = conn.cursor()
+                    inserted = 0
                     
-                    try:
-                        cursor = conn.cursor()
+                    for board_number in selected_board_numbers:
                         cursor.execute('''
                             INSERT INTO "حجوزات1" 
                             ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
-                             "نوع اللوحة", "الحجم", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                             "نوع اللوحة", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         ''', (board_number, customer_name, year, start_str, end_str,
-                              board_type, board_size, notes, phone, email))
-                        conn.commit()
-                        cursor.close()
-                        
-                        st.success("✅ تم إنشاء الحجز بنجاح!")
-                        st.balloons()
-                        
-                    except Exception as e:
-                        st.error(f"❌ حدث خطأ: {str(e)}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                              board_type, notes, phone, email))
+                        inserted += 1
+                    
+                    conn.commit()
+                    cursor.close()
+                    
+                    st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
+                    st.balloons()
+                    
+                except Exception as e:
+                    st.error(f"❌ حدث خطأ: {str(e)}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     # ========== تبويب إضافة عمود (للمدير فقط) ==========
     if len(tabs) > 1 and user_info and user_info.get('role') == 'admin':
