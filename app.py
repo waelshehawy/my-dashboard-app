@@ -497,7 +497,8 @@ with st.sidebar:
         "🗺️ تقرير جميع المواقع",
         "📐 تقرير تجميعي حسب الحجوم",
         "⚙️ الإعدادات",
-        "📝 الإدخال اليومي"
+        "📝 الإدخال اليومي",
+        "📋 كتالوج عام"
     ], key="main_menu")
     
     st.divider()
@@ -2649,9 +2650,10 @@ with tabs[tab_index]:
             
             st.markdown('</div>', unsafe_allow_html=True)
 
-#============================
+
+# ============================
 # كتالوج عام
-#=============================
+# ============================
 
 elif page == "📋 كتالوج عام":
     st.title("📋 كتالوج اللوحات المتاحة")
@@ -2672,14 +2674,18 @@ elif page == "📋 كتالوج عام":
             selected_city = st.selectbox("📍 اختر المحافظة:", cities)
         
         with col2:
-            selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
+            if not draw_df.empty:
+                selected_size = st.selectbox("📏 قياس اللوحة:", draw_df['الحجم'].unique().tolist())
+            else:
+                st.error("❌ لا توجد بيانات في جدول أسماء الرسم")
+                st.stop()
         
         # ============================================================
         # 2. اختيار الفترة (للتأكد من توفر اللوحات)
         # ============================================================
         
         periods_df = run_query('SELECT namee, no FROM "الفترة" ORDER BY no')
-        period_names = periods_df['namee'].tolist()
+        period_names = periods_df['namee'].tolist() if periods_df is not None and not periods_df.empty else []
         
         if not period_names:
             st.error("❌ لا توجد فترات في جدول الفترة")
@@ -2708,6 +2714,10 @@ elif page == "📋 كتالوج عام":
             FROM "اعمدة انارة" 
             WHERE "المحافظة" = %s AND "الحجم" = %s
         ''', (selected_city, selected_size))
+        
+        if all_columns is None or all_columns.empty:
+            st.warning("⚠️ لا توجد أعمدة في هذه المحافظة والحجم")
+            st.stop()
         
         # ============================================================
         # 4. تحديد الأعمدة المحجوزة في الفترات المحددة
@@ -2781,9 +2791,10 @@ elif page == "📋 كتالوج عام":
             st.subheader("📍 تفاصيل اللوحات المتاحة")
             
             # اختيار شبكة لعرض تفاصيلها
+            network_list = ["جميع الشبكات"] + network_summary['الشبكة'].tolist()
             selected_network = st.selectbox(
                 "اختر الشبكة لعرض تفاصيلها:",
-                ["جميع الشبكات"] + network_summary['الشبكة'].tolist()
+                network_list
             )
             
             if selected_network == "جميع الشبكات":
@@ -2841,7 +2852,13 @@ elif page == "📋 كتالوج عام":
                 if st.button("📄 تصدير الكتالوج كـ Word", use_container_width=True):
                     try:
                         with st.spinner("جاري إنشاء الكتالوج..."):
-                            # إنشاء مستند Word
+                            # استيراد المكتبات المطلوبة
+                            from docx import Document
+                            from docx.shared import Inches, Pt
+                            from docx.enum.text import WD_ALIGN_PARAGRAPH
+                            import io
+                            from datetime import datetime
+                            
                             doc = Document()
                             
                             # إعدادات الصفحة
@@ -2902,7 +2919,8 @@ elif page == "📋 كتالوج عام":
                                 
                                 for cell in hdr:
                                     for paragraph in cell.paragraphs:
-                                        paragraph.runs[0].bold = True
+                                        if paragraph.runs:
+                                            paragraph.runs[0].bold = True
                                 
                                 # بيانات الجدول
                                 for _, row in network_df.iterrows():
@@ -2941,6 +2959,7 @@ elif page == "📋 كتالوج عام":
                             
                     except Exception as e:
                         st.error(f"❌ حدث خطأ أثناء إنشاء الكتالوج: {str(e)}")
+                        st.exception(e)
             
             # ============================================================
             # 11. خيارات إضافية
@@ -2952,12 +2971,16 @@ elif page == "📋 كتالوج عام":
                 st.caption("خيارات إضافية لعرض الكتالوج")
                 
                 # خيار إظهار الأسعار (للمديرين فقط)
-                if is_admin():
-                    show_prices = st.checkbox("💰 إظهار الأسعار (للمديرين فقط)")
-                    if show_prices:
-                        # جلب الأسعار
-                        fee_print, fee_ads = get_fees(draw_df, selected_size, "عادي", False)
-                        st.info(f"سعر الطباعة: {fee_print}$ | سعر العرض الشهري: {fee_ads}$")
+                if 'is_admin' in globals() and callable(is_admin):
+                    if is_admin():
+                        show_prices = st.checkbox("💰 إظهار الأسعار (للمديرين فقط)")
+                        if show_prices:
+                            # جلب الأسعار
+                            try:
+                                fee_print, fee_ads = get_fees(draw_df, selected_size, "عادي", False)
+                                st.info(f"سعر الطباعة: {fee_print}$ | سعر العرض الشهري: {fee_ads}$")
+                            except:
+                                st.warning("⚠️ لا يمكن جلب الأسعار حالياً")
                 
                 # خيار تصدير بتنسيق إضافي
                 export_format = st.selectbox(
