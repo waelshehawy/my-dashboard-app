@@ -2292,7 +2292,7 @@ with tabs[0]:
                 """, conn_local, params=(selected_city,))
                 conn_local.close()
                 network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
-                network_options = [n for n in network_options if n != 0]
+                
             except Exception as e:
                 st.error(f"❌ {e}")
                 network_options = []
