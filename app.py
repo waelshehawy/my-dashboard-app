@@ -2671,8 +2671,6 @@ elif page == "📋 كتالوج عام":
         st.session_state.catalog_selected_boards = {}  # {city: [list of boards]}
     if 'catalog_cities_added' not in st.session_state:
         st.session_state.catalog_cities_added = []  # list of cities added
-    if 'catalog_temp_boards' not in st.session_state:
-        st.session_state.catalog_temp_boards = {}  # {city: [list of all available boards]}
     
     try:
         # ============================================================
@@ -2767,12 +2765,11 @@ elif page == "📋 كتالوج عام":
                 st.metric("المحافظة", selected_city)
             
             # ============================================================
-            # 5. إضافة جميع الشبكات دفعة واحدة
+            # 5. عرض ملخص الشبكات
             # ============================================================
             
-            st.subheader("📍 إضافة الشبكات")
+            st.subheader("📡 اللوحات المتاحة حسب الشبكة")
             
-            # عرض ملخص الشبكات
             network_summary = available_columns.groupby('الشبكة').agg({
                 'رقم اللوحة': 'count',
                 'العدد': 'sum'
@@ -2791,7 +2788,7 @@ elif page == "📋 كتالوج عام":
             )
             
             # ============================================================
-            # زر إضافة جميع الشبكات
+            # 6. زر إضافة جميع الشبكات
             # ============================================================
             
             col_add_all1, col_add_all2, col_add_all3 = st.columns([1, 2, 1])
@@ -2812,17 +2809,15 @@ elif page == "📋 كتالوج عام":
                         st.session_state.catalog_cities_added.append(selected_city)
                     
                     st.success(f"✅ تم إضافة جميع الشبكات ({len(all_board_numbers)} لوحة)")
-                    st.rerun()
             
             # ============================================================
-            # 6. عرض اللوحات المختارة وإدارة الحذف
+            # 7. عرض اللوحات المختارة
             # ============================================================
             
             if st.session_state.catalog_selected_boards:
                 st.divider()
                 st.subheader("📋 اللوحات المختارة للكتالوج")
                 
-                # عرض اللوحات المختارة لكل محافظة
                 total_selected = 0
                 for city, boards in st.session_state.catalog_selected_boards.items():
                     if boards:
@@ -2838,35 +2833,9 @@ elif page == "📋 كتالوج عام":
                         ''')
                         
                         if boards_details is not None and not boards_details.empty:
-                            # عرض اللوحات مع خيارات الحذف
-                            st.markdown("**🗑️ اختر اللوحات لحذفها من الكتالوج:**")
-                            
-                            # خيار حذف شبكة كاملة
-                            networks_in_city = boards_details['الشبكة'].unique().tolist()
-                            if networks_in_city:
-                                network_to_remove = st.selectbox(
-                                    f"اختر شبكة لحذفها بالكامل من محافظة {city}:",
-                                    ["اختر الشبكة"] + networks_in_city,
-                                    key=f"remove_network_{city}"
-                                )
-                                
-                                if network_to_remove != "اختر الشبكة" and st.button(f"🗑️ حذف شبكة {network_to_remove} بالكامل", key=f"remove_network_btn_{city}"):
-                                    # جلب لوحات هذه الشبكة
-                                    network_boards = boards_details[boards_details['الشبكة'] == network_to_remove]['رقم اللوحة'].tolist()
-                                    for board in network_boards:
-                                        if board in st.session_state.catalog_selected_boards[city]:
-                                            st.session_state.catalog_selected_boards[city].remove(board)
-                                    st.rerun()
-                            
-                            # عرض الجدول مع خيارات حذف فردية
-                            st.markdown("**أو حذف لوحات محددة:**")
-                            
-                            # إضافة عمود للاختيار
-                            boards_details['حذف'] = False
-                            
-                            # عرض الجدول مع checkbox للحذف
-                            edited_df = st.data_editor(
-                                boards_details[['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']],
+                            # عرض الجدول
+                            st.dataframe(
+                                boards_details,
                                 use_container_width=True,
                                 hide_index=True,
                                 column_config={
@@ -2874,15 +2843,38 @@ elif page == "📋 كتالوج عام":
                                     "الموقع": "اسم الموقع",
                                     "العدد": st.column_config.NumberColumn("العدد"),
                                     "الشبكة": "رقم الشبكة"
-                                },
-                                key=f"editor_{city}"
+                                }
                             )
                             
-                            # إضافة أزرار الحذف الفردي
-                            col_remove1, col_remove2, col_remove3 = st.columns([1, 1, 1])
+                            # ============================================================
+                            # خيارات الحذف
+                            # ============================================================
+                            st.markdown("**🗑️ حذف من الكتالوج:**")
+                            
+                            col_remove1, col_remove2 = st.columns(2)
+                            
+                            with col_remove1:
+                                # حذف شبكة كاملة
+                                networks_in_city = boards_details['الشبكة'].unique().tolist()
+                                if networks_in_city:
+                                    network_to_remove = st.selectbox(
+                                        f"اختر شبكة لحذفها من {city}:",
+                                        ["اختر الشبكة"] + networks_in_city,
+                                        key=f"remove_network_{city}"
+                                    )
+                                    
+                                    if network_to_remove != "اختر الشبكة" and st.button(f"🗑️ حذف شبكة {network_to_remove}", key=f"remove_network_btn_{city}"):
+                                        # جلب لوحات هذه الشبكة
+                                        network_boards = boards_details[boards_details['الشبكة'] == network_to_remove]['رقم اللوحة'].tolist()
+                                        for board in network_boards:
+                                            if board in st.session_state.catalog_selected_boards[city]:
+                                                st.session_state.catalog_selected_boards[city].remove(board)
+                                        st.success(f"✅ تم حذف شبكة {network_to_remove}")
+                            
                             with col_remove2:
+                                # حذف لوحة محددة
                                 board_to_remove = st.selectbox(
-                                    "اختر لوحة لحذفها:",
+                                    f"اختر لوحة لحذفها من {city}:",
                                     boards_details['رقم اللوحة'].tolist(),
                                     key=f"select_remove_{city}"
                                 )
@@ -2890,13 +2882,15 @@ elif page == "📋 كتالوج عام":
                                 if board_to_remove and st.button(f"🗑️ حذف اللوحة {board_to_remove}", key=f"remove_board_{city}"):
                                     if board_to_remove in st.session_state.catalog_selected_boards[city]:
                                         st.session_state.catalog_selected_boards[city].remove(board_to_remove)
-                                        st.rerun()
+                                    st.success(f"✅ تم حذف اللوحة {board_to_remove}")
                             
                             total_selected += len(boards)
                 
                 st.info(f"📊 إجمالي اللوحات المختارة: {total_selected}")
                 
+                # ============================================================
                 # أزرار التحكم
+                # ============================================================
                 col_controls1, col_controls2, col_controls3 = st.columns(3)
                 with col_controls1:
                     if st.button("🔄 تحديث القائمة", use_container_width=True):
@@ -2905,18 +2899,16 @@ elif page == "📋 كتالوج عام":
                     if st.button("🗑️ مسح جميع اللوحات", use_container_width=True):
                         st.session_state.catalog_selected_boards = {}
                         st.session_state.catalog_cities_added = []
-                        st.rerun()
+                        st.success("✅ تم مسح جميع اللوحات")
                 with col_controls3:
-                    # زر تصدير الكتالوج
                     if total_selected > 0:
                         if st.button("📄 تصدير الكتالوج", use_container_width=True, type="primary"):
                             st.session_state.export_catalog = True
-                            st.rerun()
             else:
                 st.info("📭 لم يتم اختيار أي لوحات بعد - استخدم زر 'إضافة جميع الشبكات'")
             
             # ============================================================
-            # 7. تصدير الكتالوج
+            # 8. تصدير الكتالوج
             # ============================================================
             
             if st.session_state.get('export_catalog', False) and st.session_state.catalog_selected_boards:
@@ -3015,11 +3007,9 @@ elif page == "📋 كتالوج عام":
                                             for network in city_df['الشبكة'].unique():
                                                 network_df = city_df[city_df['الشبكة'] == network]
                                                 
-                                                p_network = doc.add_paragraph()
-                                                p_network.add_run(f"الشبكة رقم {network}").bold = True
-                                                _force_rtl_style(p_network)
-                                                
+                                                # ============================================================
                                                 # جدول 4 أعمدة
+                                                # ============================================================
                                                 table = doc.add_table(rows=1, cols=4)
                                                 table.style = 'Table Grid'
                                                 
@@ -3044,8 +3034,13 @@ elif page == "📋 كتالوج عام":
                                                     tc_pr.append(shd)
                                                     _force_rtl_style(p)
                                                 
-                                                # ملء الجدول
+                                                # ============================================================
+                                                # ملء الجدول بالبيانات
+                                                # ============================================================
                                                 rows_data = network_df.to_dict('records')
+                                                total_units = int(network_df['العدد'].sum())
+                                                
+                                                # تجميع البيانات في أزواج
                                                 paired_data = []
                                                 for i in range(0, len(rows_data), 2):
                                                     if i + 1 < len(rows_data):
@@ -3053,6 +3048,20 @@ elif page == "📋 كتالوج عام":
                                                     else:
                                                         paired_data.append((rows_data[i], None))
                                                 
+                                                # الصف الأول: عنوان الشبكة والعدد الإجمالي
+                                                first_row = table.add_row().cells
+                                                first_row[0].text = str(total_units)
+                                                first_row[1].text = f"الشبكة رقم {network}"
+                                                first_row[2].text = ""
+                                                first_row[3].text = ""
+                                                
+                                                for cell in first_row:
+                                                    for p in cell.paragraphs:
+                                                        _force_rtl_style(p)
+                                                        if p.runs:
+                                                            p.runs[0].bold = True
+                                                
+                                                # الصفوف المتبقية: اللوحات الفردية
                                                 for pair in paired_data:
                                                     row_cells = table.add_row().cells
                                                     
@@ -3073,12 +3082,6 @@ elif page == "📋 كتالوج عام":
                                                     for cell in row_cells:
                                                         for p in cell.paragraphs:
                                                             _force_rtl_style(p)
-                                                
-                                                # إجمالي الشبكة
-                                                total_units = int(network_df['العدد'].sum())
-                                                p_total = doc.add_paragraph()
-                                                p_total.add_run(f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}").bold = True
-                                                _force_rtl_style(p_total)
                                                 
                                                 doc.add_paragraph()
                                         
@@ -3122,7 +3125,7 @@ elif page == "📋 كتالوج عام":
                                     st.exception(e)
             
             # ============================================================
-            # 8. خيارات إضافية
+            # 9. خيارات إضافية
             # ============================================================
             
             with st.expander("⚙️ خيارات متقدمة", expanded=False):
