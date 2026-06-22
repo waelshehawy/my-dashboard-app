@@ -2665,6 +2665,24 @@ elif page == "📋 كتالوج عام":
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
     st.info("ℹ️ هذا الكتالوج يعرض جميع اللوحات المتاحة حالياً - بدون أسعار - للعرض العام")
+def _force_rtl_style_catalog(p):
+    """نسخة معدلة من _force_rtl_style مع محاذاة RIGHT"""
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT  # RIGHT للمحاذاة اليمنى
+    pPr = p._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    for run in p.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
+
+def set_table_rtl_catalog(table):
+    """نسخة معدلة من set_table_rtl"""
+    tblPr = table._element.xpath('w:tblPr')[0]
+    bidi = OxmlElement('w:bidiVisual')
+    tblPr.append(bidi)
     
     # تهيئة session_state
     if 'catalog_selected_boards' not in st.session_state:
