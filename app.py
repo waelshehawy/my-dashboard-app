@@ -2260,7 +2260,6 @@ elif page == "📝 الإدخال اليومي":
     else:
         tabs = st.tabs(["📅 حجز جديد", "📊 عرض حجوزاتي"])
     
-# ========== تبويب الحجز الجديد ==========
 with tabs[0]:
     st.markdown('<div class="input-card">', unsafe_allow_html=True)
     st.subheader("🆕 إنشاء حجز جديد")
@@ -2271,7 +2270,22 @@ with tabs[0]:
         with col1:
             df_cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
             city_options = df_cities['المحافظة'].tolist() if not df_cities.empty else []
-            selected_city = st.selectbox("📍 اختيار المحافظة", city_options, key="city_select")
+            
+            # ✅ استخدام session_state لتخزين المحافظة المختارة
+            if 'selected_city' not in st.session_state:
+                st.session_state.selected_city = city_options[0] if city_options else None
+            
+            selected_city = st.selectbox(
+                "📍 اختيار المحافظة",
+                city_options,
+                index=city_options.index(st.session_state.selected_city) if st.session_state.selected_city in city_options else 0,
+                key="city_select"
+            )
+            
+            # ✅ تحديث session_state عند تغيير المحافظة
+            if selected_city != st.session_state.selected_city:
+                st.session_state.selected_city = selected_city
+                st.rerun()
             
             if selected_city:
                 try:
@@ -2298,6 +2312,7 @@ with tabs[0]:
                     network_options = []
                     selected_network = "جميع الشبكات"
             
+            # ✅ جلب اللوحات بناءً على المحافظة المختارة
             if selected_city:
                 try:
                     conn_local = get_connection()
