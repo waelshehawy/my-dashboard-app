@@ -2259,116 +2259,121 @@ elif page == "📝 الإدخال اليومي":
         tabs = st.tabs(["📅 حجز جديد", "🗺️ إضافة عمود", "📊 عرض الحجوزات", "⚡ إجراءات سريعة"])
     else:
         tabs = st.tabs(["📅 حجز جديد", "📊 عرض حجوزاتي"])
-    
+        
+    #===============تبويب حجز جديد======================
 with tabs[0]:
     st.markdown('<div class="input-card">', unsafe_allow_html=True)
     st.subheader("🆕 إنشاء حجز جديد")
     
-    with st.form("new_booking_form", clear_on_submit=True):
+    # ============================================================
+    # الفلاتر خارج الـ form (تتحدث عند التغيير)
+    # ============================================================
+    
+    col_filters = st.columns(3)
+    with col_filters[0]:
+        df_cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
+        city_options = df_cities['المحافظة'].tolist() if not df_cities.empty else []
+        selected_city = st.selectbox("📍 المحافظة", city_options, key="city_filter")
+    
+    with col_filters[1]:
+        if selected_city:
+            try:
+                conn_local = get_connection()
+                df_networks = pd.read_sql_query("""
+                    SELECT DISTINCT "الشبكة" 
+                    FROM "اعمدة انارة" 
+                    WHERE "المحافظة" = %s 
+                    AND "الشبكة" IS NOT NULL
+                    ORDER BY "الشبكة"
+                """, conn_local, params=(selected_city,))
+                conn_local.close()
+                network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
+                network_options = [n for n in network_options if n != 0]
+            except Exception as e:
+                st.error(f"❌ {e}")
+                network_options = []
+        else:
+            network_options = []
+        
+        selected_network = st.selectbox("🌐 الشبكة", ["جميع الشبكات"] + network_options, key="network_filter")
+    
+    # ============================================================
+    # جلب اللوحات حسب الفلاتر
+    # ============================================================
+    
+    if selected_city:
+        try:
+            conn_local = get_connection()
+            if selected_network and selected_network != "جميع الشبكات":
+                boards_query = """
+                    SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
+                    FROM "اعمدة انارة" 
+                    WHERE "المحافظة" = %s 
+                    AND "الشبكة" = %s
+                    ORDER BY "رقم اللوحة"
+                """
+                df_boards = pd.read_sql_query(boards_query, conn_local, params=(selected_city, selected_network))
+            else:
+                boards_query = """
+                    SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
+                    FROM "اعمدة انارة" 
+                    WHERE "المحافظة" = %s
+                    ORDER BY "رقم اللوحة"
+                """
+                df_boards = pd.read_sql_query(boards_query, conn_local, params=(selected_city,))
+            conn_local.close()
+        except Exception as e:
+            st.error(f"❌ خطأ في جلب اللوحات: {e}")
+            df_boards = pd.DataFrame()
+    else:
+        df_boards = pd.DataFrame()
+    
+    # ============================================================
+    # عرض اللوحات
+    # ============================================================
+    
+    if not df_boards.empty:
+        st.caption(f"📊 عدد الأعمدة: {len(df_boards)}")
+        board_options = df_boards.apply(
+            lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", 
+            axis=1
+        ).tolist()
+        
+        select_all = st.checkbox("✅ اختيار جميع الأعمدة", key="select_all_boards_outside")
+        if select_all:
+            selected_boards = board_options
+        else:
+            selected_boards = st.multiselect("🏷️ اختيار اللوحات", board_options, key="boards_select_outside")
+        
+        selected_board_numbers = [b.split(' - ')[0] for b in selected_boards] if selected_boards else []
+    else:
+        st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
+        selected_board_numbers = []
+    
+    # ============================================================
+    # نموذج الحجز (فقط للحفظ)
+    # ============================================================
+    
+    with st.form("booking_save_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
         with col1:
-            df_cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
-            city_options = df_cities['المحافظة'].tolist() if not df_cities.empty else []
-            
-            # ✅ استخدام session_state لتخزين المحافظة المختارة
-            if 'selected_city' not in st.session_state:
-                st.session_state.selected_city = city_options[0] if city_options else None
-            
-            selected_city = st.selectbox(
-                "📍 اختيار المحافظة",
-                city_options,
-                index=city_options.index(st.session_state.selected_city) if st.session_state.selected_city in city_options else 0,
-                key="city_select"
-            )
-            
-            # ✅ تحديث session_state عند تغيير المحافظة
-            if selected_city != st.session_state.selected_city:
-                st.session_state.selected_city = selected_city
-                st.rerun()
-            
-            if selected_city:
-                try:
-                    conn_local = get_connection()
-                    df_networks = pd.read_sql_query("""
-                        SELECT DISTINCT "الشبكة" 
-                        FROM "اعمدة انارة" 
-                        WHERE "المحافظة" = %s 
-                        AND "الشبكة" IS NOT NULL
-                        ORDER BY "الشبكة"
-                    """, conn_local, params=(selected_city,))
-                    conn_local.close()
-                    
-                    network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
-                    
-                    if network_options:
-                        network_options = [n for n in network_options if n != 0]
-                        selected_network = st.selectbox("🌐 اختيار الشبكة", ["جميع الشبكات"] + network_options, key="network_select")
-                    else:
-                        selected_network = "جميع الشبكات"
-                        st.info("ℹ️ لا توجد شبكات في هذه المحافظة")
-                except Exception as e:
-                    st.error(f"❌ خطأ في جلب الشبكات: {e}")
-                    network_options = []
-                    selected_network = "جميع الشبكات"
-            
-            # ✅ جلب اللوحات بناءً على المحافظة المختارة
-            if selected_city:
-                try:
-                    conn_local = get_connection()
-                    if selected_network and selected_network != "جميع الشبكات":
-                        boards_query = """
-                            SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
-                            FROM "اعمدة انارة" 
-                            WHERE "المحافظة" = %s 
-                            AND "الشبكة" = %s
-                            ORDER BY "رقم اللوحة"
-                        """
-                        df_boards = pd.read_sql_query(boards_query, conn_local, params=(selected_city, selected_network))
-                    else:
-                        boards_query = """
-                            SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
-                            FROM "اعمدة انارة" 
-                            WHERE "المحافظة" = %s
-                            ORDER BY "رقم اللوحة"
-                        """
-                        df_boards = pd.read_sql_query(boards_query, conn_local, params=(selected_city,))
-                    conn_local.close()
-                except Exception as e:
-                    st.error(f"❌ خطأ في جلب اللوحات: {e}")
-                    df_boards = pd.DataFrame()
-                
-                if not df_boards.empty:
-                    st.caption(f"📊 عدد الأعمدة المتاحة: {len(df_boards)}")
-                    select_all = st.checkbox("✅ اختيار جميع الأعمدة", key="select_all_boards")
-                    board_options = df_boards.apply(lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", axis=1).tolist()
-                    
-                    if select_all:
-                        selected_boards = board_options
-                    else:
-                        selected_boards = st.multiselect("🏷️ اختيار اللوحات", board_options, key="boards_select")
-                    
-                    selected_board_numbers = [b.split(' - ')[0] for b in selected_boards] if selected_boards else []
-                else:
-                    st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
-                    selected_board_numbers = []
-            else:
-                selected_board_numbers = []
-        
-        with col2:
             customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
             year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
+        
+        with col2:
             today = datetime.now().date()
             booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
             booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
             board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
-            notes = st.text_area("📝 ملاحظات إضافية", placeholder="أي معلومات إضافية عن الحجز...", height=80)
+        
+        notes = st.text_area("📝 ملاحظات", placeholder="أي معلومات إضافية...", height=80)
         
         col5, col6 = st.columns(2)
         with col5:
-            phone = st.text_input("📞 رقم الهاتف", placeholder="05xxxxxxxx")
+            phone = st.text_input("📞 الهاتف", placeholder="05xxxxxxxx")
         with col6:
-            email = st.text_input("✉️ البريد الإلكتروني", placeholder="example@email.com")
+            email = st.text_input("✉️ البريد", placeholder="example@email.com")
         
         if selected_board_numbers:
             st.info(f"📋 عدد اللوحات المختارة: {len(selected_board_numbers)}")
