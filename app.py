@@ -2269,23 +2269,17 @@ with tabs[0]:
         col1, col2 = st.columns(2)
         
         with col1:
-            # 1. اختيار المحافظة
             df_cities = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
             city_options = df_cities['المحافظة'].tolist() if not df_cities.empty else []
-            selected_city = st.selectbox(
-                "📍 اختيار المحافظة",
-                city_options,
-                key="city_select"
-            )
+            selected_city = st.selectbox("📍 اختيار المحافظة", city_options, key="city_select")
             
-            # 2. اختيار الشبكة (بعد اختيار المحافظة)
             if selected_city:
                 try:
                     df_networks = run_query(f'''
                         SELECT DISTINCT "الشبكة" 
                         FROM "اعمدة انارة" 
                         WHERE "المحافظة" = '{selected_city}' 
-                        AND "الشبكة" IS NOT NULL AND "الشبكة" != ''
+                        AND "الشبكة" IS NOT NULL AND "الشبكة" != 0
                         ORDER BY "الشبكة"
                     ''')
                     network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
@@ -2294,16 +2288,11 @@ with tabs[0]:
                     network_options = []
                 
                 if network_options:
-                    selected_network = st.selectbox(
-                        "🌐 اختيار الشبكة",
-                        ["جميع الشبكات"] + network_options,
-                        key="network_select"
-                    )
+                    selected_network = st.selectbox("🌐 اختيار الشبكة", ["جميع الشبكات"] + network_options, key="network_select")
                 else:
                     selected_network = "جميع الشبكات"
                     st.info("ℹ️ لا توجد شبكات في هذه المحافظة")
             
-            # 3. اختيار اللوحات
             if selected_city:
                 try:
                     if selected_network and selected_network != "جميع الشبكات":
@@ -2311,7 +2300,7 @@ with tabs[0]:
                             SELECT "رقم اللوحة", "اسم العمود", "الشبكة", "الحجم", "الجاهزية"
                             FROM "اعمدة انارة" 
                             WHERE "المحافظة" = '{selected_city}' 
-                            AND "الشبكة" = '{selected_network}'
+                            AND "الشبكة" = {selected_network}
                             ORDER BY "رقم اللوحة"
                         '''
                     else:
@@ -2321,7 +2310,6 @@ with tabs[0]:
                             WHERE "المحافظة" = '{selected_city}'
                             ORDER BY "رقم اللوحة"
                         '''
-                    
                     df_boards = run_query(boards_query)
                 except Exception as e:
                     st.error(f"❌ خطأ في جلب اللوحات: {e}")
@@ -2329,22 +2317,13 @@ with tabs[0]:
                 
                 if not df_boards.empty:
                     st.caption(f"📊 عدد الأعمدة المتاحة: {len(df_boards)}")
-                    
                     select_all = st.checkbox("✅ اختيار جميع الأعمدة", key="select_all_boards")
-                    
-                    board_options = df_boards.apply(
-                        lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", 
-                        axis=1
-                    ).tolist()
+                    board_options = df_boards.apply(lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", axis=1).tolist()
                     
                     if select_all:
                         selected_boards = board_options
                     else:
-                        selected_boards = st.multiselect(
-                            "🏷️ اختيار اللوحات",
-                            board_options,
-                            key="boards_select"
-                        )
+                        selected_boards = st.multiselect("🏷️ اختيار اللوحات", board_options, key="boards_select")
                     
                     selected_board_numbers = [b.split(' - ')[0] for b in selected_boards] if selected_boards else []
                 else:
@@ -2356,11 +2335,9 @@ with tabs[0]:
         with col2:
             customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
             year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
-            
             today = datetime.now().date()
             booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
             booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
-            
             board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
             notes = st.text_area("📝 ملاحظات إضافية", placeholder="أي معلومات إضافية عن الحجز...", height=80)
         
@@ -2373,12 +2350,38 @@ with tabs[0]:
         if selected_board_numbers:
             st.info(f"📋 عدد اللوحات المختارة: {len(selected_board_numbers)}")
         
-        # ✅ زر الإرسال (موجود هنا)
         submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
         
         if submitted:
-            # ... منطق الحفظ ...
-            st.success("✅ تم الحجز بنجاح!")
+            if not selected_board_numbers:
+                st.error("⚠️ يرجى اختيار لوحة واحدة على الأقل")
+            elif not customer_name:
+                st.error("⚠️ يرجى إدخال اسم الزبون")
+            else:
+                start_str = booking_start.strftime("%Y-%m-%d")
+                end_str = booking_end.strftime("%Y-%m-%d")
+                
+                try:
+                    cursor = conn.cursor()
+                    inserted = 0
+                    
+                    for board_number in selected_board_numbers:
+                        cursor.execute('''
+                            INSERT INTO "حجوزات1" 
+                            ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
+                             "نوع اللوحة", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        ''', (board_number, customer_name, year, start_str, end_str,
+                              board_type, notes, phone, email))
+                        inserted += 1
+                    
+                    conn.commit()
+                    cursor.close()
+                    st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
+                    st.balloons()
+                    
+                except Exception as e:
+                    st.error(f"❌ حدث خطأ: {str(e)}")
     
     # ========== تبويب إضافة عمود (للمدير فقط) ==========
     if len(tabs) > 1 and user_info and user_info.get('role') == 'admin':
