@@ -2794,13 +2794,11 @@ elif page == "📋 كتالوج عام":
             col_add_all1, col_add_all2, col_add_all3 = st.columns([1, 2, 1])
             with col_add_all2:
                 if st.button("📦 إضافة جميع الشبكات للكتالوج", use_container_width=True, type="primary"):
-                    # جلب جميع لوحات المحافظة
                     all_board_numbers = available_columns['رقم اللوحة'].tolist()
                     
                     if selected_city not in st.session_state.catalog_selected_boards:
                         st.session_state.catalog_selected_boards[selected_city] = []
                     
-                    # إضافة جميع اللوحات
                     for board in all_board_numbers:
                         if board not in st.session_state.catalog_selected_boards[selected_city]:
                             st.session_state.catalog_selected_boards[selected_city].append(board)
@@ -2823,7 +2821,6 @@ elif page == "📋 كتالوج عام":
                     if boards:
                         st.markdown(f"**📍 محافظة {city}:** {len(boards)} لوحة")
                         
-                        # جلب تفاصيل اللوحات المختارة
                         board_placeholders = ','.join([f"'{b}'" for b in boards])
                         boards_details = run_query(f'''
                             SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة"
@@ -2833,7 +2830,6 @@ elif page == "📋 كتالوج عام":
                         ''')
                         
                         if boards_details is not None and not boards_details.empty:
-                            # عرض الجدول
                             st.dataframe(
                                 boards_details,
                                 use_container_width=True,
@@ -2846,15 +2842,11 @@ elif page == "📋 كتالوج عام":
                                 }
                             )
                             
-                            # ============================================================
-                            # خيارات الحذف
-                            # ============================================================
                             st.markdown("**🗑️ حذف من الكتالوج:**")
                             
                             col_remove1, col_remove2 = st.columns(2)
                             
                             with col_remove1:
-                                # حذف شبكة كاملة
                                 networks_in_city = boards_details['الشبكة'].unique().tolist()
                                 if networks_in_city:
                                     network_to_remove = st.selectbox(
@@ -2864,7 +2856,6 @@ elif page == "📋 كتالوج عام":
                                     )
                                     
                                     if network_to_remove != "اختر الشبكة" and st.button(f"🗑️ حذف شبكة {network_to_remove}", key=f"remove_network_btn_{city}"):
-                                        # جلب لوحات هذه الشبكة
                                         network_boards = boards_details[boards_details['الشبكة'] == network_to_remove]['رقم اللوحة'].tolist()
                                         for board in network_boards:
                                             if board in st.session_state.catalog_selected_boards[city]:
@@ -2872,7 +2863,6 @@ elif page == "📋 كتالوج عام":
                                         st.success(f"✅ تم حذف شبكة {network_to_remove}")
                             
                             with col_remove2:
-                                # حذف لوحة محددة
                                 board_to_remove = st.selectbox(
                                     f"اختر لوحة لحذفها من {city}:",
                                     boards_details['رقم اللوحة'].tolist(),
@@ -2888,9 +2878,6 @@ elif page == "📋 كتالوج عام":
                 
                 st.info(f"📊 إجمالي اللوحات المختارة: {total_selected}")
                 
-                # ============================================================
-                # أزرار التحكم
-                # ============================================================
                 col_controls1, col_controls2, col_controls3 = st.columns(3)
                 with col_controls1:
                     if st.button("🔄 تحديث القائمة", use_container_width=True):
@@ -2908,21 +2895,19 @@ elif page == "📋 كتالوج عام":
                 st.info("📭 لم يتم اختيار أي لوحات بعد - استخدم زر 'إضافة جميع الشبكات'")
             
             # ============================================================
-            # 8. تصدير الكتالوج
+            # 8. تصدير الكتالوج (باستخدام دوال عرض السعر)
             # ============================================================
             
             if st.session_state.get('export_catalog', False) and st.session_state.catalog_selected_boards:
                 st.divider()
                 st.subheader("📤 تصدير الكتالوج")
                 
-                # جمع كل اللوحات المختارة
                 all_selected_boards = []
                 for city, boards in st.session_state.catalog_selected_boards.items():
                     for board in boards:
                         all_selected_boards.append(board)
                 
                 if all_selected_boards:
-                    # جلب تفاصيل جميع اللوحات المختارة
                     board_placeholders = ','.join([f"'{b}'" for b in all_selected_boards])
                     all_boards_details = run_query(f'''
                         SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "المحافظة"
@@ -2946,7 +2931,9 @@ elif page == "📋 كتالوج عام":
                                         from datetime import datetime
                                         import os
                                         
-                                        # دوال التنسيق
+                                        # ============================================================
+                                        # دوال التنسيق المستخدمة في عرض السعر
+                                        # ============================================================
                                         def _force_rtl_style(p):
                                             p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                                             pPr = p._element.get_or_add_pPr()
@@ -3008,10 +2995,11 @@ elif page == "📋 كتالوج عام":
                                                 network_df = city_df[city_df['الشبكة'] == network]
                                                 
                                                 # ============================================================
-                                                # جدول 4 أعمدة
+                                                # جدول 4 أعمدة بنفس تنسيق عرض السعر
                                                 # ============================================================
                                                 table = doc.add_table(rows=1, cols=4)
                                                 table.style = 'Table Grid'
+                                                set_table_rtl(table)
                                                 
                                                 for cell in table.columns:
                                                     cell.width = Cm(4.5)
@@ -3034,9 +3022,7 @@ elif page == "📋 كتالوج عام":
                                                     tc_pr.append(shd)
                                                     _force_rtl_style(p)
                                                 
-                                                # ============================================================
                                                 # ملء الجدول بالبيانات
-                                                # ============================================================
                                                 rows_data = network_df.to_dict('records')
                                                 total_units = int(network_df['العدد'].sum())
                                                 
@@ -3061,7 +3047,7 @@ elif page == "📋 كتالوج عام":
                                                         if p.runs:
                                                             p.runs[0].bold = True
                                                 
-                                                # الصفوف المتبقية: اللوحات الفردية
+                                                # الصفوف المتبقية
                                                 for pair in paired_data:
                                                     row_cells = table.add_row().cells
                                                     
@@ -3117,7 +3103,6 @@ elif page == "📋 كتالوج عام":
                                             use_container_width=True
                                         )
                                         
-                                        # إعادة تعيين حالة التصدير
                                         st.session_state.export_catalog = False
                                         
                                 except Exception as e:
