@@ -2666,6 +2666,12 @@ elif page == "📋 كتالوج عام":
     
     st.info("ℹ️ هذا الكتالوج يعرض جميع اللوحات المتاحة حالياً - بدون أسعار - للعرض العام")
     
+    # تهيئة session_state لحفظ اللوحات المختارة لكل محافظة
+    if 'catalog_selected_boards' not in st.session_state:
+        st.session_state.catalog_selected_boards = {}  # {city: [list of boards]}
+    if 'catalog_cities_added' not in st.session_state:
+        st.session_state.catalog_cities_added = []  # list of cities added
+    
     try:
         # ============================================================
         # 1. اختيار المحافظة والحجم والفترة
@@ -2759,269 +2765,292 @@ elif page == "📋 كتالوج عام":
                 st.metric("المحافظة", selected_city)
             
             # ============================================================
-            # 5. عرض ملخص الشبكات
+            # 5. اختيار اللوحات وإضافتها للكتالوج
             # ============================================================
             
-            st.subheader("📡 اللوحات المتاحة حسب الشبكة")
+            st.subheader("📍 اختيار اللوحات لإضافتها للكتالوج")
             
-            network_summary = available_columns.groupby('الشبكة').agg({
-                'رقم اللوحة': 'count',
-                'العدد': 'sum'
-            }).reset_index()
-            network_summary.columns = ['الشبكة', 'عدد الأعمدة', 'إجمالي اللوحات']
+            # خيارات اللوحات
+            board_options = available_columns.apply(
+                lambda row: f"{row['رقم اللوحة']} - {row['الموقع']} (الشبكة: {row['الشبكة']})", 
+                axis=1
+            ).tolist()
             
-            st.dataframe(
-                network_summary,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "الشبكة": "اسم الشبكة",
-                    "عدد الأعمدة": st.column_config.NumberColumn("عدد الأعمدة"),
-                    "إجمالي اللوحات": st.column_config.NumberColumn("إجمالي الوحدات")
-                }
+            # اختيار اللوحات
+            selected_boards = st.multiselect(
+                f"اختر اللوحات من محافظة {selected_city}:",
+                board_options,
+                key=f"catalog_select_{selected_city}"
             )
             
+            # زر إضافة اللوحات
+            col_add1, col_add2, col_add3 = st.columns([1, 1, 1])
+            with col_add2:
+                if st.button(f"➕ إضافة اللوحات المختارة من {selected_city}", use_container_width=True):
+                    if selected_boards:
+                        # استخراج أرقام اللوحات
+                        board_numbers = [b.split(' - ')[0] for b in selected_boards]
+                        
+                        # حفظ اللوحات للمحافظة
+                        if selected_city not in st.session_state.catalog_selected_boards:
+                            st.session_state.catalog_selected_boards[selected_city] = []
+                        
+                        # إضافة اللوحات الجديدة
+                        for board in board_numbers:
+                            if board not in st.session_state.catalog_selected_boards[selected_city]:
+                                st.session_state.catalog_selected_boards[selected_city].append(board)
+                        
+                        # إضافة المحافظة للقائمة
+                        if selected_city not in st.session_state.catalog_cities_added:
+                            st.session_state.catalog_cities_added.append(selected_city)
+                        
+                        st.success(f"✅ تم إضافة {len(board_numbers)} لوحة من {selected_city}")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ يرجى اختيار لوحات أولاً")
+            
             # ============================================================
-            # 6. عرض تفاصيل اللوحات
+            # 6. عرض اللوحات المختارة
             # ============================================================
             
-            st.subheader("📍 تفاصيل اللوحات المتاحة")
-            
-            network_list = ["جميع الشبكات"] + network_summary['الشبكة'].tolist()
-            selected_network = st.selectbox("اختر الشبكة لعرض تفاصيلها:", network_list)
-            
-            if selected_network == "جميع الشبكات":
-                display_df = available_columns[['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']]
-            else:
-                display_df = available_columns[available_columns['الشبكة'] == selected_network][['رقم اللوحة', 'الموقع', 'العدد', 'الشبكة']]
-            
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "رقم اللوحة": "رقم اللوحة",
-                    "الموقع": "اسم الموقع",
-                    "العدد": st.column_config.NumberColumn("العدد"),
-                    "الشبكة": "الشبكة"
-                },
-                height=400
-            )
-            
-            # ============================================================
-            # 7. تصدير الكتالوج - مع جدول 4 أعمدة (لوحتان في السطر)
-            # ============================================================
-            
-            st.divider()
-            st.subheader("📤 تصدير الكتالوج")
-            
-            col_exp1, col_exp2, col_exp3 = st.columns([1, 2, 1])
-            with col_exp2:
-                if st.button("📄 تصدير الكتالوج كـ Word", use_container_width=True):
-                    try:
-                        with st.spinner("جاري إنشاء الكتالوج..."):
-                            # استيراد المكتبات
-                            from docx import Document
-                            from docx.shared import Inches, Pt, RGBColor, Cm
-                            from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
-                            from docx.oxml import OxmlElement
-                            from docx.oxml.ns import qn
-                            import io
-                            from datetime import datetime
-                            import os
-                            
-                            # ============================================
-                            # استخدام القالب إذا كان موجوداً
-                            # ============================================
-                            template_path = 'template.docx'
-                            if os.path.exists(template_path):
-                                doc = Document(template_path)
-                            else:
-                                doc = Document()
-                            
-                            PURPLE_COLOR = "660099"
-                            
-                            # ============================================
-                            # دالة لتطبيق RTL على الفقرة
-                            # ============================================
-                            def set_rtl_paragraph(paragraph):
-                                """تطبيق تنسيق RTL على الفقرة"""
-                                paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
-                                p = paragraph._element
-                                pPr = p.get_or_add_pPr()
-                                bidi = OxmlElement('w:bidi')
-                                bidi.set(qn('w:val'), '1')
-                                pPr.append(bidi)
-                            
-                            def set_table_rtl(table):
-                                """تطبيق RTL على الجدول"""
-                                for row in table.rows:
-                                    for cell in row.cells:
-                                        tc = cell._element
-                                        tcPr = tc.get_or_add_tcPr()
-                                        # إضافة اتجاه النص
-                                        textDirection = OxmlElement('w:textDirection')
-                                        textDirection.set(qn('w:val'), 'rl')
-                                        tcPr.append(textDirection)
-                                        # تطبيق RTL على كل فقرة في الخلية
-                                        for p in cell.paragraphs:
-                                            set_rtl_paragraph(p)
-                            
-                            # ============================================
-                            # إضافة المحتوى
-                            # ============================================
-                            
-                            # التاريخ
-                            today_date = datetime.now().strftime("%d / %m / %Y")
-                            p_date = doc.add_paragraph()
-                            p_date.add_run(f"التاريخ: {today_date}")
-                            set_rtl_paragraph(p_date)
-                            
-                            doc.add_paragraph()
-                            
-                            # العنوان الرئيسي
-                            p_cust = doc.add_paragraph()
-                            p_cust.add_run(f"كتالوج اللوحات الإعلانية المتاحة").bold = True
-                            set_rtl_paragraph(p_cust)
-                            
-                            # مقدمة
-                            p_stat = doc.add_paragraph()
-                            p_stat.add_run(f"نقدم لكم اللوحات المتاحة في محافظة {selected_city} من فترة ({start_p}) ولغاية ({end_p})")
-                            set_rtl_paragraph(p_stat)
-                            
-                            # معلومات القياس
-                            p_size = doc.add_paragraph()
-                            p_size.add_run(f"لوحات قياس {selected_size}")
-                            set_rtl_paragraph(p_size)
-                            
-                            # ============================================
-                            # عرض اللوحات حسب الشبكة - مع جدول 4 أعمدة
-                            # ============================================
-                            for network in available_columns['الشبكة'].unique():
-                                network_df = available_columns[available_columns['الشبكة'] == network]
-                                
-                                # عنوان الشبكة
-                                p_network = doc.add_paragraph()
-                                p_network.add_run(f"الشبكة رقم {network}").bold = True
-                                set_rtl_paragraph(p_network)
-                                
-                                # ============================================
-                                # جدول بـ 4 أعمدة (لوحتان في السطر)
-                                # ============================================
-                                # إنشاء جدول بـ 4 أعمدة
-                                table = doc.add_table(rows=1, cols=4)
-                                table.style = 'Table Grid'
-                                
-                                # تعيين عرض الأعمدة
-                                for cell in table.columns:
-                                    cell.width = Cm(4.5)
-                                
-                                # رأس الجدول
-                                hdr = table.rows[0].cells
-                                hdr[0].text = "العدد"
-                                hdr[1].text = "رقم الشبكة"
-                                hdr[2].text = "العدد"
-                                hdr[3].text = "رقم الشبكة"
-                                
-                                # تنسيق رأس الجدول
-                                for cell in hdr:
-                                    for p in cell.paragraphs:
-                                        if p.runs:
-                                            p.runs[0].bold = True
-                                            p.runs[0].font.color.rgb = RGBColor(255, 255, 255)
-                                    # خلفية أرجوانية
-                                    tc_pr = cell._element.get_or_add_tcPr()
-                                    shd = OxmlElement('w:shd')
-                                    shd.set(qn('w:fill'), PURPLE_COLOR)
-                                    tc_pr.append(shd)
-                                    set_rtl_paragraph(p)
-                                
-                                # ============================================
-                                # ملء الجدول: لوحتان في كل سطر
-                                # ============================================
-                                rows_data = network_df.to_dict('records')
-                                
-                                # تجميع البيانات في أزواج
-                                paired_data = []
-                                for i in range(0, len(rows_data), 2):
-                                    if i + 1 < len(rows_data):
-                                        paired_data.append((rows_data[i], rows_data[i+1]))
-                                    else:
-                                        paired_data.append((rows_data[i], None))
-                                
-                                for pair in paired_data:
-                                    row_cells = table.add_row().cells
-                                    
-                                    # العمود الأول (اللوحة الأولى)
-                                    if pair[0]:
-                                        row_cells[0].text = str(pair[0]['العدد'])
-                                        row_cells[1].text = str(pair[0]['الموقع'])
-                                    else:
-                                        row_cells[0].text = ""
-                                        row_cells[1].text = ""
-                                    
-                                    # العمود الثاني (اللوحة الثانية)
-                                    if pair[1]:
-                                        row_cells[2].text = str(pair[1]['العدد'])
-                                        row_cells[3].text = str(pair[1]['الموقع'])
-                                    else:
-                                        row_cells[2].text = ""
-                                        row_cells[3].text = ""
-                                    
-                                    # تطبيق RTL على جميع الخلايا
-                                    for cell in row_cells:
-                                        for p in cell.paragraphs:
-                                            set_rtl_paragraph(p)
-                                
-                                # إجمالي الشبكة
-                                total_units = int(network_df['العدد'].sum())
-                                p_total = doc.add_paragraph()
-                                p_total.add_run(f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}").bold = True
-                                set_rtl_paragraph(p_total)
-                                
-                                doc.add_paragraph()
-                            
-                            # ============================================
-                            # الإجمالي النهائي للكتالوج
-                            # ============================================
-                            doc.add_paragraph()
-                            
-                            p_grand = doc.add_paragraph()
-                            run_g = p_grand.add_run(f"العدد الإجمالي: {int(available_columns['العدد'].sum())}")
-                            run_g.bold = True
-                            run_g.font.size = Pt(14)
-                            run_g.font.color.rgb = RGBColor(102, 0, 153)
-                            set_rtl_paragraph(p_grand)
-                            
-                            doc.add_paragraph()
-                            
-                            # ============================================
-                            # ملاحظة ختامية
-                            # ============================================
-                            p_note = doc.add_paragraph()
-                            run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة للفترة المحددة.")
-                            run_note.bold = True
-                            set_rtl_paragraph(p_note)
-                            
-                            # ============================================
-                            # حفظ وتحميل الملف
-                            # ============================================
-                            target = io.BytesIO()
-                            doc.save(target)
-                            target.seek(0)
-                            
-                            st.success("✅ تم إنشاء الكتالوج بنجاح!")
-                            st.download_button(
-                                label="📥 تحميل الكتالوج",
-                                data=target,
-                                file_name=f"كتالوج_{selected_city}_{datetime.now().strftime('%Y%m%d')}.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True
+            if st.session_state.catalog_selected_boards:
+                st.divider()
+                st.subheader("📋 اللوحات المختارة للكتالوج")
+                
+                # عرض اللوحات المختارة لكل محافظة
+                total_selected = 0
+                for city, boards in st.session_state.catalog_selected_boards.items():
+                    if boards:
+                        st.markdown(f"**📍 محافظة {city}:** {len(boards)} لوحة")
+                        # جلب تفاصيل اللوحات
+                        board_placeholders = ','.join([f"'{b}'" for b in boards])
+                        boards_details = run_query(f'''
+                            SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة"
+                            FROM "اعمدة انارة" 
+                            WHERE "رقم اللوحة" IN ({board_placeholders})
+                        ''')
+                        if boards_details is not None and not boards_details.empty:
+                            st.dataframe(
+                                boards_details,
+                                use_container_width=True,
+                                hide_index=True
                             )
-                            
-                    except Exception as e:
-                        st.error(f"❌ حدث خطأ أثناء إنشاء الكتالوج: {str(e)}")
-                        st.exception(e)
+                            total_selected += len(boards)
+                
+                st.info(f"📊 إجمالي اللوحات المختارة: {total_selected}")
+                
+                # زر مسح الكتالوج
+                if st.button("🗑️ مسح جميع اللوحات المختارة", use_container_width=True):
+                    st.session_state.catalog_selected_boards = {}
+                    st.session_state.catalog_cities_added = []
+                    st.rerun()
+            else:
+                st.info("📭 لم يتم اختيار أي لوحات بعد")
+            
+            # ============================================================
+            # 7. تصدير الكتالوج
+            # ============================================================
+            
+            if st.session_state.catalog_selected_boards:
+                st.divider()
+                st.subheader("📤 تصدير الكتالوج")
+                
+                # جمع كل اللوحات المختارة
+                all_selected_boards = []
+                for city, boards in st.session_state.catalog_selected_boards.items():
+                    for board in boards:
+                        all_selected_boards.append(board)
+                
+                if all_selected_boards:
+                    # جلب تفاصيل جميع اللوحات المختارة
+                    board_placeholders = ','.join([f"'{b}'" for b in all_selected_boards])
+                    all_boards_details = run_query(f'''
+                        SELECT "رقم اللوحة", "اسم العمود" as "الموقع", "العدد", "الشبكة", "المحافظة"
+                        FROM "اعمدة انارة" 
+                        WHERE "رقم اللوحة" IN ({board_placeholders})
+                        ORDER BY "المحافظة", "الشبكة", "رقم اللوحة"
+                    ''')
+                    
+                    if all_boards_details is not None and not all_boards_details.empty:
+                        col_exp1, col_exp2, col_exp3 = st.columns([1, 2, 1])
+                        with col_exp2:
+                            if st.button("📄 تصدير الكتالوج كـ Word", use_container_width=True):
+                                try:
+                                    with st.spinner("جاري إنشاء الكتالوج..."):
+                                        from docx import Document
+                                        from docx.shared import Inches, Pt, RGBColor, Cm
+                                        from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
+                                        from docx.oxml import OxmlElement
+                                        from docx.oxml.ns import qn
+                                        import io
+                                        from datetime import datetime
+                                        import os
+                                        
+                                        # استخدام الدوال العامة
+                                        def _force_rtl_style(p):
+                                            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT  # تغيير من LEFT إلى RIGHT
+                                            pPr = p._element.get_or_add_pPr()
+                                            bidi = OxmlElement('w:bidi')
+                                            bidi.set(qn('w:val'), '1')
+                                            pPr.append(bidi)
+                                            for run in p.runs:
+                                                rPr = run._element.get_or_add_rPr()
+                                                rtl = OxmlElement('w:rtl')
+                                                rtl.set(qn('w:val'), '1')
+                                                rPr.append(rtl)
+                                        
+                                        def set_table_rtl(table):
+                                            tblPr = table._element.xpath('w:tblPr')[0]
+                                            bidi = OxmlElement('w:bidiVisual')
+                                            tblPr.append(bidi)
+                                        
+                                        # استخدام القالب
+                                        template_path = 'template.docx'
+                                        if os.path.exists(template_path):
+                                            doc = Document(template_path)
+                                        else:
+                                            doc = Document()
+                                        
+                                        PURPLE_COLOR = "660099"
+                                        
+                                        # التاريخ
+                                        today_date = datetime.now().strftime("%d / %m / %Y")
+                                        p_date = doc.add_paragraph()
+                                        p_date.add_run(f"التاريخ: {today_date}")
+                                        _force_rtl_style(p_date)
+                                        
+                                        doc.add_paragraph()
+                                        
+                                        # العنوان الرئيسي
+                                        p_cust = doc.add_paragraph()
+                                        p_cust.add_run(f"كتالوج اللوحات الإعلانية المتاحة").bold = True
+                                        _force_rtl_style(p_cust)
+                                        
+                                        # مقدمة
+                                        p_stat = doc.add_paragraph()
+                                        p_stat.add_run(f"نقدم لكم اللوحات المتاحة من فترة ({start_p}) ولغاية ({end_p})")
+                                        _force_rtl_style(p_stat)
+                                        
+                                        # عرض حسب المحافظة
+                                        for city in all_boards_details['المحافظة'].unique():
+                                            city_df = all_boards_details[all_boards_details['المحافظة'] == city]
+                                            
+                                            p_city = doc.add_paragraph()
+                                            p_city.add_run(f"محافظة {city}").bold = True
+                                            _force_rtl_style(p_city)
+                                            
+                                            # معلومات القياس
+                                            p_size = doc.add_paragraph()
+                                            p_size.add_run(f"لوحات قياس {selected_size}")
+                                            _force_rtl_style(p_size)
+                                            
+                                            # عرض حسب الشبكة
+                                            for network in city_df['الشبكة'].unique():
+                                                network_df = city_df[city_df['الشبكة'] == network]
+                                                
+                                                p_network = doc.add_paragraph()
+                                                p_network.add_run(f"الشبكة رقم {network}").bold = True
+                                                _force_rtl_style(p_network)
+                                                
+                                                # جدول 4 أعمدة
+                                                table = doc.add_table(rows=1, cols=4)
+                                                table.style = 'Table Grid'
+                                                
+                                                # تعيين عرض الأعمدة
+                                                for cell in table.columns:
+                                                    cell.width = Cm(4.5)
+                                                
+                                                # رأس الجدول
+                                                hdr = table.rows[0].cells
+                                                hdr[0].text = "العدد"
+                                                hdr[1].text = "رقم الشبكة"
+                                                hdr[2].text = "العدد"
+                                                hdr[3].text = "رقم الشبكة"
+                                                
+                                                for cell in hdr:
+                                                    for p in cell.paragraphs:
+                                                        if p.runs:
+                                                            p.runs[0].bold = True
+                                                            p.runs[0].font.color.rgb = RGBColor(255, 255, 255)
+                                                    tc_pr = cell._element.get_or_add_tcPr()
+                                                    shd = OxmlElement('w:shd')
+                                                    shd.set(qn('w:fill'), PURPLE_COLOR)
+                                                    tc_pr.append(shd)
+                                                    _force_rtl_style(p)
+                                                
+                                                # ملء الجدول
+                                                rows_data = network_df.to_dict('records')
+                                                paired_data = []
+                                                for i in range(0, len(rows_data), 2):
+                                                    if i + 1 < len(rows_data):
+                                                        paired_data.append((rows_data[i], rows_data[i+1]))
+                                                    else:
+                                                        paired_data.append((rows_data[i], None))
+                                                
+                                                for pair in paired_data:
+                                                    row_cells = table.add_row().cells
+                                                    
+                                                    if pair[0]:
+                                                        row_cells[0].text = str(pair[0]['العدد'])
+                                                        row_cells[1].text = str(pair[0]['الموقع'])
+                                                    else:
+                                                        row_cells[0].text = ""
+                                                        row_cells[1].text = ""
+                                                    
+                                                    if pair[1]:
+                                                        row_cells[2].text = str(pair[1]['العدد'])
+                                                        row_cells[3].text = str(pair[1]['الموقع'])
+                                                    else:
+                                                        row_cells[2].text = ""
+                                                        row_cells[3].text = ""
+                                                    
+                                                    for cell in row_cells:
+                                                        for p in cell.paragraphs:
+                                                            _force_rtl_style(p)
+                                                
+                                                # إجمالي الشبكة
+                                                total_units = int(network_df['العدد'].sum())
+                                                p_total = doc.add_paragraph()
+                                                p_total.add_run(f"إجمالي عدد اللوحات في الشبكة: {len(network_df)} | إجمالي الوحدات: {total_units}").bold = True
+                                                _force_rtl_style(p_total)
+                                                
+                                                doc.add_paragraph()
+                                        
+                                        # الإجمالي النهائي
+                                        doc.add_paragraph()
+                                        total_all = int(all_boards_details['العدد'].sum())
+                                        p_grand = doc.add_paragraph()
+                                        run_g = p_grand.add_run(f"العدد الإجمالي: {total_all}")
+                                        run_g.bold = True
+                                        run_g.font.size = Pt(14)
+                                        run_g.font.color.rgb = RGBColor(102, 0, 153)
+                                        _force_rtl_style(p_grand)
+                                        
+                                        doc.add_paragraph()
+                                        
+                                        # ملاحظة
+                                        p_note = doc.add_paragraph()
+                                        run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة للفترة المحددة.")
+                                        run_note.bold = True
+                                        _force_rtl_style(p_note)
+                                        
+                                        # حفظ وتحميل
+                                        target = io.BytesIO()
+                                        doc.save(target)
+                                        target.seek(0)
+                                        
+                                        st.success("✅ تم إنشاء الكتالوج بنجاح!")
+                                        st.download_button(
+                                            label="📥 تحميل الكتالوج",
+                                            data=target,
+                                            file_name=f"كتالوج_{datetime.now().strftime('%Y%m%d')}.docx",
+                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            use_container_width=True
+                                        )
+                                        
+                                except Exception as e:
+                                    st.error(f"❌ حدث خطأ أثناء إنشاء الكتالوج: {str(e)}")
+                                    st.exception(e)
             
             # ============================================================
             # 8. خيارات إضافية (للمديرين فقط)
