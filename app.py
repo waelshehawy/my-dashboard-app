@@ -710,7 +710,7 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
     return valid
 
 # ============================================================
-# عرض الصفحات
+# عرض الصفحات- لوحات الشركات
 # ============================================================
 page = st.session_state.get("main_menu", "🏢 لوحات الشركات")
 
