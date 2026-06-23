@@ -1278,9 +1278,9 @@ elif page == "📅 لوحة الفترات":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
-#=================
-# لوحة المراقبة
-#==================
+# ============================================================
+# صفحة: Dashboard (لوحة المراقبة) - نسخة معدلة
+# ============================================================
 
 elif page == "📊 Dashboard":
     st.markdown("""
@@ -1292,25 +1292,32 @@ elif page == "📊 Dashboard":
     
     current_year = datetime.now().year
     
-    all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
+    # ✅ استخدام @st.cache_data لتجنب إعادة التحميل المتكرر
+    @st.cache_data(ttl=300)
+    def load_dashboard_data(current_year):
+        all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
+        booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
+        booked_df = run_query(booked_query, (current_year,))
+        return all_columns, booked_df
     
-    booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
-    booked_df = run_query(booked_query, (current_year,))
+    all_columns, booked_df = load_dashboard_data(current_year)
     
     booked_boards_list = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
     
     all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_boards_list else 'متاح')
     
+    # ✅ حساب الإحصائيات باستخدام العدد الحقيقي
     total_boards = all_columns['العدد'].sum()
     booked_boards = all_columns[all_columns['الحالة'] == 'محجوز']['العدد'].sum()
     available_boards = total_boards - booked_boards
     occupancy_rate = (booked_boards / total_boards * 100) if total_boards > 0 else 0
     
+    # ✅ عرض البطاقات
     cols = st.columns(4)
     metrics_data = [
-        ("إجمالي اللوحات", total_boards, "🏢", "primary"),
-        ("محجوز", booked_boards, "🔴", "danger"),
-        ("متاح", available_boards, "🟢", "success"),
+        ("إجمالي اللوحات", int(total_boards), "🏢", "primary"),
+        ("محجوز", int(booked_boards), "🔴", "danger"),
+        ("متاح", int(available_boards), "🟢", "success"),
         ("نسبة الإشغال", f"{occupancy_rate:.1f}%", "📈", "warning")
     ]
     
@@ -1318,6 +1325,7 @@ elif page == "📊 Dashboard":
         with cols[idx]:
             st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
     
+    # ✅ شريط التقدم
     st.markdown(f"""
     <div style="margin: 20px 0;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -1332,6 +1340,7 @@ elif page == "📊 Dashboard":
     
     st.divider()
     
+    # ✅ الرسوم البيانية
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
@@ -1366,8 +1375,14 @@ elif page == "📊 Dashboard":
     
     st.divider()
     
+    # ✅ الخريطة
     st.subheader("🗺️ توزع اللوحات على الخريطة")
-    all_columns_map = run_query('SELECT * FROM "اعمدة انارة"')
+    
+    @st.cache_data(ttl=600)
+    def load_map_data():
+        return run_query('SELECT * FROM "اعمدة انارة"')
+    
+    all_columns_map = load_map_data()
     
     m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
     marker_cluster = MarkerCluster().add_to(m)
