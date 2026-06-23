@@ -911,6 +911,10 @@ if page == "🏢 لوحات الشركات":
                     # عرض البطاقة مع صورة خلفية
                     # ============================================================
                     
+# ============================================================
+# عرض البطاقة مع صورة خلفية - مع إزاحة 20px
+# ============================================================
+
                     st.markdown(f'''
                     <div style="
                         background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('{company_image}');
@@ -918,7 +922,7 @@ if page == "🏢 لوحات الشركات":
                         background-position: center;
                         border-radius: 20px;
                         padding: 20px;
-                        margin-bottom: 20px;
+                        margin: 20px 10px 20px 10px;
                         color: white;
                         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
                         transition: all 0.3s ease;
@@ -933,65 +937,24 @@ if page == "🏢 لوحات الشركات":
                     onmouseover="this.style.transform='translateY(-8px) scale(1.02)'; this.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)';"
                     onmouseout="this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 10px 30px rgba(0,0,0,0.3)';"
                     >
-                        <!-- شريط الحالة في الأعلى -->
-                        <div style="
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: start;
-                        ">
-                            <div style="
-                                background: rgba(0,0,0,0.5);
-                                padding: 4px 12px;
-                                border-radius: 20px;
-                                font-size: 12px;
-                                backdrop-filter: blur(4px);
-                            ">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="background: rgba(0,0,0,0.5); padding: 4px 12px; border-radius: 20px; font-size: 12px; backdrop-filter: blur(4px);">
                                 #{rank} {status_icon} {status_text}
                             </div>
-                            <span style="
-                                background: rgba(0,0,0,0.5);
-                                padding: 4px 12px;
-                                border-radius: 20px;
-                                font-size: 12px;
-                                backdrop-filter: blur(4px);
-                            ">{year}</span>
+                            <span style="background: rgba(0,0,0,0.5); padding: 4px 12px; border-radius: 20px; font-size: 12px; backdrop-filter: blur(4px);">{year}</span>
                         </div>
                         
-                        <!-- معلومات الشركة -->
                         <div style="text-align: center;">
-                            <h2 style="
-                                margin: 0;
-                                font-size: 22px;
-                                font-weight: bold;
-                                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-                            ">🏢 {company_name}</h2>
-                            <div style="
-                                margin-top: 8px;
-                                font-size: 14px;
-                                opacity: 0.9;
-                                text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
-                            ">
+                            <h2 style="margin: 0; font-size: 22px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">🏢 {company_name}</h2>
+                            <div style="margin-top: 8px; font-size: 14px; opacity: 0.9; text-shadow: 1px 1px 3px rgba(0,0,0,0.5);">
                                 📅 {first_period} → {last_period}
                             </div>
-                            <div style="
-                                margin-top: 4px;
-                                font-size: 12px;
-                                opacity: 0.8;
-                                text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
-                            ">
+                            <div style="margin-top: 4px; font-size: 12px; opacity: 0.8; text-shadow: 1px 1px 3px rgba(0,0,0,0.5);">
                                 ⏱️ المدة: {period_duration} فترة
                             </div>
                         </div>
                         
-                        <!-- الإحصائيات -->
-                        <div style="
-                            display: flex;
-                            justify-content: space-around;
-                            padding: 10px 0;
-                            background: rgba(0,0,0,0.3);
-                            border-radius: 12px;
-                            backdrop-filter: blur(4px);
-                        ">
+                        <div style="display: flex; justify-content: space-around; padding: 10px 0; background: rgba(0,0,0,0.3); border-radius: 12px; backdrop-filter: blur(4px);">
                             <div style="text-align: center;">
                                 <div style="font-size: 28px; font-weight: bold;">{total_boards}</div>
                                 <div style="font-size: 12px; opacity: 0.8;">📊 لوحات</div>
@@ -1006,22 +969,9 @@ if page == "🏢 لوحات الشركات":
                             </div>
                         </div>
                         
-                        <!-- أزرار سريعة -->
                         <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
-                            <span style="
-                                background: rgba(255,255,255,0.15);
-                                padding: 2px 10px;
-                                border-radius: 12px;
-                                font-size: 11px;
-                                backdrop-filter: blur(4px);
-                            ">🟢 نشط</span>
-                            <span style="
-                                background: rgba(255,255,255,0.15);
-                                padding: 2px 10px;
-                                border-radius: 12px;
-                                font-size: 11px;
-                                backdrop-filter: blur(4px);
-                            ">📌 {total_boards} لوحة</span>
+                            <span style="background: rgba(255,255,255,0.15); padding: 2px 10px; border-radius: 12px; font-size: 11px; backdrop-filter: blur(4px);">🟢 نشط</span>
+                            <span style="background: rgba(255,255,255,0.15); padding: 2px 10px; border-radius: 12px; font-size: 11px; backdrop-filter: blur(4px);">📌 {total_boards} لوحة</span>
                         </div>
                     </div>
                     ''', unsafe_allow_html=True)
