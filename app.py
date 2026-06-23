@@ -723,6 +723,10 @@ page = st.session_state.get('page', "🏢 لوحات الشركات")
 # الصفحة الأولى: لوحات الشركات (if)
 # ============================================================
 
+# ============================================================
+# صفحة: لوحات الشركات (مع تصحيح STRING_AGG)
+# ============================================================
+
 if page == "🏢 لوحات الشركات":
     st.title("🏢 لوحات الشركات المعلنة")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -735,6 +739,8 @@ if page == "🏢 لوحات الشركات":
     def load_companies_data():
         try:
             conn = get_connection()
+            
+            # جلب الفترات الحالية والمستقبلية
             periods_df = pd.read_sql_query('''
                 SELECT namee, no FROM "الفترة" 
                 WHERE no >= (SELECT MIN(no) FROM "الفترة" WHERE no >= (
@@ -752,13 +758,15 @@ if page == "🏢 لوحات الشركات":
             
             if current_periods:
                 placeholders = ','.join([f"'{p}'" for p in current_periods])
+                
+                # ✅ تصحيح: تحويل "رقم اللوحة" إلى نص باستخدام CAST
                 bookings_df = pd.read_sql_query(f'''
                     SELECT 
                         "اسم الزبون" as company_name,
                         COUNT(DISTINCT "رقم اللوحة") as total_boards,
                         COUNT(DISTINCT "فترة الحجز") as total_periods,
                         STRING_AGG(DISTINCT "فترة الحجز", ' | ') as periods_list,
-                        STRING_AGG(DISTINCT "رقم اللوحة", ', ') as boards_list,
+                        STRING_AGG(DISTINCT CAST("رقم اللوحة" AS TEXT), ', ') as boards_list,
                         MIN("فترة الحجز") as first_period,
                         MAX("فترة الحجز") as last_period,
                         "العام"
@@ -773,6 +781,7 @@ if page == "🏢 لوحات الشركات":
             
             conn.close()
             return {'bookings': bookings_df, 'current_periods': current_periods}
+            
         except Exception as e:
             st.error(f"❌ خطأ في تحميل البيانات: {str(e)}")
             return None
@@ -926,6 +935,9 @@ if page == "🏢 لوحات الشركات":
                             safe_rerun()
     else:
         st.warning("⚠️ لا توجد شركات معلنة حالياً")
+        st.info("💡 ستظهر الشركات هنا عندما يكون لديها حجوزات في الفترات الحالية أو المستقبلية")
+    
+    # باقي الكود (تفاصيل الشركة والخريطة)...
     
     if st.session_state.get('show_company_details', False):
         company_name = st.session_state.get('selected_company', '')
