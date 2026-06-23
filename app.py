@@ -1483,73 +1483,79 @@ elif page == "📊 Dashboard":
     # الخريطة
     # ============================================================
     
-    st.subheader("🗺️ توزع اللوحات على الخريطة")
+    # ============================================================
+    # الخريطة (مع زر عرض/إخفاء)
+    # ============================================================
     
-    @st.cache_data(ttl=600)
-    def load_map_data():
-        return run_query('SELECT * FROM "اعمدة انارة"')
-    
-    all_columns_map = load_map_data()
-    
-    # ✅ جلب أسماء الزبائن للوحات المحجوزة
-    @st.cache_data(ttl=600)
-    def load_customer_names():
-        return run_query('SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = %s', (current_year,))
-    
-    customers_df = load_customer_names()
-    customer_dict = dict(zip(customers_df['رقم اللوحة'].astype(str), customers_df['اسم الزبون']))
-    
-    # ✅ خريطة بدون تقييد
-    m = folium.Map(
-        location=SYRIA_COORDS["سوريا"], 
-        zoom_start=7,
-        height=480
-    )
-    marker_cluster = MarkerCluster().add_to(m)
-    
-    booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
-    
-    for _, row in all_columns_map.iterrows():
-        if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
-            is_booked = row['رقم اللوحة'] in booked_boards_list
-            board_id = str(row['رقم اللوحة'])
-            
-            if is_booked:
-                color = 'red'
-                status_text = '🔴 محجوز'
-                customer_name = customer_dict.get(board_id, '')
-                customer_line = f"👤 الزبون: {customer_name}<br>" if customer_name else ""
-            else:
-                color = 'green'
-                status_text = '🟢 متاح'
-                customer_line = ""
-            
-            network = row.get('الشبكة', 0)
-            network_display = str(int(network)) if network is not None and network != 0 else 'بدون شبكة'
-            board_count = int(row['العدد'])
-            
-            popup_html = f"""
-            <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;padding:5px;">
-                <b>🏢 {row['اسم العمود']}</b><br>
-                📍 {row['المحافظة']}<br>
-                📡 الشبكة: {network_display}<br>
-                📏 {row['الحجم']}<br>
-                🔢 العدد: {board_count} لوحة<br>
-                {customer_line}
-                {status_text}
-            </div>
-            """
-            
-            folium.Marker(
-                [row['Latitude'], row['Longitude']],
-                popup=folium.Popup(popup_html, max_width=350),
-                icon=folium.Icon(color=color)
-            ).add_to(marker_cluster)
-    
-    # ✅ عرض الخريطة مع ارتفاع ثابت فقط (بدون returned_objects)
-    st_folium(m, width="100%", height=480, key="dashboard_map")
-    
-    st.caption("📍 اضغط على أيقونة لعرض تفاصيل اللوحة")
+    # ✅ استخدام st.expander لتوسيع الخريطة فقط عند الطلب
+    with st.expander("🗺️ عرض الخريطة", expanded=False):
+        
+        @st.cache_data(ttl=600)
+        def load_map_data():
+            return run_query('SELECT * FROM "اعمدة انارة"')
+        
+        all_columns_map = load_map_data()
+        
+        # ✅ جلب أسماء الزبائن للوحات المحجوزة
+        @st.cache_data(ttl=600)
+        def load_customer_names():
+            return run_query('SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = %s', (current_year,))
+        
+        customers_df = load_customer_names()
+        customer_dict = dict(zip(customers_df['رقم اللوحة'].astype(str), customers_df['اسم الزبون']))
+        
+        # ✅ إنشاء الخريطة
+        m = folium.Map(
+            location=SYRIA_COORDS["سوريا"], 
+            zoom_start=7,
+            height=480
+        )
+        marker_cluster = MarkerCluster().add_to(m)
+        
+        booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
+        
+        for _, row in all_columns_map.iterrows():
+            if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
+                is_booked = row['رقم اللوحة'] in booked_boards_list
+                board_id = str(row['رقم اللوحة'])
+                
+                if is_booked:
+                    color = 'red'
+                    status_text = '🔴 محجوز'
+                    customer_name = customer_dict.get(board_id, '')
+                    customer_line = f"👤 الزبون: {customer_name}<br>" if customer_name else ""
+                else:
+                    color = 'green'
+                    status_text = '🟢 متاح'
+                    customer_line = ""
+                
+                network = row.get('الشبكة', 0)
+                network_display = str(int(network)) if network is not None and network != 0 else 'بدون شبكة'
+                board_count = int(row['العدد'])
+                
+                popup_html = f"""
+                <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;padding:5px;">
+                    <b>🏢 {row['اسم العمود']}</b><br>
+                    📍 {row['المحافظة']}<br>
+                    📡 الشبكة: {network_display}<br>
+                    📏 {row['الحجم']}<br>
+                    🔢 العدد: {board_count} لوحة<br>
+                    {customer_line}
+                    {status_text}
+                </div>
+                """
+                
+                folium.Marker(
+                    [row['Latitude'], row['Longitude']],
+                    popup=folium.Popup(popup_html, max_width=350),
+                    icon=folium.Icon(color=color)
+                ).add_to(marker_cluster)
+        
+        # ✅ عرض الخريطة داخل expander
+        st_folium(m, width="100%", height=480, key="dashboard_map")
+        
+        # ✅ تذييل صغير
+        st.caption("📍 اضغط على أيقونة لعرض تفاصيل اللوحة • 🟢 متاح • 🔴 محجوز")
 #============================
 # عرض سعر
 #=============================
