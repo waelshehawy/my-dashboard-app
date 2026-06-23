@@ -709,22 +709,13 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
     
     return valid
 
-# ============================================================
-# عرض الصفحات- لوحات الشركات
-# ============================================================
 
-# ============================================================
-# عرض الصفحة المحددة
-# ============================================================
-
-page = st.session_state.get('page', "🏢 لوحات الشركات")
-
-# ============================================================
-# الصفحة الأولى: لوحات الشركات (if)
-# ============================================================
 
 # ============================================================
 # صفحة: لوحات الشركات (مع تصحيح STRING_AGG)
+# ============================================================
+# ============================================================
+# صفحة: لوحات الشركات
 # ============================================================
 
 if page == "🏢 لوحات الشركات":
@@ -740,7 +731,6 @@ if page == "🏢 لوحات الشركات":
         try:
             conn = get_connection()
             
-            # جلب الفترات الحالية والمستقبلية
             periods_df = pd.read_sql_query('''
                 SELECT namee, no FROM "الفترة" 
                 WHERE no >= (SELECT MIN(no) FROM "الفترة" WHERE no >= (
@@ -758,8 +748,6 @@ if page == "🏢 لوحات الشركات":
             
             if current_periods:
                 placeholders = ','.join([f"'{p}'" for p in current_periods])
-                
-                # ✅ تصحيح: تحويل "رقم اللوحة" إلى نص باستخدام CAST
                 bookings_df = pd.read_sql_query(f'''
                     SELECT 
                         "اسم الزبون" as company_name,
@@ -781,7 +769,6 @@ if page == "🏢 لوحات الشركات":
             
             conn.close()
             return {'bookings': bookings_df, 'current_periods': current_periods}
-            
         except Exception as e:
             st.error(f"❌ خطأ في تحميل البيانات: {str(e)}")
             return None
@@ -861,7 +848,7 @@ if page == "🏢 لوحات الشركات":
                     else:
                         card_color = "linear-gradient(135deg, #f093fb, #f5576c)"
                     
-                    st.markdown(f"""
+                    st.markdown(f'''
                     <div style="
                         background: {card_color};
                         border-radius: 20px;
@@ -882,18 +869,12 @@ if page == "🏢 لوحات الشركات":
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: start;">
                                 <h3 style="margin: 0; font-size: 18px; font-weight: bold;">🏢 {company_name}</h3>
-                                <span style="
-                                    background: rgba(255,255,255,0.2);
-                                    padding: 4px 12px;
-                                    border-radius: 20px;
-                                    font-size: 12px;
-                                ">{year}</span>
+                                <span style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-size: 12px;">{year}</span>
                             </div>
                             <div style="margin-top: 10px; font-size: 13px; opacity: 0.9;">
                                 📅 {first_period} → {last_period}
                             </div>
                         </div>
-                        
                         <div style="display: flex; justify-content: space-around; padding: 10px 0;">
                             <div style="text-align: center;">
                                 <div style="font-size: 28px; font-weight: bold;">{total_boards}</div>
@@ -904,23 +885,12 @@ if page == "🏢 لوحات الشركات":
                                 <div style="font-size: 12px; opacity: 0.8;">📅 فترات</div>
                             </div>
                         </div>
-                        
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <span style="
-                                background: rgba(255,255,255,0.2);
-                                padding: 2px 10px;
-                                border-radius: 12px;
-                                font-size: 11px;
-                            ">🟢 نشط</span>
-                            <span style="
-                                background: rgba(255,255,255,0.2);
-                                padding: 2px 10px;
-                                border-radius: 12px;
-                                font-size: 11px;
-                            ">📌 {total_boards} لوحة</span>
+                            <span style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; font-size: 11px;">🟢 نشط</span>
+                            <span style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; font-size: 11px;">📌 {total_boards} لوحة</span>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    ''', unsafe_allow_html=True)
                     
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
@@ -937,8 +907,6 @@ if page == "🏢 لوحات الشركات":
         st.warning("⚠️ لا توجد شركات معلنة حالياً")
         st.info("💡 ستظهر الشركات هنا عندما يكون لديها حجوزات في الفترات الحالية أو المستقبلية")
     
-    # باقي الكود (تفاصيل الشركة والخريطة)...
-    
     if st.session_state.get('show_company_details', False):
         company_name = st.session_state.get('selected_company', '')
         if company_name:
@@ -950,10 +918,7 @@ if page == "🏢 لوحات الشركات":
                 try:
                     conn = get_connection()
                     bookings_detail = pd.read_sql_query('''
-                        SELECT 
-                            "رقم اللوحة",
-                            "فترة الحجز",
-                            "العام"
+                        SELECT "رقم اللوحة", "فترة الحجز", "العام"
                         FROM "حجوزات1" 
                         WHERE "اسم الزبون" = %s
                         ORDER BY "العام" DESC, "فترة الحجز"
@@ -963,12 +928,7 @@ if page == "🏢 لوحات الشركات":
                         board_numbers = bookings_detail['رقم اللوحة'].unique().tolist()
                         placeholders = ','.join([f"'{b}'" for b in board_numbers])
                         boards_info = pd.read_sql_query(f'''
-                            SELECT 
-                                "رقم اللوحة",
-                                "اسم العمود" as location,
-                                "المحافظة" as city,
-                                "الشبكة" as network,
-                                "الحجم" as size
+                            SELECT "رقم اللوحة", "اسم العمود" as location, "المحافظة" as city, "الشبكة" as network, "الحجم" as size
                             FROM "اعمدة انارة"
                             WHERE "رقم اللوحة" IN ({placeholders})
                         ''', conn)
@@ -1101,6 +1061,7 @@ if page == "🏢 لوحات الشركات":
             if st.button("🔙 إغلاق الخريطة", use_container_width=True):
                 st.session_state['show_company_map'] = False
                 safe_rerun()
+            
 
 
 
