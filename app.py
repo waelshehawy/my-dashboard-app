@@ -35,13 +35,13 @@ st.set_page_config(
 # ============================================================
 
 def get_connection():
-    """اتصال مباشر بـ Supabase PostgreSQL"""
+    """اتصال مباشر بـ Supabase PostgreSQL باستخدام st.secrets"""
     return psycopg2.connect(
-        host=os.environ.get("SUPABASE_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
-        port=os.environ.get("SUPABASE_PORT", "6543"),
-        database=os.environ.get("SUPABASE_DB", "postgres"),
-        user=os.environ.get("SUPABASE_USER", "postgres.ncuofpvbaglwbdqnpman"),
-        password=os.environ.get("SUPABASE_PASSWORD", "W@elPreview2026"),
+        host=st.secrets["SUPABASE_HOST"],
+        port=st.secrets["SUPABASE_PORT"],
+        database=st.secrets["SUPABASE_DB"],
+        user=st.secrets["SUPABASE_USER"],
+        password=st.secrets["SUPABASE_PASSWORD"],
         sslmode="require",
         connect_timeout=30
     )
