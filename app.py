@@ -1261,277 +1261,253 @@ def ensure_db_connection():
 # صفحة: لوحة التحكم البصرية للفترات
 # ============================================================
 
+# ============================================================
+# صفحة: لوحة التحكم البصرية للفترات (محسنة)
+# ============================================================
+
 elif page == "📅 لوحة الفترات":
+    # ============================================================
+    # إعداد الصفحة ومنع الريفريش المتكرر
+    # ============================================================
+    
+    st.session_state.current_page = "📅 لوحة الفترات"
+    
+    if st.session_state.get('processing', False):
+        st.warning("⏳ جاري معالجة طلب سابق، الرجاء الانتظار...")
+        st.stop()
+    
     st.title("📅 لوحة التحكم البصرية للفترات")
     st.info("📌 عرض المتاح والمحجوز لكل فترة مع تفاصيل اللوحات المتاحة")
     
     # ============================================================
-    # بناء PERIOD_ORDER من قاعدة البيانات
-    # ============================================================
-    
-    def build_period_order():
-        conn = get_connection()
-        df = pd.read_sql_query('SELECT no, namee FROM "الفترة" ORDER BY no', conn)
-        conn.close()
-        return {row['namee']: row['no'] for _, row in df.iterrows()}
-    
-    PERIOD_ORDER = build_period_order()
-    
-    # ============================================================
-    # الفلاتر
-    # ============================================================
-    
-    col_filter1, col_filter2 = st.columns(2)
-    
-    with col_filter1:
-        conn = get_connection()
-        cities_df = pd.read_sql_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"', conn)
-        conn.close()
-        city_list = ['جميع المحافظات'] + cities_df['المحافظة'].tolist()
-        selected_city = st.selectbox("🏙️ اختر المحافظة:", city_list)
-    
-    with col_filter2:
-        conn = get_connection()
-        sizes_df = pd.read_sql_query('SELECT DISTINCT "الحجم" FROM "اعمدة انارة" ORDER BY "الحجم"', conn)
-        conn.close()
-        size_list = ['جميع الأحجام'] + sizes_df['الحجم'].tolist()
-        selected_size = st.selectbox("📏 اختر الحجم:", size_list)
-    
-    # ============================================================
-    # جلب البيانات
+    # تحميل البيانات مع التخزين المؤقت
     # ============================================================
     
     @st.cache_data(ttl=300)
-    def load_period_data(selected_city, selected_size, PERIOD_ORDER):
-        conn = get_connection()
-        
-        where_conditions = []
-        if selected_city != 'جميع المحافظات':
-            where_conditions.append(f'"المحافظة" = \'{selected_city}\'')
-        if selected_size != 'جميع الأحجام':
-            where_conditions.append(f'"الحجم" = \'{selected_size}\'')
-        
-        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-        
-        boards_query = f"""
-        SELECT 
-            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-            "اسم العمود",
-            "المحافظة",
-            "الشبكة",
-            "الحجم",
-            "العدد"
-        FROM "اعمدة انارة"
-        WHERE {where_clause}
-        """
-        boards_df = pd.read_sql_query(boards_query, conn)
-        
-        bookings_query = """
-        SELECT 
-            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-            "اسم الزبون",
-            "فترة الحجز",
-            "العام"
-        FROM "حجوزات1"
-        WHERE "العام" = 2026
-        """
-        bookings_df = pd.read_sql_query(bookings_query, conn)
-        conn.close()
-        
-        bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(
-            lambda x: PERIOD_ORDER.get(x, 99)
+    def load_period_data():
+        """تحميل جميع البيانات اللازمة للوحة الفترات"""
+        try:
+            # جلب جميع الفترات
+            periods_df = run_query('SELECT no, namee FROM "الفترة" ORDER BY no', use_cache=True)
+            
+            # جلب جميع الأعمدة
+            columns_df = run_query('SELECT * FROM "اعمدة انارة"', use_cache=True)
+            
+            # جلب جميع الحجوزات
+            bookings_df = run_query('SELECT * FROM "حجوزات1"', use_cache=True)
+            
+            return {
+                'periods': periods_df,
+                'columns': columns_df,
+                'bookings': bookings_df
+            }
+        except Exception as e:
+            st.error(f"❌ خطأ في تحميل البيانات: {str(e)}")
+            return None
+    
+    # ============================================================
+    # عرض البيانات مع مؤشر تحميل
+    # ============================================================
+    
+    with st.spinner("🔄 جاري تحميل بيانات الفترات..."):
+        data = load_period_data()
+    
+    if data is None:
+        st.error("❌ فشل تحميل البيانات")
+        st.stop()
+    
+    periods_df = data['periods']
+    columns_df = data['columns']
+    bookings_df = data['bookings']
+    
+    # التحقق من صحة البيانات
+    if periods_df is None or periods_df.empty:
+        st.warning("⚠️ لا توجد فترات في قاعدة البيانات")
+        st.stop()
+    
+    if columns_df is None or columns_df.empty:
+        st.warning("⚠️ لا توجد أعمدة في قاعدة البيانات")
+        st.stop()
+    
+    # ============================================================
+    # خيارات التصفية
+    # ============================================================
+    
+    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    
+    with col_filter1:
+        # اختيار العام
+        available_years = bookings_df['العام'].unique().tolist() if bookings_df is not None and not bookings_df.empty else [2026]
+        selected_year = st.selectbox(
+            "📅 العام:",
+            sorted(available_years, reverse=True),
+            index=0,
+            key="period_year_select"
         )
-        
-        return boards_df, bookings_df
     
-    boards_df, bookings_df = load_period_data(selected_city, selected_size, PERIOD_ORDER)
+    with col_filter2:
+        # اختيار المحافظة
+        cities = columns_df['المحافظة'].unique().tolist() if columns_df is not None else []
+        selected_city = st.selectbox(
+            "🏙️ المحافظة:",
+            ["جميع المحافظات"] + cities,
+            key="period_city_select"
+        )
     
-    # ============================================================
-    # الحصول على الفترات من PERIOD_ORDER
-    # ============================================================
-    
-    sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
-    all_period_names = [p[0] for p in sorted_periods]
-    
-    # ============================================================
-    # حساب الإحصائيات لكل فترة
-    # ============================================================
-    
-    total_boards = boards_df['العدد'].sum()
-    period_stats = []
-    period_details = {}
-    
-    for period_name, period_num in sorted_periods:
-        # اللوحات المحجوزة في هذه الفترة
-        booked_boards = bookings_df[bookings_df['period_num'] == period_num]['رقم اللوحة'].unique()
-        booked_boards_list = list(booked_boards)
-        
-        # تفاصيل اللوحات المحجوزة
-        booked_details = boards_df[boards_df['رقم اللوحة'].isin(booked_boards_list)]
-        
-        # ✅ اللوحات المتاحة في هذه الفترة (جميع اللوحات - المحجوزة)
-        available_boards = boards_df[~boards_df['رقم اللوحة'].isin(booked_boards_list)]
-        
-        # الزبائن في هذه الفترة
-        customers = bookings_df[bookings_df['period_num'] == period_num]['اسم الزبون'].unique()
-        customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
-        
-        period_stats.append({
-            'الفترة': period_name,
-            'رقم الفترة': period_num,
-            'إجمالي اللوحات': int(total_boards),
-            'محجوز': int(booked_details['العدد'].sum()),
-            'متاح': int(total_boards - booked_details['العدد'].sum()),
-            'عدد الزبائن': len(customers),
-            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد'
-        })
-        
-        period_details[period_name] = {
-            'booked_details': booked_details,
-            'available_details': available_boards,  # ✅ اللوحات المتاحة
-            'customers': customers,
-            'booked_boards': booked_boards_list
-        }
-    
-    period_df = pd.DataFrame(period_stats)
+    with col_filter3:
+        # اختيار الحجم
+        sizes = columns_df['الحجم'].unique().tolist() if columns_df is not None else []
+        selected_size = st.selectbox(
+            "📏 الحجم:",
+            ["جميع الأحجام"] + sizes,
+            key="period_size_select"
+        )
     
     # ============================================================
-    # عرض النتائج
+    # عرض إحصائيات سريعة
     # ============================================================
     
-    st.subheader("📊 إحصائيات عامة")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("🏢 إجمالي اللوحات", int(total_boards))
-    col2.metric("📅 عدد الفترات", len(all_period_names))
-    col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
+    st.subheader("📊 إحصائيات سريعة")
+    
+    # حساب الإحصائيات
+    total_columns = len(columns_df) if columns_df is not None else 0
+    total_bookings = len(bookings_df[bookings_df['العام'] == selected_year]) if bookings_df is not None and not bookings_df.empty else 0
+    total_periods = len(periods_df) if periods_df is not None else 0
+    
+    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+    
+    with col_stat1:
+        st.metric("📊 إجمالي الأعمدة", total_columns)
+    with col_stat2:
+        st.metric("📋 إجمالي الحجوزات", total_bookings)
+    with col_stat3:
+        st.metric("📅 عدد الفترات", total_periods)
+    with col_stat4:
+        available = total_columns - (total_bookings / total_periods if total_periods > 0 else 0)
+        st.metric("🟢 المتوسط المتاح", f"{available:.0f}")
     
     st.divider()
     
-    st.subheader("📋 الفترات")
-    
-    for i in range(0, len(all_period_names), 4):
-        cols = st.columns(4)
-        for j, col in enumerate(cols):
-            if i + j < len(all_period_names):
-                period_name = all_period_names[i + j]
-                stats = period_stats[i + j]
-                
-                with col:
-                    if stats['محجوز'] == 0:
-                        bg_color = "#e8f5e9"
-                        border_color = "#4CAF50"
-                    else:
-                        bg_color = "#fff3e0"
-                        border_color = "#FF9800"
-                    
-                    st.markdown(f"""
-                    <div style="background:{bg_color};border:2px solid {border_color};border-radius:12px;padding:15px;text-align:center;margin:5px 0;">
-                        <div style="font-size:14px;font-weight:bold;">{period_name}</div>
-                        <div style="font-size:12px;margin-top:5px;">🟢 {stats['متاح']} | 🔴 {stats['محجوز']}</div>
-                        <div style="font-size:11px;margin-top:5px;color:#666;">👥 {stats['الزبائن']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button(f"📋 تفاصيل", key=f"detail_{i+j}"):
-                        st.session_state[f'selected_period_{i+j}'] = period_name
-                        st.session_state['show_period_detail'] = True
-                        st.rerun()
-    
     # ============================================================
-    # التفاصيل للفترة المختارة (عرض المتاح)
+    # عرض الفترات مع تفاصيل اللوحات
     # ============================================================
     
-    if st.session_state.get('show_period_detail', False):
-        selected_period = None
-        for key in st.session_state:
-            if key.startswith('selected_period_'):
-                selected_period = st.session_state[key]
-                break
+    st.subheader("📅 تفاصيل الفترات")
+    
+    # تصفية الأعمدة حسب الاختيارات
+    filtered_columns = columns_df.copy()
+    if selected_city != "جميع المحافظات":
+        filtered_columns = filtered_columns[filtered_columns['المحافظة'] == selected_city]
+    if selected_size != "جميع الأحجام":
+        filtered_columns = filtered_columns[filtered_columns['الحجم'] == selected_size]
+    
+    # عرض الفترات في جدول
+    for _, period_row in periods_df.iterrows():
+        period_name = period_row['namee']
+        period_no = period_row['no']
         
-        if selected_period and selected_period in period_details:
-            details = period_details[selected_period]
+        with st.expander(f"📅 الفترة {period_no}: {period_name}", expanded=False):
+            # جلب الحجوزات لهذه الفترة والعام
+            period_bookings = bookings_df[
+                (bookings_df['فترة الحجز'] == period_name) & 
+                (bookings_df['العام'] == selected_year)
+            ] if bookings_df is not None and not bookings_df.empty else pd.DataFrame()
             
-            st.divider()
-            st.subheader(f"📋 تفاصيل الفترة: {selected_period}")
+            # أرقام اللوحات المحجوزة
+            booked_boards = period_bookings['رقم اللوحة'].tolist() if not period_bookings.empty else []
             
-            period_stat = next(p for p in period_stats if p['الفترة'] == selected_period)
-            col1, col2, col3 = st.columns(3)
-            col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
-            col2.metric("🔴 محجوز", period_stat['محجوز'])
-            col3.metric("🟢 متاح", period_stat['متاح'])
+            # الأعمدة المتاحة
+            available_columns = filtered_columns[~filtered_columns['رقم اللوحة'].isin(booked_boards)]
             
-            # عرض الزبائن في هذه الفترة
-            if len(details['customers']) > 0:
-                st.write("**👥 الزبائن في هذه الفترة:**")
-                st.write(", ".join(details['customers']))
-            else:
-                st.write("**👥 الزبائن في هذه الفترة:** لا يوجد")
+            # عرض الإحصائيات
+            col_stats1, col_stats2, col_stats3 = st.columns(3)
+            with col_stats1:
+                st.metric("📌 إجمالي الأعمدة", len(filtered_columns))
+            with col_stats2:
+                st.metric("🔴 محجوز", len(booked_boards))
+            with col_stats3:
+                st.metric("🟢 متاح", len(available_columns))
             
-            # ✅ عرض اللوحات المتاحة (وليس المحجوزة)
-            if not details['available_details'].empty:
-                st.write("**📋 اللوحات المتاحة في هذه الفترة:**")
+            # عرض الأعمدة المتاحة إذا كانت موجودة
+            if not available_columns.empty:
+                st.write("**📍 الأعمدة المتاحة:**")
                 st.dataframe(
-                    details['available_details'][['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
+                    available_columns[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'العدد', 'المحافظة', 'الحجم']],
+                    use_container_width=True,
+                    height=200
+                )
+                
+                # زر لحجز عمود محدد (للمديرين)
+                if is_admin():
+                    with st.expander("➕ حجز عمود جديد", expanded=False):
+                        selected_board = st.selectbox(
+                            "اختر العمود:",
+                            available_columns['رقم اللوحة'].tolist(),
+                            format_func=lambda x: f"{x} - {available_columns[available_columns['رقم اللوحة'] == x]['اسم العمود'].iloc[0]}",
+                            key=f"book_board_{period_no}"
+                        )
+                        
+                        customer_name = st.text_input("اسم الزبون:", key=f"cust_{period_no}")
+                        
+                        if st.button("✅ حجز العمود", key=f"confirm_book_{period_no}"):
+                            if customer_name:
+                                if not st.session_state.processing:
+                                    st.session_state.processing = True
+                                    try:
+                                        # تنفيذ الحجز باستخدام run_query الآمن
+                                        result = run_query('''
+                                            INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
+                                            VALUES (%s, %s, %s, %s)
+                                        ''', (selected_board, customer_name, selected_year, period_name), use_cache=False)
+                                        
+                                        if result is not None:
+                                            st.success(f"✅ تم حجز العمود {selected_board} بنجاح")
+                                            # مسح cache لتحديث البيانات
+                                            st.cache_data.clear()
+                                            safe_rerun("حجز عمود جديد")
+                                        else:
+                                            st.error("❌ فشل الحجز")
+                                    except Exception as e:
+                                        st.error(f"❌ خطأ في الحجز: {str(e)}")
+                                    finally:
+                                        st.session_state.processing = False
+                            else:
+                                st.warning("⚠️ الرجاء إدخال اسم الزبون")
+            else:
+                st.info("📭 لا توجد أعمدة متاحة في هذه الفترة")
+    
+    # ============================================================
+    # عرض تقرير مفصل (اختياري)
+    # ============================================================
+    
+    with st.expander("📊 تقرير مفصل عن الحجوزات", expanded=False):
+        if bookings_df is not None and not bookings_df.empty:
+            # تصفية حسب العام
+            year_bookings = bookings_df[bookings_df['العام'] == selected_year]
+            
+            if not year_bookings.empty:
+                # إحصائيات حسب الفترة
+                period_stats = year_bookings.groupby('فترة الحجز').size().reset_index(name='عدد الحجوزات')
+                period_stats = period_stats.merge(
+                    periods_df[['namee', 'no']],
+                    left_on='فترة الحجز',
+                    right_on='namee',
+                    how='left'
+                ).sort_values('no')
+                
+                st.write("**📈 عدد الحجوزات لكل فترة:**")
+                st.bar_chart(period_stats.set_index('فترة الحجز')['عدد الحجوزات'])
+                
+                # عرض الحجوزات التفصيلية
+                st.write("**📋 تفاصيل الحجوزات:**")
+                st.dataframe(
+                    year_bookings[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'العام']],
                     use_container_width=True
                 )
             else:
-                st.info("✅ لا توجد لوحات متاحة في هذه الفترة")
-            
-            if st.button("🔙 إغلاق التفاصيل", key="close_detail"):
-                st.session_state['show_period_detail'] = False
-                for key in list(st.session_state.keys()):
-                    if key.startswith('selected_period_'):
-                        del st.session_state[key]
-                st.rerun()
-    
-    # ============================================================
-    # الرسم البياني
-    # ============================================================
-    
-    st.divider()
-    st.subheader("📊 رسم بياني للمتاح والمحجوز")
-    
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['متاح'], name='متاح', marker_color='#4CAF50'))
-    fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['محجوز'], name='محجوز', marker_color='#f44336'))
-    fig.update_layout(
-        barmode='stack',
-        height=400,
-        xaxis_tickangle=-45,
-        xaxis_title='الفترة',
-        yaxis_title='عدد اللوحات'
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # تصدير Excel (مع المتاح في التفاصيل)
-    # ============================================================
-    
-    st.divider()
-    st.subheader("📥 تصدير التقرير")
-    
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # صفحة الملخص
-        period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
-        
-        # صفحة لكل فترة تحتوي على اللوحات المتاحة
-        for period_name in all_period_names:
-            if period_name in period_details:
-                details = period_details[period_name]
-                if not details['available_details'].empty:
-                    sheet_name = period_name[:25]
-                    details['available_details'].to_excel(writer, sheet_name=sheet_name, index=False)
-    
-    output.seek(0)
-    
-    st.download_button(
-        "📥 تحميل تقرير Excel",
-        output,
-        f"periods_report_{selected_city}_{selected_size}.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
+                st.info("📭 لا توجد حجوزات في هذا العام")
+        else:
+            st.info("📭 لا توجد حجوزات مسجلة")
 #=================
 # لوحة المراقبة
 #==================
