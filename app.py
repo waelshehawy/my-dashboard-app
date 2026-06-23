@@ -717,10 +717,8 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 page = st.session_state.get('page', "🏢 لوحات الشركات")
 
 # ============================================================
-# صفحة: لوحات الشركات (مع ترتيب حسب المدة وصورة خلفية)
+# صفحة: لوحات الشركات (نسخة تعمل مع إزاحة 16)
 # ============================================================
-
-
 
 if page == "🏢 لوحات الشركات":
     st.title("🏢 لوحات الشركات المعلنة")
@@ -756,7 +754,7 @@ if page == "🏢 لوحات الشركات":
                     SELECT 
                         "اسم الزبون" as company_name,
                         COUNT(DISTINCT "رقم اللوحة") as total_boards,
-                        COUNT(DISTINCT "فترة الحجز") as total_periods,
+                        COUNT(DISTINCT "فترة الحجز" || '-' || "العام") as total_periods,
                         STRING_AGG(DISTINCT "فترة الحجز", ' | ') as periods_list,
                         STRING_AGG(DISTINCT CAST("رقم اللوحة" AS TEXT), ', ') as boards_list,
                         MIN("فترة الحجز") as first_period,
@@ -788,7 +786,6 @@ if page == "🏢 لوحات الشركات":
     current_periods = data['current_periods']
     
     if bookings_df is not None and not bookings_df.empty:
-        # حساب المدة
         bookings_df['period_duration'] = bookings_df['total_periods']
         bookings_df = bookings_df.sort_values('period_duration', ascending=False)
         
@@ -852,10 +849,8 @@ if page == "🏢 لوحات الشركات":
                     last_period = company.get('last_period', '')
                     year = company.get('العام', '')
                     
-                    # الترتيب
                     rank = row_idx + col_idx + 1
                     
-                    # تحديد اللون حسب المدة
                     if period_duration >= 10:
                         card_color = "linear-gradient(135deg, #667eea, #764ba2)"
                         status_icon = "🌟"
@@ -869,13 +864,14 @@ if page == "🏢 لوحات الشركات":
                         status_icon = "🔄"
                         status_text = "قريب"
                     
-                    # البطاقة - نفس الكود الذي كان يعمل
                     st.markdown(f'''
                     <div style="
                         background: {card_color};
                         border-radius: 20px;
                         padding: 20px;
                         margin-bottom: 20px;
+                        margin-right: 16px;
+                        margin-left: 16px;
                         color: white;
                         box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                         transition: all 0.3s ease;
@@ -899,7 +895,7 @@ if page == "🏢 لوحات الشركات":
                                 📅 {first_period} → {last_period}
                             </div>
                             <div style="margin-top: 4px; font-size: 12px; opacity: 0.8;">
-                                ⏱️ المدة: {period_duration} فترة | {status_text}
+                                ⏱️ المدة: {period_duration} فترة ({period_duration/2:.1f} شهر) | {status_text}
                             </div>
                         </div>
                         <div style="display: flex; justify-content: space-around; padding: 10px 0;">
@@ -913,7 +909,7 @@ if page == "🏢 لوحات الشركات":
                             </div>
                             <div style="text-align: center;">
                                 <div style="font-size: 28px; font-weight: bold;">{period_duration}</div>
-                                <div style="font-size: 12px; opacity: 0.8;">⏱️ مدة</div>
+                                <div style="font-size: 12px; opacity: 0.8;">⏱️ نصف شهر</div>
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
