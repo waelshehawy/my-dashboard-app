@@ -1279,244 +1279,56 @@ elif page == "📅 لوحة الفترات":
         use_container_width=True
     )
 # ============================================================
-# صفحة: Dashboard (لوحة المراقبة) - باستخدام نفس منطق الأعمدة المتاحة
+# الخريطة
 # ============================================================
 
-elif page == "📊 Dashboard":
-    st.markdown("""
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h1>📊 لوحة التحكم المتقدمة</h1>
-        <p style="color: rgba(255,255,255,0.7);">نظرة شاملة على أداء النظام وإحصائيات الإعلانات</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    current_year = datetime.now().year
-    today = date.today()
-    target_period_num = get_period_from_date(today)
-    
-    # ============================================================
-    # جلب البيانات (نفس منطق صفحة الأعمدة المتاحة)
-    # ============================================================
-    
-    @st.cache_data(ttl=300)
-    def load_dashboard_data(target_period_num, target_year):
-        conn = get_connection()
+st.subheader("🗺️ توزع اللوحات على الخريطة")
+
+@st.cache_data(ttl=600)
+def load_map_data():
+    return run_query('SELECT * FROM "اعمدة انارة"')
+
+all_columns_map = load_map_data()
+
+m = folium.Map(
+    location=SYRIA_COORDS["سوريا"], 
+    zoom_start=7,
+    height=500,
+    control_scale=True
+)
+marker_cluster = MarkerCluster().add_to(m)
+
+booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
+
+for _, row in all_columns_map.iterrows():
+    if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
+        is_booked = row['رقم اللوحة'] in booked_boards_list
+        color = 'red' if is_booked else 'green'
         
-        query = f"""
-        WITH booking_periods AS (
-            SELECT 
-                CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-                "فترة الحجز",
-                "العام",
-                CASE
-                    WHEN "فترة الحجز" = 'كانون ثاني 15-1' THEN 1
-                    WHEN "فترة الحجز" = 'كانون ثاني 30-15' THEN 2
-                    WHEN "فترة الحجز" = 'شباط 15-1' THEN 3
-                    WHEN "فترة الحجز" = 'شباط 30-15' THEN 4
-                    WHEN "فترة الحجز" = 'اذار 15-1' THEN 5
-                    WHEN "فترة الحجز" = 'اذار 30-15' THEN 6
-                    WHEN "فترة الحجز" = 'نيسان 15-1' THEN 7
-                    WHEN "فترة الحجز" = 'نيسان 30-15' THEN 8
-                    WHEN "فترة الحجز" = 'ايار15-1' THEN 9
-                    WHEN "فترة الحجز" = 'أيار 30-15' THEN 10
-                    WHEN "فترة الحجز" = 'حزيران 15-1' THEN 11
-                    WHEN "فترة الحجز" = 'حزيران 30-15' THEN 12
-                    WHEN "فترة الحجز" = 'تموز 15-1' THEN 13
-                    WHEN "فترة الحجز" = 'تموز 30-15' THEN 14
-                    WHEN "فترة الحجز" = 'اب 15-1' THEN 15
-                    WHEN "فترة الحجز" = 'اب 30-15' THEN 16
-                    WHEN "فترة الحجز" = 'أيلول 15-1' THEN 17
-                    WHEN "فترة الحجز" = 'ايلول30-15' THEN 18
-                    WHEN "فترة الحجز" = 'تشرين اول 15-1' THEN 19
-                    WHEN "فترة الحجز" = 'تشرين اول30-15' THEN 20
-                    WHEN "فترة الحجز" = 'تشرين ثاني 15-1' THEN 21
-                    WHEN "فترة الحجز" = 'تشرين ثاني 30-15' THEN 22
-                    WHEN "فترة الحجز" = 'كانون اول 15-1' THEN 23
-                    WHEN "فترة الحجز" = 'كانون اول 30-15' THEN 24
-                END as period_num
-            FROM "حجوزات1"
-            WHERE "العام" >= {target_year}
-        ),
-        board_aggregated AS (
-            SELECT 
-                "رقم اللوحة",
-                MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
-                MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future
-            FROM booking_periods
-            GROUP BY "رقم اللوحة"
-        )
-        SELECT 
-            a."رقم اللوحة",
-            a."اسم العمود",
-            a."المحافظة",
-            a."الشبكة",
-            a."الحجم",
-            a."العدد",
-            CASE 
-                WHEN b.has_current = 1 AND b.has_future = 1 THEN 'محجوز بالكامل'
-                WHEN b.has_current = 1 AND b.has_future = 0 THEN 'محجوز مؤقتاً'
-                WHEN b.has_current = 0 AND b.has_future = 1 THEN 'متاح مؤقتاً'
-                ELSE 'متاح فوراً'
-            END as status
-        FROM "اعمدة انارة" a
-        LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
-        ORDER BY a."المحافظة", a."رقم اللوحة"
+        # ✅ عرض الشبكة والعدد
+        network = row.get('الشبكة', 0)
+        network_display = str(int(network)) if network is not None and network != 0 else 'بدون شبكة'
+        board_count = int(row['العدد'])
+        
+        popup_html = f"""
+        <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;padding:5px;">
+            <b>🏢 {row['اسم العمود']}</b><br>
+            📍 {row['المحافظة']}<br>
+            📡 الشبكة: {network_display}<br>
+            📏 {row['الحجم']}<br>
+            🔢 العدد: {board_count} لوحة<br>
+            {'🔴 محجوز' if is_booked else '🟢 متاح'}
+        </div>
         """
         
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        return df
-    
-    df = load_dashboard_data(target_period_num, current_year)
-    
-    # ============================================================
-    # حساب الإحصائيات (نفس صفحة الأعمدة المتاحة)
-    # ============================================================
-    
-    total_sites = len(df)
-    total_boards = df['العدد'].sum()
-    
-    # محجوز حالياً (has_current = 1)
-    booked_current = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
-    booked_current_sites = len(booked_current)
-    booked_current_boards = booked_current['العدد'].sum()
-    
-    # متاح حالياً (has_current = 0)
-    available_current = df[~df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
-    available_current_sites = len(available_current)
-    available_current_boards = available_current['العدد'].sum()
-    
-    # نسبة الإشغال
-    occupancy_rate = (booked_current_sites / total_sites * 100) if total_sites > 0 else 0
-    
-    # ============================================================
-    # عرض البطاقات
-    # ============================================================
-    
-    cols = st.columns(4)
-    metrics_data = [
-        ("إجمالي المواقع", total_sites, "🗺️", "primary"),
-        ("🔴 محجوز", booked_current_sites, "📌", "danger"),
-        ("🟢 متاح", available_current_sites, "✅", "success"),
-        ("📈 نسبة الإشغال", f"{occupancy_rate:.1f}%", "📊", "warning")
-    ]
-    
-    for idx, (title, value, icon, color) in enumerate(metrics_data):
-        with cols[idx]:
-            st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
-    
-    # ============================================================
-    # شريط التقدم
-    # ============================================================
-    
-    st.markdown(f"""
-    <div style="margin: 20px 0;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span>📊 نسبة الإشغال الحالية</span>
-            <span style="font-weight: bold;">{occupancy_rate:.1f}%</span>
-        </div>
-        <div style="height: 12px; background: rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden;">
-            <div style="width: {occupancy_rate}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px;"></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # ============================================================
-    # إحصائيات اللوحات الفعلية
-    # ============================================================
-    
-    st.subheader("📊 إحصائيات اللوحات الفعلية")
-    col_boards1, col_boards2, col_boards3 = st.columns(3)
-    with col_boards1:
-        st.metric("📌 إجمالي اللوحات", f"{int(total_boards):,}")
-    with col_boards2:
-        st.metric("🔴 لوحات محجوزة", f"{int(booked_current_boards):,}")
-    with col_boards3:
-        st.metric("🟢 لوحات متاحة", f"{int(available_current_boards):,}")
-    
-    st.divider()
-    
-    # ============================================================
-    # الرسوم البيانية
-    # ============================================================
-    
-    col_chart1, col_chart2 = st.columns(2)
-    
-    with col_chart1:
-        st.subheader("🥧 نسبة الإشغال")
-        fig_pie = go.Figure(data=[go.Pie(
-            labels=['محجوز', 'متاح'],
-            values=[booked_current_sites, available_current_sites],
-            hole=0.4,
-            marker_colors=['#dc2626', '#22c55e'],
-            textinfo='percent+label'
-        )])
-        fig_pie.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    with col_chart2:
-        st.subheader("📊 نسبة الإشغال حسب المحافظة")
-        city_stats = []
-        for city in df['المحافظة'].unique():
-            city_data = df[df['المحافظة'] == city]
-            city_total = len(city_data)
-            city_booked = len(city_data[city_data['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])])
-            city_stats.append({
-                'المحافظة': city,
-                'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
-            })
-        
-        city_df = pd.DataFrame(city_stats)
-        fig_bar = px.bar(city_df, x='المحافظة', y='نسبة الإشغال', 
-                         color='نسبة الإشغال', color_continuous_scale='RdYlGn')
-        fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    st.divider()
-    
-    # ============================================================
-    # الخريطة
-    # ============================================================
-    
-    st.subheader("🗺️ توزع اللوحات على الخريطة")
-    
-    @st.cache_data(ttl=600)
-    def load_map_data():
-        return run_query('SELECT * FROM "اعمدة انارة"')
-    
-    all_columns_map = load_map_data()
-    
-    m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
-    marker_cluster = MarkerCluster().add_to(m)
-    
-    # قائمة اللوحات المحجوزة حالياً
-    booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
-    
-    for _, row in all_columns_map.iterrows():
-        if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
-            is_booked = row['رقم اللوحة'] in booked_boards_list
-            color = 'red' if is_booked else 'green'
-            
-            popup_html = f"""
-            <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;">
-                <b>🏢 {row['اسم العمود']}</b><br>
-                📍 {row['المحافظة']}<br>
-                📡 {row['الشبكة']}<br>
-                📏 {row['الحجم']}<br>
-                🔢 {row['العدد']} لوحة<br>
-                {'🔴 محجوز' if is_booked else '🟢 متاح'}
-            </div>
-            """
-            
-            folium.Marker(
-                [row['Latitude'], row['Longitude']],
-                popup=folium.Popup(popup_html, max_width=350),
-                icon=folium.Icon(color=color)
-            ).add_to(marker_cluster)
-    
-    st_folium(m, width="100%", height=500)
+        folium.Marker(
+            [row['Latitude'], row['Longitude']],
+            popup=folium.Popup(popup_html, max_width=350),
+            icon=folium.Icon(color=color)
+        ).add_to(marker_cluster)
+
+st_folium(m, width="100%", height=500, returned_objects=[])
+st.caption("📍 يمكنك التكبير والتصغير لاستكشاف اللوحات")
 
 #============================
 # عرض سعر
