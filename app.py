@@ -1499,16 +1499,16 @@ elif page == "📊 Dashboard":
     customers_df = load_customer_names()
     customer_dict = dict(zip(customers_df['رقم اللوحة'].astype(str), customers_df['اسم الزبون']))
     
-    # ✅ إنشاء الخريطة بارتفاع ثابت ومنع المسافة البيضاء
+    # ✅ إنشاء الخريطة
     m = folium.Map(
         location=SYRIA_COORDS["سوريا"], 
         zoom_start=7,
         height=480,
         control_scale=True,
         zoom_control=True,
-        scrollWheelZoom=False,  # ✅ منع التكبير بالتمرير
-        dragging=True,          # ✅ السماح بالسحب
-        double_click_zoom=False # ✅ منع التكبير بالضغط المزدوج
+        scrollWheelZoom=False,
+        dragging=True,
+        double_click_zoom=False
     )
     marker_cluster = MarkerCluster().add_to(m)
     
@@ -1519,11 +1519,9 @@ elif page == "📊 Dashboard":
             is_booked = row['رقم اللوحة'] in booked_boards_list
             board_id = str(row['رقم اللوحة'])
             
-            # ✅ اختيار اللون
             if is_booked:
                 color = 'red'
                 status_text = '🔴 محجوز'
-                # ✅ إضافة اسم الزبون إذا كانت اللوحة محجوزة
                 customer_name = customer_dict.get(board_id, '')
                 customer_line = f"👤 الزبون: {customer_name}<br>" if customer_name else ""
             else:
@@ -1531,7 +1529,6 @@ elif page == "📊 Dashboard":
                 status_text = '🟢 متاح'
                 customer_line = ""
             
-            # ✅ عرض الشبكة والعدد
             network = row.get('الشبكة', 0)
             network_display = str(int(network)) if network is not None and network != 0 else 'بدون شبكة'
             board_count = int(row['العدد'])
@@ -1554,16 +1551,14 @@ elif page == "📊 Dashboard":
                 icon=folium.Icon(color=color)
             ).add_to(marker_cluster)
     
-    # ✅ عرض الخريطة مع ارتفاع ثابت ومنع المسافة البيضاء
+    # ✅ عرض الخريطة مع السماح بالتفاعل (بدون returned_objects=[])
     st_folium(
         m, 
         width="100%", 
         height=480,
-        returned_objects=[],
         key="dashboard_map"
     )
     
-    # ✅ إضافة تذييل صغير بدلاً من المساحة البيضاء
     st.caption("📍 اضغط على أيقونة لعرض تفاصيل اللوحة • 🟢 متاح • 🔴 محجوز")
 #============================
 # عرض سعر
