@@ -389,7 +389,40 @@ def safe_split(value):
 def is_admin():
     return st.session_state.get('role') == 'admin'
 
+def set_page_rtl(doc):
+    """تغيير اتجاه الصفحة بأكملها إلى RTL"""
+    try:
+        section = doc.sections[0]
+        sectPr = section._element
+        
+        bidi = sectPr.find(qn('w:bidi'))
+        if bidi is None:
+            bidi = OxmlElement('w:bidi')
+            sectPr.append(bidi)
+        bidi.set(qn('w:val'), '1')
+        
+        return True
+    except Exception as e:
+        return False
+#=============== دوال اتجاه الوورد=============
+def set_page_rtl(doc):
+    """تغيير اتجاه الصفحة بأكملها إلى RTL"""
+    try:
+        section = doc.sections[0]
+        sectPr = section._element
+        
+        bidi = sectPr.find(qn('w:bidi'))
+        if bidi is None:
+            bidi = OxmlElement('w:bidi')
+            sectPr.append(bidi)
+        bidi.set(qn('w:val'), '1')
+        
+        return True
+    except Exception as e:
+        return False
+
 def _force_rtl_style(p):
+    """تطبيق محاذاة يمين مع اتجاه RTL"""
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
@@ -402,9 +435,14 @@ def _force_rtl_style(p):
         rPr.append(rtl)
 
 def set_table_rtl(table):
+    """تطبيق محاذاة يمين على الجدول"""
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
+    for row in table.rows:
+        for cell in row.cells:
+            for p in cell.paragraphs:
+                _force_rtl_style(p)
 
 SYRIA_COORDS = {
     "دمشق": [33.5138, 36.2765],
@@ -2247,6 +2285,7 @@ elif page == "📄 عرض سعر":
                     discount = discount_percent if apply_discount else 0
                     
                     doc = Document('template.docx') if os.path.exists('template.docx') else Document()
+set_page_rtl(doc)  # <-- هذا السطر الجديد
                     PURPLE_COLOR = "660099"
                     
                     discount_amount = grand_total_display * (discount / 100)
