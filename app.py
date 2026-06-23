@@ -719,6 +719,10 @@ page = st.session_state.get('page', "🏢 لوحات الشركات")
 #============================================================
 # الصفحة الأولى لوحات الشركات
 #============================================================
+# ============================================================
+# صفحة: لوحات الشركات (باستخدام دوال الفترات)
+# ============================================================
+
 if page == "🏢 لوحات الشركات":
     st.title("🏢 لوحات الشركات المعلنة")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -732,6 +736,7 @@ if page == "🏢 لوحات الشركات":
         try:
             conn = get_connection()
             
+            # جلب الفترات الحالية والمستقبلية
             periods_df = pd.read_sql_query('''
                 SELECT namee, no FROM "الفترة" 
                 WHERE no >= (SELECT MIN(no) FROM "الفترة" WHERE no >= (
@@ -749,11 +754,12 @@ if page == "🏢 لوحات الشركات":
             
             if current_periods:
                 placeholders = ','.join([f"'{p}'" for p in current_periods])
+                
+                # جلب الحجوزات مع الفترات
                 bookings_df = pd.read_sql_query(f'''
                     SELECT 
                         "اسم الزبون" as company_name,
                         COUNT(DISTINCT "رقم اللوحة") as total_boards,
-                        COUNT(DISTINCT "فترة الحجز" || '-' || CAST("العام" AS TEXT)) as total_periods,
                         STRING_AGG(DISTINCT "فترة الحجز", ' | ') as periods_list,
                         STRING_AGG(DISTINCT CAST("رقم اللوحة" AS TEXT), ', ') as boards_list,
                         MIN("فترة الحجز") as first_period,
@@ -765,6 +771,22 @@ if page == "🏢 لوحات الشركات":
                     GROUP BY "اسم الزبون", "العام"
                     ORDER BY "اسم الزبون"
                 ''', conn)
+                
+                # حساب عدد الفترات باستخدام get_period_number()
+                if not bookings_df.empty:
+                    def calculate_period_count(row):
+                        periods = row['periods_list'].split(' | ') if row['periods_list'] else []
+                        # استخدام get_period_number() لحساب الفترات الفريدة
+                        unique_periods = set()
+                        for p in periods:
+                            period_num = get_period_number(p.strip())
+                            if period_num != 99:
+                                unique_periods.add(period_num)
+                        return len(unique_periods)
+                    
+                    bookings_df['total_periods'] = bookings_df.apply(calculate_period_count, axis=1)
+                else:
+                    bookings_df['total_periods'] = 0
             else:
                 bookings_df = pd.DataFrame()
             
@@ -785,6 +807,7 @@ if page == "🏢 لوحات الشركات":
     current_periods = data['current_periods']
     
     if bookings_df is not None and not bookings_df.empty:
+        # حساب المدة وترتيب الشركات
         bookings_df['period_duration'] = bookings_df['total_periods']
         bookings_df = bookings_df.sort_values('period_duration', ascending=False)
         
