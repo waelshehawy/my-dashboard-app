@@ -34,81 +34,194 @@ st.set_page_config(
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
 
+# ============================================================
+# إدارة اتصال قاعدة البيانات مع التخزين المؤقت
+# ============================================================
+
+@st.cache_resource(ttl=300)  # تخزين مؤقت لمدة 5 دقائق
+def get_cached_connection():
+    """الحصول على اتصال مخزن مؤقتاً بقاعدة البيانات"""
+    try:
+        conn = psycopg2.connect(
+            host=st.secrets["SUPABASE_HOST"],
+            port=st.secrets["SUPABASE_PORT"],
+            database=st.secrets["SUPABASE_DB"],
+            user=st.secrets["SUPABASE_USER"],
+            password=st.secrets["SUPABASE_PASSWORD"],
+            sslmode="require",
+            connect_timeout=30
+        )
+        return conn
+    except Exception as e:
+        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {str(e)}")
+        return None
+
 def get_connection():
-    """اتصال مباشر بـ Supabase PostgreSQL باستخدام st.secrets"""
-    return psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        port=st.secrets["SUPABASE_PORT"],
-        database=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        sslmode="require",
-        connect_timeout=30
-    )
+    """الحصول على اتصال بقاعدة البيانات مع إعادة المحاولة"""
+    if st.session_state.db_connection is None or st.session_state.db_connection.closed:
+        st.session_state.db_connection = get_cached_connection()
+        st.session_state.connection_time = time.time()
+    return st.session_state.db_connection
+
+def safe_query(query, params=None, max_retries=3):
+    """تنفيذ استعلام آمن مع إعادة المحاولة والتخزين المؤقت"""
+    for attempt in range(max_retries):
+        try:
+            conn = get_connection()
+            if conn is None or conn.closed:
+                conn = get_cached_connection()
+                st.session_state.db_connection = conn
+            
+            cursor = conn.cursor()
+            cursor.execute(query, params or ())
+            
+            # تحديد نوع النتيجة
+            if query.strip().upper().startswith('SELECT'):
+                result = cursor.fetchall()
+                # الحصول على أسماء الأعمدة
+                col_names = [desc[0] for desc in cursor.description] if cursor.description else []
+                cursor.close()
+                if col_names:
+                    return pd.DataFrame(result, columns=col_names)
+                return pd.DataFrame(result)
+            else:
+                conn.commit()
+                affected = cursor.rowcount
+                cursor.close()
+                return affected
+                
+        except Exception as e:
+            if attempt == max_retries - 1:
+                st.error(f"❌ خطأ في قاعدة البيانات (محاولة {attempt+1}): {str(e)}")
+                return None
+            time.sleep(0.5 * (attempt + 1))  # تأخير تصاعدي
+    
+    return None
 
 # ============================================================
 # تهيئة session_state (قبل أي شيء آخر)
 # ============================================================
 
-if 'auth' not in st.session_state:
-    st.session_state.auth = False
-if 'role' not in st.session_state:
-    st.session_state.role = None
-if 'username' not in st.session_state:
-    st.session_state.username = None
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'cart' not in st.session_state:
-    st.session_state.cart = {}
-if 'booking_cart' not in st.session_state:
-    st.session_state.booking_cart = []
-if 'selected_company' not in st.session_state:
-    st.session_state.selected_company = None
-if 'show_company_map' not in st.session_state:
-    st.session_state.show_company_map = False
-if 'selected_city' not in st.session_state:
-    st.session_state.selected_city = None
-if 'show_city_details' not in st.session_state:
-    st.session_state.show_city_details = False
-if 'show_all_cities' not in st.session_state:
-    st.session_state.show_all_cities = False
 # ============================================================
-# دوال المصادقة
+# تهيئة متقدمة لـ session_state (قبل أي شيء)
 # ============================================================
 
+def init_session_state():
+    """تهيئة جميع متغيرات الجلسة مرة واحدة وبشكل آمن"""
+    defaults = {
+        'auth': False,
+        'role': None,
+        'username': None,
+        'user_id': None,
+        'cart': {},
+        'booking_cart': [],
+        'selected_company': None,
+        'show_company_map': False,
+        'selected_city': None,
+        'show_city_details': False,
+        'show_all_cities': False,
+        'temp_cust': "",
+        'page_loaded': False,
+        'last_rerun': None,
+        'processing': False,
+        'db_connection': None,
+        'connection_time': None,
+        'prevent_rerun': False,
+        'current_page': None,
+        'page_init_time': None
+    }
+    
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+# استدعاء التهيئة في بداية الملف
+init_session_state()
+
+# إضافة متغيرات جديدة للتحكم في الريفريش
+if 'rerun_counter' not in st.session_state:
+    st.session_state.rerun_counter = 0
+if 'last_action_time' not in st.session_state:
+    st.session_state.last_action_time = time.time()
+# ============================================================
+# دوال المصادقة المحسنة
+# ============================================================
+
+@st.cache_data(ttl=60)
+def get_user_by_id(user_id):
+    """جلب معلومات المستخدم مع تخزين مؤقت"""
+    if user_id is None:
+        return None
+    
+    result = run_query(
+        'SELECT id, username, role, full_name, created_at FROM users WHERE id = %s',
+        (user_id,),
+        use_cache=True
+    )
+    
+    if result is not None and not result.empty:
+        row = result.iloc[0]
+        return {
+            'id': row['id'],
+            'username': row['username'],
+            'role': row['role'],
+            'full_name': row['full_name'],
+            'created_at': row['created_at']
+        }
+    return None
+
 def is_authenticated():
-    """التحقق من مصادقة المستخدم"""
+    """التحقق من مصادقة المستخدم بشكل سريع"""
     return st.session_state.get('auth', False) and st.session_state.get('user_id') is not None
 
 def get_current_user():
-    """الحصول على معلومات المستخدم الحالي"""
-    if 'user_id' not in st.session_state:
+    """الحصول على معلومات المستخدم الحالي مع تخزين مؤقت"""
+    if not is_authenticated():
         return None
     
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT id, username, role, full_name, created_at 
-            FROM users 
-            WHERE id = %s
-        ''', (st.session_state.user_id,))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if user:
-            return {
-                'id': user[0],
-                'username': user[1],
-                'role': user[2],
-                'full_name': user[3],
-                'created_at': user[4]
-            }
-    except Exception as e:
-        st.error(f"❌ خطأ في جلب المستخدم: {e}")
+    return get_user_by_id(st.session_state.user_id)
+
+# ============================================================
+# التحكم في الريفريش
+# ============================================================
+
+def safe_rerun(reason=None):
+    """إعادة تشغيل آمنة مع منع التكرار"""
+    current_time = time.time()
     
-    return None
+    # منع الريفريش المتكرر (أقل من ثانية)
+    if current_time - st.session_state.get('last_rerun', 0) < 1.0:
+        return
+    
+    # منع الريفريش أثناء المعالجة
+    if st.session_state.get('processing', False):
+        return
+    
+    st.session_state.last_rerun = current_time
+    st.session_state.rerun_counter = st.session_state.rerun_counter + 1
+    st.session_state.prevent_rerun = False
+    
+    if reason:
+        st.session_state.last_action = reason
+    
+    st.rerun()
+
+def check_page_load():
+    """التحقق من تحميل الصفحة ومنع التحميل المزدوج"""
+    current_page = st.session_state.get('current_page', '')
+    
+    # إذا لم يتم تحميل الصفحة بعد أو تم تغيير الصفحة
+    if current_page != st.session_state.get('page_loaded', ''):
+        st.session_state.page_loaded = current_page
+        st.session_state.page_init_time = time.time()
+        return True
+    
+    # إذا تم تحميل الصفحة بالفعل ولكن مر وقت طويل (أكثر من 5 دقائق)
+    if st.session_state.page_init_time and time.time() - st.session_state.page_init_time > 300:
+        st.session_state.page_init_time = time.time()
+        return True
+    
+    return False
 # ============================================================
 # التحسينات البصرية
 # ============================================================
@@ -241,7 +354,19 @@ ADVANCED_CSS = """
 
 st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 
+# ============================================================
+# دوال CSS المحسنة (تطبق مرة واحدة فقط)
+# ============================================================
 
+def apply_css():
+    """تطبيق CSS مرة واحدة فقط"""
+    if 'css_applied' not in st.session_state:
+        st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
+        st.session_state.css_applied = True
+        st.session_state.css_applied_time = time.time()
+
+# استدعاء تطبيق CSS
+apply_css()
 # ============================================================
 # دوال المتاح
 # ============================================================
@@ -478,6 +603,50 @@ if not st.session_state.auth:
 conn = get_connection()
 
 # ============================================================
+# معالج الأخطاء العام
+# ============================================================
+
+def handle_global_error(error, page_name=None):
+    """معالج أخطاء موحد لكامل التطبيق"""
+    import traceback
+    
+    error_id = f"ERR_{int(time.time())}_{hash(str(error)) % 10000:04d}"
+    
+    # تسجيل الخطأ
+    if 'error_log' not in st.session_state:
+        st.session_state.error_log = []
+    
+    st.session_state.error_log.append({
+        'id': error_id,
+        'error': str(error),
+        'traceback': traceback.format_exc(),
+        'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'page': page_name or st.session_state.get('current_page', 'Unknown'),
+        'user': st.session_state.get('username', 'Unknown')
+    })
+    
+    # عرض رسالة خطأ مناسبة
+    st.error(f"""
+    ❌ **حدث خطأ غير متوقع** (رمز: {error_id})
+    
+    {str(error)[:200]}
+    
+    الرجاء المحاولة مرة أخرى أو الاتصال بالدعم الفني.
+    """)
+    
+    # لا نقوم بإعادة التحميل تلقائياً لتجنب الحلقات اللانهائية
+    st.session_state.processing = False
+    
+    return error_id
+
+# استخدام المعالج في بداية كل صفحة
+try:
+    # كود الصفحة هنا
+    pass
+except Exception as e:
+    handle_global_error(e, "صفحة عرض السعر")
+    st.stop()
+# ============================================================
 # الشريط الجانبي
 # ============================================================
 
@@ -550,26 +719,32 @@ with st.sidebar:
 
 
 # ============================================================
-# دوال استعلامات Supabase (بصيغة PostgreSQL)
+# دوال الاستعلام المحسنة (بدلاً من run_query القديمة)
 # ============================================================
 
-def run_query(query, params=None, fetch=True):
-    """تنفيذ استعلام على Supabase"""
-    cursor = conn.cursor()
-    try:
-        cursor.execute(query, params or ())
-        if fetch and query.strip().upper().startswith('SELECT'):
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
-            return pd.DataFrame(rows, columns=columns)
-        else:
-            conn.commit()
-            return cursor.rowcount
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        cursor.close()
+@st.cache_data(ttl=60)  # تخزين مؤقت لمدة دقيقة
+def cached_query(query, params=None):
+    """استعلام مع تخزين مؤقت للنتائج المتكررة"""
+    return safe_query(query, params)
+
+def run_query(query, params=None, use_cache=True):
+    """
+    تنفيذ استعلام مع خيار التخزين المؤقت
+    تحل محل run_query القديمة مع تحسينات
+    """
+    # لا نخزن الاستعلامات التي تغير البيانات
+    modifying_queries = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP']
+    is_modifying = any(query.strip().upper().startswith(keyword) for keyword in modifying_queries)
+    
+    if use_cache and not is_modifying:
+        return cached_query(query, params)
+    else:
+        return safe_query(query, params)
+
+# تصحيح: نعيد تعريف run_query لتكون متوافقة مع الكود القديم
+# (نحتفظ بالدالة القديمة ولكن مع التحسينات)
+
+#=============================================
 
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
