@@ -481,9 +481,6 @@ conn = get_connection()
 # الشريط الجانبي
 # ============================================================
 
-# ============================================================
-# الشريط الجانبي المطور والمضمون 100% (مع انزياح صحيح ومطابق)
-# ============================================================
 
 with st.sidebar:
     st.markdown("""
@@ -508,8 +505,8 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    # القائمة الرئيسية المحدثة - لاحظ انزياح الأسطر بـ 4 مسافات إجبارية بداخل block الـ with
-    st.radio("📋 القائمة الرئيسية", [
+    # القائمة الرئيسية
+    selected_page = st.radio("📋 القائمة الرئيسية", [
         "🏢 لوحات الشركات",
         "📍 الأعمدة المتاحة",
         "📅 لوحة الفترات",
@@ -524,29 +521,18 @@ with st.sidebar:
         "📋 كتالوج عام"
     ], key="main_menu")
     
+    # تحديث الصفحة عند التغيير
+    if selected_page != st.session_state.get('page'):
+        st.session_state.page = selected_page
+        st.rerun()
+    
     st.divider()
     
-    # الإحصائيات السريعة
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM \"اعمدة انارة\"")
-    total_boards_sidebar = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(DISTINCT \"اسم الزبون\") FROM \"حجوزات1\"")
-    total_clients = cursor.fetchone()[0]
-    cursor.close()
-    
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.markdown(create_metric_card_3d("اللوحات", total_boards_sidebar, "🗺️", "primary"), unsafe_allow_html=True)
-    with col_s2:
-        st.markdown(create_metric_card_3d("العملاء", total_clients, "👥", "success"), unsafe_allow_html=True)
-
-    st.divider()
-    
+    # زر تسجيل الخروج
     if st.button("🚪 تسجيل الخروج", use_container_width=True):
         st.session_state.auth = False
         st.session_state.cart = {}
         st.rerun()
-
 
 
 # ============================================================
