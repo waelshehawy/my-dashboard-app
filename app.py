@@ -715,8 +715,9 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # صفحة: لوحات الشركات (مع تصحيح STRING_AGG)
 # ============================================================
 page = st.session_state.get('page', "🏢 لوحات الشركات")
+
 # ============================================================
-# صفحة: لوحات الشركات
+# صفحة: لوحات الشركات (مع ترتيب حسب المدة وصورة خلفية)
 # ============================================================
 
 if page == "🏢 لوحات الشركات":
@@ -785,6 +786,16 @@ if page == "🏢 لوحات الشركات":
     current_periods = data['current_periods']
     
     if bookings_df is not None and not bookings_df.empty:
+        # ============================================================
+        # حساب مدة الحجز لكل شركة (عدد الفترات)
+        # ============================================================
+        
+        # إضافة عمود المدة
+        bookings_df['period_duration'] = bookings_df['total_periods']
+        
+        # ترتيب الشركات حسب المدة (الأطول أولاً)
+        bookings_df = bookings_df.sort_values('period_duration', ascending=False)
+        
         total_companies = len(bookings_df)
         total_boards = bookings_df['total_boards'].sum()
         total_periods = bookings_df['total_periods'].sum()
@@ -801,30 +812,41 @@ if page == "🏢 لوحات الشركات":
         
         st.markdown("---")
         
+        # ============================================================
+        # فلترة الشركات
+        # ============================================================
+        
         col_filter1, col_filter2 = st.columns([2, 1])
         with col_filter1:
             search_term = st.text_input("🔍 بحث عن شركة:", placeholder="اكتب اسم الشركة...")
         with col_filter2:
             sort_by = st.selectbox(
                 "ترتيب حسب:",
-                ["عدد اللوحات (الأكثر)", "عدد اللوحات (الأقل)", "عدد الفترات (الأكثر)", "اسم الشركة"]
+                ["المدة (الأطول)", "المدة (الأقصر)", "عدد اللوحات (الأكثر)", "عدد اللوحات (الأقل)", "اسم الشركة"]
             )
         
         filtered_df = bookings_df.copy()
         if search_term:
             filtered_df = filtered_df[filtered_df['company_name'].str.contains(search_term, case=False, na=False)]
         
-        if sort_by == "عدد اللوحات (الأكثر)":
+        # تطبيق الترتيب
+        if sort_by == "المدة (الأطول)":
+            filtered_df = filtered_df.sort_values('period_duration', ascending=False)
+        elif sort_by == "المدة (الأقصر)":
+            filtered_df = filtered_df.sort_values('period_duration', ascending=True)
+        elif sort_by == "عدد اللوحات (الأكثر)":
             filtered_df = filtered_df.sort_values('total_boards', ascending=False)
         elif sort_by == "عدد اللوحات (الأقل)":
             filtered_df = filtered_df.sort_values('total_boards', ascending=True)
-        elif sort_by == "عدد الفترات (الأكثر)":
-            filtered_df = filtered_df.sort_values('total_periods', ascending=False)
         else:
             filtered_df = filtered_df.sort_values('company_name')
         
         st.markdown(f"**📊 عرض {len(filtered_df)} شركة من أصل {total_companies}**")
         st.markdown("---")
+        
+        # ============================================================
+        # عرض الشركات في شبكة (Grid)
+        # ============================================================
         
         COLS_PER_ROW = 3
         companies_list = filtered_df.to_dict('records')
@@ -838,45 +860,138 @@ if page == "🏢 لوحات الشركات":
                     company_name = company['company_name']
                     total_boards = company['total_boards']
                     total_periods = company['total_periods']
+                    period_duration = company.get('period_duration', 0)
                     first_period = company.get('first_period', '')
                     last_period = company.get('last_period', '')
                     year = company.get('العام', '')
                     
-                    if total_boards >= 10:
-                        card_color = "linear-gradient(135deg, #667eea, #764ba2)"
-                    elif total_boards >= 5:
-                        card_color = "linear-gradient(135deg, #11998e, #38ef7d)"
+                    # ============================================================
+                    # تحديد اللون والترتيب حسب المدة
+                    # ============================================================
+                    
+                    # تحديد الترتيب (أول شركة = 1)
+                    rank = row_idx + col_idx + 1
+                    
+                    # تحديد اللون بناءً على المدة
+                    if period_duration >= 10:
+                        card_color = "linear-gradient(135deg, #667eea, #764ba2)"  # أزرق - مدة طويلة
+                        border_color = "#764ba2"
+                        status_icon = "🌟"
+                        status_text = "مميز"
+                    elif period_duration >= 5:
+                        card_color = "linear-gradient(135deg, #11998e, #38ef7d)"  # أخضر - مدة متوسطة
+                        border_color = "#11998e"
+                        status_icon = "⭐"
+                        status_text = "نشط"
                     else:
-                        card_color = "linear-gradient(135deg, #f093fb, #f5576c)"
+                        card_color = "linear-gradient(135deg, #f093fb, #f5576c)"  # وردي - مدة قصيرة
+                        border_color = "#f5576c"
+                        status_icon = "🔄"
+                        status_text = "قريب"
+                    
+                    # ============================================================
+                    # صورة خلفية اختيارية (يمكنك تغيير الرابط)
+                    # ============================================================
+                    
+                    # قائمة صور خلفية حسب اسم الشركة (اختياري)
+                    company_images = {
+                        # "اسم الشركة": "رابط الصورة"
+                        # مثال:
+                        # "شركة الاتصالات": "https://example.com/image1.jpg",
+                        # "شركة البنك": "https://example.com/image2.jpg",
+                    }
+                    
+                    # صورة افتراضية إذا لم توجد صورة للشركة
+                    default_image = "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&h=300&fit=crop"
+                    
+                    # الحصول على صورة الشركة أو الافتراضية
+                    company_image = company_images.get(company_name, default_image)
+                    
+                    # ============================================================
+                    # عرض البطاقة مع صورة خلفية
+                    # ============================================================
                     
                     st.markdown(f'''
                     <div style="
-                        background: {card_color};
+                        background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('{company_image}');
+                        background-size: cover;
+                        background-position: center;
                         border-radius: 20px;
                         padding: 20px;
                         margin-bottom: 20px;
                         color: white;
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
                         transition: all 0.3s ease;
-                        height: 280px;
+                        height: 300px;
                         display: flex;
                         flex-direction: column;
                         justify-content: space-between;
-                        cursor: pointer;
+                        border: 3px solid {border_color};
+                        position: relative;
+                        overflow: hidden;
                     "
-                    onmouseover="this.style.transform='translateY(-5px) scale(1.02)'"
-                    onmouseout="this.style.transform='translateY(0) scale(1)'"
+                    onmouseover="this.style.transform='translateY(-8px) scale(1.02)'; this.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)';"
+                    onmouseout="this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 10px 30px rgba(0,0,0,0.3)';"
                     >
-                        <div>
-                            <div style="display: flex; justify-content: space-between; align-items: start;">
-                                <h3 style="margin: 0; font-size: 18px; font-weight: bold;">🏢 {company_name}</h3>
-                                <span style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-size: 12px;">{year}</span>
+                        <!-- شريط الحالة في الأعلى -->
+                        <div style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: start;
+                        ">
+                            <div style="
+                                background: rgba(0,0,0,0.5);
+                                padding: 4px 12px;
+                                border-radius: 20px;
+                                font-size: 12px;
+                                backdrop-filter: blur(4px);
+                            ">
+                                #{rank} {status_icon} {status_text}
                             </div>
-                            <div style="margin-top: 10px; font-size: 13px; opacity: 0.9;">
+                            <span style="
+                                background: rgba(0,0,0,0.5);
+                                padding: 4px 12px;
+                                border-radius: 20px;
+                                font-size: 12px;
+                                backdrop-filter: blur(4px);
+                            ">{year}</span>
+                        </div>
+                        
+                        <!-- معلومات الشركة -->
+                        <div style="text-align: center;">
+                            <h2 style="
+                                margin: 0;
+                                font-size: 22px;
+                                font-weight: bold;
+                                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                            ">🏢 {company_name}</h2>
+                            <div style="
+                                margin-top: 8px;
+                                font-size: 14px;
+                                opacity: 0.9;
+                                text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+                            ">
                                 📅 {first_period} → {last_period}
                             </div>
+                            <div style="
+                                margin-top: 4px;
+                                font-size: 12px;
+                                opacity: 0.8;
+                                text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+                            ">
+                                ⏱️ المدة: {period_duration} فترة
+                            </div>
                         </div>
-                        <div style="display: flex; justify-content: space-around; padding: 10px 0;">
+                        
+                        <!-- الإحصائيات -->
+                        <div style="
+                            display: flex;
+                            justify-content: space-around;
+                            padding: 10px 0;
+                            background: rgba(0,0,0,0.3);
+                            border-radius: 12px;
+                            backdrop-filter: blur(4px);
+                        ">
                             <div style="text-align: center;">
                                 <div style="font-size: 28px; font-weight: bold;">{total_boards}</div>
                                 <div style="font-size: 12px; opacity: 0.8;">📊 لوحات</div>
@@ -885,13 +1000,35 @@ if page == "🏢 لوحات الشركات":
                                 <div style="font-size: 28px; font-weight: bold;">{total_periods}</div>
                                 <div style="font-size: 12px; opacity: 0.8;">📅 فترات</div>
                             </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold;">{period_duration}</div>
+                                <div style="font-size: 12px; opacity: 0.8;">⏱️ مدة</div>
+                            </div>
                         </div>
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <span style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; font-size: 11px;">🟢 نشط</span>
-                            <span style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; font-size: 11px;">📌 {total_boards} لوحة</span>
+                        
+                        <!-- أزرار سريعة -->
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                            <span style="
+                                background: rgba(255,255,255,0.15);
+                                padding: 2px 10px;
+                                border-radius: 12px;
+                                font-size: 11px;
+                                backdrop-filter: blur(4px);
+                            ">🟢 نشط</span>
+                            <span style="
+                                background: rgba(255,255,255,0.15);
+                                padding: 2px 10px;
+                                border-radius: 12px;
+                                font-size: 11px;
+                                backdrop-filter: blur(4px);
+                            ">📌 {total_boards} لوحة</span>
                         </div>
                     </div>
                     ''', unsafe_allow_html=True)
+                    
+                    # ============================================================
+                    # أزرار تفاعلية
+                    # ============================================================
                     
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
@@ -907,6 +1044,10 @@ if page == "🏢 لوحات الشركات":
     else:
         st.warning("⚠️ لا توجد شركات معلنة حالياً")
         st.info("💡 ستظهر الشركات هنا عندما يكون لديها حجوزات في الفترات الحالية أو المستقبلية")
+    
+    # ============================================================
+    # باقي الكود (تفاصيل الشركة والخريطة) - كما هو
+    # ============================================================
     
     if st.session_state.get('show_company_details', False):
         company_name = st.session_state.get('selected_company', '')
