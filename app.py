@@ -1278,9 +1278,9 @@ elif page == "📅 لوحة الفترات":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
-#=================
-# لوحة المراقبة
-#==================
+# ============================================================
+# صفحة: Dashboard (لوحة المراقبة)
+# ============================================================
 
 elif page == "📊 Dashboard":
     st.markdown("""
@@ -1292,53 +1292,106 @@ elif page == "📊 Dashboard":
     
     current_year = datetime.now().year
     
-    all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
+    # ============================================================
+    # جلب البيانات (نفس منطق صفحة الفترات)
+    # ============================================================
     
-    booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
-    booked_df = run_query(booked_query, (current_year,))
+    @st.cache_data(ttl=300)
+    def load_dashboard_data(current_year):
+        # جلب جميع الأعمدة
+        all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
+        
+        # جلب الحجوزات للسنة الحالية (مواقع فريدة)
+        booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
+        booked_df = run_query(booked_query, (current_year,))
+        booked_boards_list = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
+        
+        return all_columns, booked_boards_list
     
-    booked_boards_list = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
+    all_columns, booked_boards_list = load_dashboard_data(current_year)
     
-    all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_boards_list else 'متاح')
+    # ============================================================
+    # حساب الإحصائيات (نفس منطق صفحة الفترات)
+    # ============================================================
     
+    # ✅ عدد المواقع الفريد (DISTINCT)
+    total_sites = len(all_columns)
+    booked_sites = len(booked_boards_list)
+    available_sites = total_sites - booked_sites
+    
+    # ✅ عدد اللوحات الفعلية (العدد)
     total_boards = all_columns['العدد'].sum()
-    booked_boards = all_columns[all_columns['الحالة'] == 'محجوز']['العدد'].sum()
+    booked_boards = all_columns[all_columns['رقم اللوحة'].isin(booked_boards_list)]['العدد'].sum()
     available_boards = total_boards - booked_boards
-    occupancy_rate = (booked_boards / total_boards * 100) if total_boards > 0 else 0
+    
+    # ✅ نسبة الإشغال (مواقع)
+    occupancy_rate = (booked_sites / total_sites * 100) if total_sites > 0 else 0
+    
+    # ============================================================
+    # عرض البطاقات
+    # ============================================================
     
     cols = st.columns(4)
     metrics_data = [
-        ("إجمالي اللوحات", total_boards, "🏢", "primary"),
-        ("محجوز", booked_boards, "🔴", "danger"),
-        ("متاح", available_boards, "🟢", "success"),
-        ("نسبة الإشغال", f"{occupancy_rate:.1f}%", "📈", "warning")
+        ("إجمالي المواقع", total_sites, "🗺️", "primary"),
+        ("🔴 محجوز (مواقع)", booked_sites, "📌", "danger"),
+        ("🟢 متاح (مواقع)", available_sites, "✅", "success"),
+        ("📈 نسبة الإشغال", f"{occupancy_rate:.1f}%", "📊", "warning")
     ]
     
     for idx, (title, value, icon, color) in enumerate(metrics_data):
         with cols[idx]:
             st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
     
+    # ============================================================
+    # شريط التقدم
+    # ============================================================
+    
     st.markdown(f"""
     <div style="margin: 20px 0;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span>📊 نسبة الإشغال الحالية</span>
+            <span>📊 نسبة إشغال المواقع</span>
             <span style="font-weight: bold;">{occupancy_rate:.1f}%</span>
         </div>
         <div style="height: 12px; background: rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden;">
             <div style="width: {occupancy_rate}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; color: #666;">
+            <span>🟢 {available_sites} موقع متاح</span>
+            <span>🔴 {booked_sites} موقع محجوز</span>
+            <span>📍 {total_sites} إجمالي المواقع</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
     st.divider()
     
+    # ============================================================
+    # إحصائيات اللوحات الفعلية
+    # ============================================================
+    
+    st.subheader("📊 إحصائيات اللوحات الفعلية")
+    col_boards1, col_boards2, col_boards3 = st.columns(3)
+    with col_boards1:
+        st.metric("📌 إجمالي اللوحات", f"{int(total_boards):,}")
+    with col_boards2:
+        st.metric("🔴 لوحات محجوزة", f"{int(booked_boards):,}")
+    with col_boards3:
+        st.metric("🟢 لوحات متاحة", f"{int(available_boards):,}")
+    
+    st.divider()
+    
+    # ============================================================
+    # الرسوم البيانية
+    # ============================================================
+    
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
-        st.subheader("🥧 نسبة الإشغال الكلية")
+        st.subheader("🥧 نسبة الإشغال (مواقع)")
         fig_pie = go.Figure(data=[go.Pie(
             labels=['محجوز', 'متاح'],
-            values=[booked_boards, available_boards],
+            values=[booked_sites, available_sites],
             hole=0.4,
             marker_colors=['#dc2626', '#22c55e'],
             textinfo='percent+label'
@@ -1347,12 +1400,12 @@ elif page == "📊 Dashboard":
         st.plotly_chart(fig_pie, use_container_width=True)
     
     with col_chart2:
-        st.subheader("📊 إحصائيات حسب المحافظة")
+        st.subheader("📊 نسبة الإشغال حسب المحافظة")
         city_stats = []
         for city in all_columns['المحافظة'].unique():
             city_data = all_columns[all_columns['المحافظة'] == city]
-            city_total = city_data['العدد'].sum()
-            city_booked = city_data[city_data['الحالة'] == 'محجوز']['العدد'].sum()
+            city_total = len(city_data)
+            city_booked = city_data[city_data['رقم اللوحة'].isin(booked_boards_list)]['رقم اللوحة'].nunique()
             city_stats.append({
                 'المحافظة': city,
                 'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
@@ -1366,28 +1419,41 @@ elif page == "📊 Dashboard":
     
     st.divider()
     
+    # ============================================================
+    # الخريطة
+    # ============================================================
+    
     st.subheader("🗺️ توزع اللوحات على الخريطة")
-    all_columns_map = run_query('SELECT * FROM "اعمدة انارة"')
+    
+    @st.cache_data(ttl=600)
+    def load_map_data():
+        return run_query('SELECT * FROM "اعمدة انارة"')
+    
+    all_columns_map = load_map_data()
     
     m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
     marker_cluster = MarkerCluster().add_to(m)
     
     for _, row in all_columns_map.iterrows():
         if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
+            is_booked = row['رقم اللوحة'] in booked_boards_list
+            color = 'red' if is_booked else 'green'
+            
             popup_html = f"""
             <div dir="rtl" style="font-family:Arial;text-align:right;min-width:250px;">
                 <b>🏢 {row['اسم العمود']}</b><br>
                 📍 {row['المحافظة']}<br>
                 📡 {row['الشبكة']}<br>
                 📏 {row['الحجم']}<br>
-                🔢 {row['العدد']} لوحة
+                🔢 {row['العدد']} لوحة<br>
+                {'🔴 محجوز' if is_booked else '🟢 متاح'}
             </div>
             """
             
             folium.Marker(
                 [row['Latitude'], row['Longitude']],
                 popup=folium.Popup(popup_html, max_width=350),
-                icon=folium.Icon(color='green')
+                icon=folium.Icon(color=color)
             ).add_to(marker_cluster)
     
     st_folium(m, width="100%", height=500)
