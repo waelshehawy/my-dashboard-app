@@ -1484,10 +1484,9 @@ elif page == "📊 Dashboard":
     # ============================================================
     
     # ============================================================
-    # الخريطة (مع زر عرض/إخفاء)
+    # الخريطة (مع منع الريفريش)
     # ============================================================
     
-    # ✅ استخدام st.expander لتوسيع الخريطة فقط عند الطلب
     with st.expander("🗺️ عرض الخريطة", expanded=False):
         
         @st.cache_data(ttl=600)
@@ -1496,7 +1495,6 @@ elif page == "📊 Dashboard":
         
         all_columns_map = load_map_data()
         
-        # ✅ جلب أسماء الزبائن للوحات المحجوزة
         @st.cache_data(ttl=600)
         def load_customer_names():
             return run_query('SELECT DISTINCT "رقم اللوحة", "اسم الزبون" FROM "حجوزات1" WHERE "العام" = %s', (current_year,))
@@ -1504,7 +1502,6 @@ elif page == "📊 Dashboard":
         customers_df = load_customer_names()
         customer_dict = dict(zip(customers_df['رقم اللوحة'].astype(str), customers_df['اسم الزبون']))
         
-        # ✅ إنشاء الخريطة
         m = folium.Map(
             location=SYRIA_COORDS["سوريا"], 
             zoom_start=7,
@@ -1551,11 +1548,10 @@ elif page == "📊 Dashboard":
                     icon=folium.Icon(color=color)
                 ).add_to(marker_cluster)
         
-        # ✅ عرض الخريطة داخل expander
-        st_folium(m, width="100%", height=480, key="dashboard_map")
+        # ✅ منع الريفريش باستخدام key ثابت
+        st_folium(m, width="100%", height=480, key="fixed_map")
         
-        # ✅ تذييل صغير
-        st.caption("📍 اضغط على أيقونة لعرض تفاصيل اللوحة • 🟢 متاح • 🔴 محجوز")
+        st.caption("📍 اضغط على أيقونة لعرض تفاصيل اللوحة")
 #============================
 # عرض سعر
 #=============================
