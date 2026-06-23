@@ -1480,7 +1480,7 @@ elif page == "📊 Dashboard":
 
     
     # ============================================================
-    # الخريطة (نسخة نهائية)
+    # الخريطة (نسخة نهائية - مع سكرول وتكبير طبيعي)
     # ============================================================
     
     st.subheader("🗺️ توزع اللوحات على الخريطة")
@@ -1499,16 +1499,12 @@ elif page == "📊 Dashboard":
     customers_df = load_customer_names()
     customer_dict = dict(zip(customers_df['رقم اللوحة'].astype(str), customers_df['اسم الزبون']))
     
-    # ✅ إنشاء الخريطة
+    # ✅ إنشاء الخريطة (بدون تقييد)
     m = folium.Map(
         location=SYRIA_COORDS["سوريا"], 
         zoom_start=7,
         height=480,
-        control_scale=True,
-        zoom_control=True,
-        scrollWheelZoom=False,
-        dragging=True,
-        double_click_zoom=False
+        control_scale=True
     )
     marker_cluster = MarkerCluster().add_to(m)
     
@@ -1551,7 +1547,7 @@ elif page == "📊 Dashboard":
                 icon=folium.Icon(color=color)
             ).add_to(marker_cluster)
     
-    # ✅ عرض الخريطة مع السماح بالتفاعل (بدون returned_objects=[])
+    # ✅ عرض الخريطة (بدون returned_objects=[]، بدون تقييد)
     st_folium(
         m, 
         width="100%", 
