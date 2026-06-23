@@ -2284,8 +2284,8 @@ elif page == "📄 عرض سعر":
                 if st.button("📝 تصدير Word", use_container_width=True, key="export_word"):
                     discount = discount_percent if apply_discount else 0
                     
-                    doc = Document('template.docx') if os.path.exists('template.docx') else Document()
-set_page_rtl(doc)  # <-- هذا السطر الجديد
+                    doc = Document('template.docx') if os.path.exists('template.docx') else Document() 
+                    set_page_rtl(doc)  # <-- هذا السطر الجديد
                     PURPLE_COLOR = "660099"
                     
                     discount_amount = grand_total_display * (discount / 100)
