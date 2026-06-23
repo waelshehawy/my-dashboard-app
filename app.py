@@ -717,7 +717,7 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # عرض الصفحة المحددة
 # ============================================================
 
-page = st.session_state.get('page', "🏢 لوحات الشركات')
+page = st.session_state.get('page', "🏢 لوحات الشركات")
 
 # ============================================================
 # الصفحة الأولى: لوحات الشركات (if)
