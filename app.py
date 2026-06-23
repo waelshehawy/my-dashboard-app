@@ -1443,6 +1443,10 @@ elif page == "📊 Dashboard":
     # الرسوم البيانية
     # ============================================================
     
+    # ============================================================
+    # الرسوم البيانية
+    # ============================================================
+    
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
@@ -1459,6 +1463,7 @@ elif page == "📊 Dashboard":
     
     with col_chart2:
         st.subheader("📊 نسبة الإشغال حسب المحافظة")
+        
         city_stats = []
         for city in df['المحافظة'].unique():
             city_data = df[df['المحافظة'] == city]
@@ -1470,9 +1475,42 @@ elif page == "📊 Dashboard":
             })
         
         city_df = pd.DataFrame(city_stats)
-        fig_bar = px.bar(city_df, x='المحافظة', y='نسبة الإشغال', 
-                         color='نسبة الإشغال', color_continuous_scale='RdYlGn')
-        fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        
+        # ✅ ألوان واضحة ومتباينة
+        fig_bar = px.bar(
+            city_df, 
+            x='المحافظة', 
+            y='نسبة الإشغال',
+            color='نسبة الإشغال',
+            color_continuous_scale=[
+                (0.0, '#22c55e'),   # أخضر فاتح (نسبة منخفضة)
+                (0.5, '#eab308'),   # أصفر (نسبة متوسطة)
+                (1.0, '#dc2626')    # أحمر (نسبة عالية)
+            ],
+            text='نسبة الإشغال'
+        )
+        fig_bar.update_traces(
+            texttemplate='%{text:.1f}%',
+            textposition='outside',
+            marker=dict(line=dict(width=2, color='#1e293b'))
+        )
+        fig_bar.update_layout(
+            height=400,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#1e293b', size=13),
+            xaxis=dict(tickangle=0, tickfont=dict(size=11)),
+            yaxis=dict(
+                title='نسبة الإشغال %',
+                range=[0, 105],
+                gridcolor='rgba(0,0,0,0.08)'
+            ),
+            coloraxis_colorbar=dict(
+                title='نسبة الإشغال',
+                tickvals=[0, 50, 100],
+                ticktext=['منخفضة', 'متوسطة', 'عالية']
+            )
+        )
         st.plotly_chart(fig_bar, use_container_width=True)
     
     st.divider()
