@@ -330,9 +330,9 @@ def get_period_from_date(date_obj):
     month = date_obj.month
     
     month_names = {
-        1: 'كانون الثاني', 2: 'شباط', 3: 'آذار', 4: 'نيسان',
-        5: 'أيار', 6: 'حزيران', 7: 'تموز', 8: 'آب',
-        9: 'أيلول', 10: 'تشرين الأول', 11: 'تشرين الثاني', 12: 'كانون الأول'
+        1: 'كانون ثاني', 2: 'شباط', 3: 'اذار', 4: 'نيسان',
+        5: 'ايار', 6: 'حزيران', 7: 'تموز', 8: 'اب',
+        9: 'ايلول', 10: 'تشرين اول', 11: 'تشرين ثاني', 12: 'كانون اول'
     }
     
     month_name = month_names[month]
@@ -340,18 +340,11 @@ def get_period_from_date(date_obj):
     if day <= 15:
         period_name = f"{month_name} 15-1"
     else:
-        # تحديد آخر يوم في الشهر
-        if month == 2:  # شباط
-            last_day = 28
-        elif month in [4, 6, 9, 11]:  # نيسان, حزيران, أيلول, تشرين الثاني
-            last_day = 30
-        else:
-            last_day = 31
-        period_name = f"{month_name} {last_day}-16"
+        period_name = f"{month_name} 30-15"
     
     return PERIOD_ORDER.get(period_name, 99)
     
-    return PERIOD_ORDER.get(period_name, 99)
+
 # ============================================================
 # دوال مساعدة
 # ============================================================
