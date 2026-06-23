@@ -1279,7 +1279,7 @@ elif page == "📅 لوحة الفترات":
         use_container_width=True
     )
 # ============================================================
-# صفحة: Dashboard (لوحة المراقبة)
+# صفحة: Dashboard (لوحة المراقبة) - باستخدام نفس منطق الأعمدة المتاحة
 # ============================================================
 
 elif page == "📊 Dashboard":
@@ -1291,41 +1291,103 @@ elif page == "📊 Dashboard":
     """, unsafe_allow_html=True)
     
     current_year = datetime.now().year
+    today = date.today()
+    target_period_num = get_period_from_date(today)
     
     # ============================================================
-    # جلب البيانات (نفس منطق صفحة الفترات)
+    # جلب البيانات (نفس منطق صفحة الأعمدة المتاحة)
     # ============================================================
     
     @st.cache_data(ttl=300)
-    def load_dashboard_data(current_year):
-        # جلب جميع الأعمدة
-        all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
+    def load_dashboard_data(target_period_num, target_year):
+        conn = get_connection()
         
-        # جلب الحجوزات للسنة الحالية (مواقع فريدة)
-        booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
-        booked_df = run_query(booked_query, (current_year,))
-        booked_boards_list = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
+        query = f"""
+        WITH booking_periods AS (
+            SELECT 
+                CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
+                "فترة الحجز",
+                "العام",
+                CASE
+                    WHEN "فترة الحجز" = 'كانون ثاني 15-1' THEN 1
+                    WHEN "فترة الحجز" = 'كانون ثاني 30-15' THEN 2
+                    WHEN "فترة الحجز" = 'شباط 15-1' THEN 3
+                    WHEN "فترة الحجز" = 'شباط 30-15' THEN 4
+                    WHEN "فترة الحجز" = 'اذار 15-1' THEN 5
+                    WHEN "فترة الحجز" = 'اذار 30-15' THEN 6
+                    WHEN "فترة الحجز" = 'نيسان 15-1' THEN 7
+                    WHEN "فترة الحجز" = 'نيسان 30-15' THEN 8
+                    WHEN "فترة الحجز" = 'ايار15-1' THEN 9
+                    WHEN "فترة الحجز" = 'أيار 30-15' THEN 10
+                    WHEN "فترة الحجز" = 'حزيران 15-1' THEN 11
+                    WHEN "فترة الحجز" = 'حزيران 30-15' THEN 12
+                    WHEN "فترة الحجز" = 'تموز 15-1' THEN 13
+                    WHEN "فترة الحجز" = 'تموز 30-15' THEN 14
+                    WHEN "فترة الحجز" = 'اب 15-1' THEN 15
+                    WHEN "فترة الحجز" = 'اب 30-15' THEN 16
+                    WHEN "فترة الحجز" = 'أيلول 15-1' THEN 17
+                    WHEN "فترة الحجز" = 'ايلول30-15' THEN 18
+                    WHEN "فترة الحجز" = 'تشرين اول 15-1' THEN 19
+                    WHEN "فترة الحجز" = 'تشرين اول30-15' THEN 20
+                    WHEN "فترة الحجز" = 'تشرين ثاني 15-1' THEN 21
+                    WHEN "فترة الحجز" = 'تشرين ثاني 30-15' THEN 22
+                    WHEN "فترة الحجز" = 'كانون اول 15-1' THEN 23
+                    WHEN "فترة الحجز" = 'كانون اول 30-15' THEN 24
+                END as period_num
+            FROM "حجوزات1"
+            WHERE "العام" >= {target_year}
+        ),
+        board_aggregated AS (
+            SELECT 
+                "رقم اللوحة",
+                MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
+                MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future
+            FROM booking_periods
+            GROUP BY "رقم اللوحة"
+        )
+        SELECT 
+            a."رقم اللوحة",
+            a."اسم العمود",
+            a."المحافظة",
+            a."الشبكة",
+            a."الحجم",
+            a."العدد",
+            CASE 
+                WHEN b.has_current = 1 AND b.has_future = 1 THEN 'محجوز بالكامل'
+                WHEN b.has_current = 1 AND b.has_future = 0 THEN 'محجوز مؤقتاً'
+                WHEN b.has_current = 0 AND b.has_future = 1 THEN 'متاح مؤقتاً'
+                ELSE 'متاح فوراً'
+            END as status
+        FROM "اعمدة انارة" a
+        LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+        ORDER BY a."المحافظة", a."رقم اللوحة"
+        """
         
-        return all_columns, booked_boards_list
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
     
-    all_columns, booked_boards_list = load_dashboard_data(current_year)
+    df = load_dashboard_data(target_period_num, current_year)
     
     # ============================================================
-    # حساب الإحصائيات (نفس منطق صفحة الفترات)
+    # حساب الإحصائيات (نفس صفحة الأعمدة المتاحة)
     # ============================================================
     
-    # ✅ عدد المواقع الفريد (DISTINCT)
-    total_sites = len(all_columns)
-    booked_sites = len(booked_boards_list)
-    available_sites = total_sites - booked_sites
+    total_sites = len(df)
+    total_boards = df['العدد'].sum()
     
-    # ✅ عدد اللوحات الفعلية (العدد)
-    total_boards = all_columns['العدد'].sum()
-    booked_boards = all_columns[all_columns['رقم اللوحة'].isin(booked_boards_list)]['العدد'].sum()
-    available_boards = total_boards - booked_boards
+    # محجوز حالياً (has_current = 1)
+    booked_current = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
+    booked_current_sites = len(booked_current)
+    booked_current_boards = booked_current['العدد'].sum()
     
-    # ✅ نسبة الإشغال (مواقع)
-    occupancy_rate = (booked_sites / total_sites * 100) if total_sites > 0 else 0
+    # متاح حالياً (has_current = 0)
+    available_current = df[~df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
+    available_current_sites = len(available_current)
+    available_current_boards = available_current['العدد'].sum()
+    
+    # نسبة الإشغال
+    occupancy_rate = (booked_current_sites / total_sites * 100) if total_sites > 0 else 0
     
     # ============================================================
     # عرض البطاقات
@@ -1334,8 +1396,8 @@ elif page == "📊 Dashboard":
     cols = st.columns(4)
     metrics_data = [
         ("إجمالي المواقع", total_sites, "🗺️", "primary"),
-        ("🔴 محجوز (مواقع)", booked_sites, "📌", "danger"),
-        ("🟢 متاح (مواقع)", available_sites, "✅", "success"),
+        ("🔴 محجوز", booked_current_sites, "📌", "danger"),
+        ("🟢 متاح", available_current_sites, "✅", "success"),
         ("📈 نسبة الإشغال", f"{occupancy_rate:.1f}%", "📊", "warning")
     ]
     
@@ -1350,16 +1412,11 @@ elif page == "📊 Dashboard":
     st.markdown(f"""
     <div style="margin: 20px 0;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span>📊 نسبة إشغال المواقع</span>
+            <span>📊 نسبة الإشغال الحالية</span>
             <span style="font-weight: bold;">{occupancy_rate:.1f}%</span>
         </div>
         <div style="height: 12px; background: rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden;">
             <div style="width: {occupancy_rate}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px;"></div>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; color: #666;">
-            <span>🟢 {available_sites} موقع متاح</span>
-            <span>🔴 {booked_sites} موقع محجوز</span>
-            <span>📍 {total_sites} إجمالي المواقع</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1375,9 +1432,9 @@ elif page == "📊 Dashboard":
     with col_boards1:
         st.metric("📌 إجمالي اللوحات", f"{int(total_boards):,}")
     with col_boards2:
-        st.metric("🔴 لوحات محجوزة", f"{int(booked_boards):,}")
+        st.metric("🔴 لوحات محجوزة", f"{int(booked_current_boards):,}")
     with col_boards3:
-        st.metric("🟢 لوحات متاحة", f"{int(available_boards):,}")
+        st.metric("🟢 لوحات متاحة", f"{int(available_current_boards):,}")
     
     st.divider()
     
@@ -1388,10 +1445,10 @@ elif page == "📊 Dashboard":
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
-        st.subheader("🥧 نسبة الإشغال (مواقع)")
+        st.subheader("🥧 نسبة الإشغال")
         fig_pie = go.Figure(data=[go.Pie(
             labels=['محجوز', 'متاح'],
-            values=[booked_sites, available_sites],
+            values=[booked_current_sites, available_current_sites],
             hole=0.4,
             marker_colors=['#dc2626', '#22c55e'],
             textinfo='percent+label'
@@ -1402,10 +1459,10 @@ elif page == "📊 Dashboard":
     with col_chart2:
         st.subheader("📊 نسبة الإشغال حسب المحافظة")
         city_stats = []
-        for city in all_columns['المحافظة'].unique():
-            city_data = all_columns[all_columns['المحافظة'] == city]
+        for city in df['المحافظة'].unique():
+            city_data = df[df['المحافظة'] == city]
             city_total = len(city_data)
-            city_booked = city_data[city_data['رقم اللوحة'].isin(booked_boards_list)]['رقم اللوحة'].nunique()
+            city_booked = len(city_data[city_data['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])])
             city_stats.append({
                 'المحافظة': city,
                 'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
@@ -1433,6 +1490,9 @@ elif page == "📊 Dashboard":
     
     m = folium.Map(location=SYRIA_COORDS["سوريا"], zoom_start=7)
     marker_cluster = MarkerCluster().add_to(m)
+    
+    # قائمة اللوحات المحجوزة حالياً
+    booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
     
     for _, row in all_columns_map.iterrows():
         if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
