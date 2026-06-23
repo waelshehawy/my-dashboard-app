@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import time  # ⬅️ أضف هذا السطر
 import io
 import folium
 import json
@@ -31,270 +30,85 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-
-
+#============================================================
+# إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
-# إدارة اتصال قاعدة البيانات المتقدمة
-# ============================================================
-
-@st.cache_resource(ttl=300)  # تجديد كل 5 دقائق
-def create_db_connection():
-    """إنشاء اتصال جديد بقاعدة البيانات"""
-    try:
-        conn = psycopg2.connect(
-            host=st.secrets["SUPABASE_HOST"],
-            port=st.secrets["SUPABASE_PORT"],
-            database=st.secrets["SUPABASE_DB"],
-            user=st.secrets["SUPABASE_USER"],
-            password=st.secrets["SUPABASE_PASSWORD"],
-            sslmode="require",
-            connect_timeout=30,
-            keepalives=1,
-            keepalives_idle=30,
-            keepalives_interval=10,
-            keepalives_count=5
-        )
-        return conn
-    except Exception as e:
-        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {str(e)}")
-        return None
 
 def get_connection():
-    """
-    الحصول على اتصال صالح بقاعدة البيانات
-    مع إعادة المحاولة إذا كان الاتصال مغلقاً
-    """
-    # التحقق من وجود اتصال في session_state
-    if 'db_connection' not in st.session_state:
-        st.session_state.db_connection = None
-    
-    # التحقق من صحة الاتصال الحالي
-    conn = st.session_state.db_connection
-    
-    # إذا لم يكن هناك اتصال أو كان مغلقاً
-    if conn is None or conn.closed:
-        try:
-            # محاولة إعادة الاتصال
-            new_conn = create_db_connection()
-            if new_conn is not None:
-                st.session_state.db_connection = new_conn
-                st.session_state.connection_time = time.time()
-                return new_conn
-            else:
-                st.error("❌ لا يمكن إنشاء اتصال بقاعدة البيانات")
-                return None
-        except Exception as e:
-            st.error(f"❌ خطأ في الاتصال: {str(e)}")
-            return None
-    
-    # التحقق من أن الاتصال لا يزال صالحاً (ping)
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        cursor.fetchone()
-        cursor.close()
-        return conn
-    except Exception:
-        # الاتصال غير صالح، إعادة إنشائه
-        try:
-            new_conn = create_db_connection()
-            if new_conn is not None:
-                st.session_state.db_connection = new_conn
-                st.session_state.connection_time = time.time()
-                return new_conn
-        except:
-            pass
-        
-        # محاولة إغلاق الاتصال القديم إذا كان موجوداً
-        try:
-            if conn:
-                conn.close()
-        except:
-            pass
-        
-        st.session_state.db_connection = None
-        st.error("❌ انقطع الاتصال بقاعدة البيانات، يرجى تحديث الصفحة")
-        return None
+    """اتصال مباشر بـ Supabase PostgreSQL باستخدام st.secrets"""
+    return psycopg2.connect(
+        host=st.secrets["SUPABASE_HOST"],
+        port=st.secrets["SUPABASE_PORT"],
+        database=st.secrets["SUPABASE_DB"],
+        user=st.secrets["SUPABASE_USER"],
+        password=st.secrets["SUPABASE_PASSWORD"],
+        sslmode="require",
+        connect_timeout=30
+    )
 
-def safe_cursor():
-    """
-    الحصول على مؤشر آمن للتعامل مع قاعدة البيانات
-    """
-    conn = get_connection()
-    if conn is None or conn.closed:
-        st.error("❌ لا يوجد اتصال صالح بقاعدة البيانات")
+# ============================================================
+# تهيئة session_state (قبل أي شيء آخر)
+# ============================================================
+
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'cart' not in st.session_state:
+    st.session_state.cart = {}
+if 'booking_cart' not in st.session_state:
+    st.session_state.booking_cart = []
+if 'selected_company' not in st.session_state:
+    st.session_state.selected_company = None
+if 'show_company_map' not in st.session_state:
+    st.session_state.show_company_map = False
+if 'selected_city' not in st.session_state:
+    st.session_state.selected_city = None
+if 'show_city_details' not in st.session_state:
+    st.session_state.show_city_details = False
+if 'show_all_cities' not in st.session_state:
+    st.session_state.show_all_cities = False
+# ============================================================
+# دوال المصادقة
+# ============================================================
+
+def is_authenticated():
+    """التحقق من مصادقة المستخدم"""
+    return st.session_state.get('auth', False) and st.session_state.get('user_id') is not None
+
+def get_current_user():
+    """الحصول على معلومات المستخدم الحالي"""
+    if 'user_id' not in st.session_state:
         return None
     
-    try:
-        return conn.cursor()
-    except Exception as e:
-        st.error(f"❌ خطأ في إنشاء المؤشر: {str(e)}")
-        return None
-
-def execute_query(query, params=None, fetch_all=True):
-    """
-    تنفيذ استعلام مع إدارة الاتصال التلقائية
-    """
-    conn = None
-    cursor = None
     try:
         conn = get_connection()
-        if conn is None or conn.closed:
-            st.error("❌ لا يوجد اتصال صالح بقاعدة البيانات")
-            return None
-        
         cursor = conn.cursor()
-        cursor.execute(query, params or ())
+        cursor.execute('''
+            SELECT id, username, role, full_name, created_at 
+            FROM users 
+            WHERE id = %s
+        ''', (st.session_state.user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
         
-        if fetch_all:
-            # استعلام SELECT
-            if query.strip().upper().startswith('SELECT'):
-                result = cursor.fetchall()
-                # الحصول على أسماء الأعمدة
-                if cursor.description:
-                    col_names = [desc[0] for desc in cursor.description]
-                    return pd.DataFrame(result, columns=col_names)
-                return pd.DataFrame(result)
-            else:
-                # استعلام INSERT/UPDATE/DELETE
-                conn.commit()
-                return cursor.rowcount
-        else:
-            # لا نحتاج إلى النتيجة (مثل INSERT مع RETURNING)
-            conn.commit()
-            return cursor
-            
-    except psycopg2.InterfaceError as e:
-        # خطأ في الاتصال
-        st.error(f"❌ انقطع الاتصال بقاعدة البيانات: {str(e)}")
-        # إعادة تعيين الاتصال
-        st.session_state.db_connection = None
-        return None
+        if user:
+            return {
+                'id': user[0],
+                'username': user[1],
+                'role': user[2],
+                'full_name': user[3],
+                'created_at': user[4]
+            }
     except Exception as e:
-        st.error(f"❌ خطأ في تنفيذ الاستعلام: {str(e)}")
-        if conn:
-            conn.rollback()
-        return None
-    finally:
-        if cursor:
-            try:
-                cursor.close()
-            except:
-                pass
-
-
-
-# ============================================================
-# تهيئة متقدمة لـ session_state (قبل أي شيء)
-# ============================================================
-
-def init_session_state():
-    """تهيئة جميع متغيرات الجلسة مرة واحدة وبشكل آمن"""
-    defaults = {
-        'auth': False,
-        'role': None,
-        'username': None,
-        'user_id': None,
-        'cart': {},
-        'booking_cart': [],
-        'selected_company': None,
-        'show_company_map': False,
-        'selected_city': None,
-        'show_city_details': False,
-        'show_all_cities': False,
-        'temp_cust': "",
-        'page_loaded': False,
-        'last_rerun': None,
-        'processing': False,
-        'db_connection': None,
-        'connection_time': None,
-        'prevent_rerun': False,
-        'current_page': None,
-        'page_init_time': None
-    }
+        st.error(f"❌ خطأ في جلب المستخدم: {e}")
     
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-# استدعاء التهيئة في بداية الملف
-init_session_state()
-
-# إضافة متغيرات جديدة للتحكم في الريفريش
-if 'rerun_counter' not in st.session_state:
-    st.session_state.rerun_counter = 0
-if 'last_action_time' not in st.session_state:
-    st.session_state.last_action_time = time.time()
-# ============================================================
-# دوال الاستعلام المحسنة
-# ============================================================
-
-@st.cache_data(ttl=60, show_spinner=False)
-def cached_query(query, params=None):
-    """استعلام مع تخزين مؤقت"""
-    result = execute_query(query, params, fetch_all=True)
-    return result
-
-def run_query(query, params=None, use_cache=True):
-    """
-    تنفيذ استعلام مع خيار التخزين المؤقت
-    """
-    # التحقق من نوع الاستعلام
-    query_upper = query.strip().upper()
-    modifying_queries = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE']
-    is_modifying = any(query_upper.startswith(keyword) for keyword in modifying_queries)
-    
-    if is_modifying:
-        # استعلامات التعديل لا تستخدم cache
-        return execute_query(query, params, fetch_all=False)
-    else:
-        # استعلامات SELECT يمكن استخدام cache
-        if use_cache:
-            return cached_query(query, params)
-        else:
-            return execute_query(query, params, fetch_all=True)
-# ============================================================
-# التحكم في الريفريش
-# ============================================================
-
-def safe_rerun(reason=None):
-    """إعادة تشغيل آمنة مع منع التكرار"""
-    current_time = time.time()
-    
-    # منع الريفريش المتكرر (أقل من ثانية)
-    if current_time - st.session_state.get('last_rerun', 0) < 1.0:
-        return
-    
-    # منع الريفريش أثناء المعالجة
-    if st.session_state.get('processing', False):
-        return
-    
-    st.session_state.last_rerun = current_time
-    st.session_state.rerun_counter = st.session_state.rerun_counter + 1
-    st.session_state.prevent_rerun = False
-    
-    if reason:
-        st.session_state.last_action = reason
-    
-    st.rerun()
-
-def check_page_load():
-    """التحقق من تحميل الصفحة ومنع التحميل المزدوج"""
-    current_page = st.session_state.get('current_page', '')
-    
-    # إذا لم يتم تحميل الصفحة بعد أو تم تغيير الصفحة
-    if current_page != st.session_state.get('page_loaded', ''):
-        st.session_state.page_loaded = current_page
-        st.session_state.page_init_time = time.time()
-        return True
-    
-    # إذا تم تحميل الصفحة بالفعل ولكن مر وقت طويل (أكثر من 5 دقائق)
-    if st.session_state.page_init_time and time.time() - st.session_state.page_init_time > 300:
-        st.session_state.page_init_time = time.time()
-        return True
-    
-    return False
+    return None
 # ============================================================
 # التحسينات البصرية
 # ============================================================
@@ -427,19 +241,7 @@ ADVANCED_CSS = """
 
 st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 
-# ============================================================
-# دوال CSS المحسنة (تطبق مرة واحدة فقط)
-# ============================================================
 
-def apply_css():
-    """تطبيق CSS مرة واحدة فقط"""
-    if 'css_applied' not in st.session_state:
-        st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
-        st.session_state.css_applied = True
-        st.session_state.css_applied_time = time.time()
-
-# استدعاء تطبيق CSS
-apply_css()
 # ============================================================
 # دوال المتاح
 # ============================================================
@@ -625,7 +427,7 @@ if "temp_cust" not in st.session_state:
 
 
 # ============================================================
-# صفحة تسجيل الدخول المحسنة
+# صفحة تسجيل الدخول
 # ============================================================
 
 if not st.session_state.auth:
@@ -646,13 +448,22 @@ if not st.session_state.auth:
         
         if submitted:
             try:
-                user = authenticate_user(username, password)
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, username, password, role FROM users WHERE username = %s AND password = %s",
+                    (username, password)
+                )
+                user = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                
                 if user:
                     st.session_state.auth = True
-                    st.session_state.role = user['role']
-                    st.session_state.username = user['username']
-                    st.session_state.user_id = user['id']
-                    safe_rerun("تسجيل الدخول")
+                    st.session_state.role = user[3]
+                    st.session_state.username = user[1]
+                    st.session_state.user_id = user[0]
+                    st.rerun()
                 else:
                     st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
             except Exception as e:
@@ -666,50 +477,6 @@ if not st.session_state.auth:
 
 conn = get_connection()
 
-# ============================================================
-# معالج الأخطاء العام
-# ============================================================
-
-def handle_global_error(error, page_name=None):
-    """معالج أخطاء موحد لكامل التطبيق"""
-    import traceback
-    
-    error_id = f"ERR_{int(time.time())}_{hash(str(error)) % 10000:04d}"
-    
-    # تسجيل الخطأ
-    if 'error_log' not in st.session_state:
-        st.session_state.error_log = []
-    
-    st.session_state.error_log.append({
-        'id': error_id,
-        'error': str(error),
-        'traceback': traceback.format_exc(),
-        'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'page': page_name or st.session_state.get('current_page', 'Unknown'),
-        'user': st.session_state.get('username', 'Unknown')
-    })
-    
-    # عرض رسالة خطأ مناسبة
-    st.error(f"""
-    ❌ **حدث خطأ غير متوقع** (رمز: {error_id})
-    
-    {str(error)[:200]}
-    
-    الرجاء المحاولة مرة أخرى أو الاتصال بالدعم الفني.
-    """)
-    
-    # لا نقوم بإعادة التحميل تلقائياً لتجنب الحلقات اللانهائية
-    st.session_state.processing = False
-    
-    return error_id
-
-# استخدام المعالج في بداية كل صفحة
-try:
-    # كود الصفحة هنا
-    pass
-except Exception as e:
-    handle_global_error(e, "صفحة عرض السعر")
-    st.stop()
 # ============================================================
 # الشريط الجانبي
 # ============================================================
@@ -783,34 +550,26 @@ with st.sidebar:
 
 
 # ============================================================
-# دوال الاستعلام المحسنة
+# دوال استعلامات Supabase (بصيغة PostgreSQL)
 # ============================================================
 
-@st.cache_data(ttl=60, show_spinner=False)
-def cached_query(query, params=None):
-    """استعلام مع تخزين مؤقت"""
-    result = execute_query(query, params, fetch_all=True)
-    return result
-
-def run_query(query, params=None, use_cache=True):
-    """
-    تنفيذ استعلام مع خيار التخزين المؤقت
-    """
-    # التحقق من نوع الاستعلام
-    query_upper = query.strip().upper()
-    modifying_queries = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE']
-    is_modifying = any(query_upper.startswith(keyword) for keyword in modifying_queries)
-    
-    if is_modifying:
-        # استعلامات التعديل لا تستخدم cache
-        return execute_query(query, params, fetch_all=False)
-    else:
-        # استعلامات SELECT يمكن استخدام cache
-        if use_cache:
-            return cached_query(query, params)
+def run_query(query, params=None, fetch=True):
+    """تنفيذ استعلام على Supabase"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, params or ())
+        if fetch and query.strip().upper().startswith('SELECT'):
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            return pd.DataFrame(rows, columns=columns)
         else:
-            return execute_query(query, params, fetch_all=True)
-#=============================================
+            conn.commit()
+            return cursor.rowcount
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cursor.close()
 
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
@@ -1043,20 +802,7 @@ if page == "🏢 لوحات الشركات":
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
     st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
-# ============================================================
-# التحقق من الاتصال قبل تنفيذ أي عملية
-# ============================================================
-
-def ensure_db_connection():
-    """التأكد من وجود اتصال صالح بقاعدة البيانات"""
-    conn = get_connection()
-    if conn is None or conn.closed:
-        st.error("❌ لا يوجد اتصال بقاعدة البيانات. يرجى تحديث الصفحة.")
-        st.stop()
-    return conn
-
-# استخدمها في بداية كل صفحة تحتاج إلى قاعدة بيانات
-# conn = ensure_db_connection()    
+    
     # فلتر تاريخ البداية (بدون إعادة تحميل تلقائي)
     with st.form(key="filter_form"):
         st.subheader("📅 فلتر تاريخ بداية الإتاحة")
@@ -1261,253 +1007,277 @@ def ensure_db_connection():
 # صفحة: لوحة التحكم البصرية للفترات
 # ============================================================
 
-# ============================================================
-# صفحة: لوحة التحكم البصرية للفترات (محسنة)
-# ============================================================
-
 elif page == "📅 لوحة الفترات":
-    # ============================================================
-    # إعداد الصفحة ومنع الريفريش المتكرر
-    # ============================================================
-    
-    st.session_state.current_page = "📅 لوحة الفترات"
-    
-    if st.session_state.get('processing', False):
-        st.warning("⏳ جاري معالجة طلب سابق، الرجاء الانتظار...")
-        st.stop()
-    
     st.title("📅 لوحة التحكم البصرية للفترات")
     st.info("📌 عرض المتاح والمحجوز لكل فترة مع تفاصيل اللوحات المتاحة")
     
     # ============================================================
-    # تحميل البيانات مع التخزين المؤقت
+    # بناء PERIOD_ORDER من قاعدة البيانات
+    # ============================================================
+    
+    def build_period_order():
+        conn = get_connection()
+        df = pd.read_sql_query('SELECT no, namee FROM "الفترة" ORDER BY no', conn)
+        conn.close()
+        return {row['namee']: row['no'] for _, row in df.iterrows()}
+    
+    PERIOD_ORDER = build_period_order()
+    
+    # ============================================================
+    # الفلاتر
+    # ============================================================
+    
+    col_filter1, col_filter2 = st.columns(2)
+    
+    with col_filter1:
+        conn = get_connection()
+        cities_df = pd.read_sql_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"', conn)
+        conn.close()
+        city_list = ['جميع المحافظات'] + cities_df['المحافظة'].tolist()
+        selected_city = st.selectbox("🏙️ اختر المحافظة:", city_list)
+    
+    with col_filter2:
+        conn = get_connection()
+        sizes_df = pd.read_sql_query('SELECT DISTINCT "الحجم" FROM "اعمدة انارة" ORDER BY "الحجم"', conn)
+        conn.close()
+        size_list = ['جميع الأحجام'] + sizes_df['الحجم'].tolist()
+        selected_size = st.selectbox("📏 اختر الحجم:", size_list)
+    
+    # ============================================================
+    # جلب البيانات
     # ============================================================
     
     @st.cache_data(ttl=300)
-    def load_period_data():
-        """تحميل جميع البيانات اللازمة للوحة الفترات"""
-        try:
-            # جلب جميع الفترات
-            periods_df = run_query('SELECT no, namee FROM "الفترة" ORDER BY no', use_cache=True)
-            
-            # جلب جميع الأعمدة
-            columns_df = run_query('SELECT * FROM "اعمدة انارة"', use_cache=True)
-            
-            # جلب جميع الحجوزات
-            bookings_df = run_query('SELECT * FROM "حجوزات1"', use_cache=True)
-            
-            return {
-                'periods': periods_df,
-                'columns': columns_df,
-                'bookings': bookings_df
-            }
-        except Exception as e:
-            st.error(f"❌ خطأ في تحميل البيانات: {str(e)}")
-            return None
-    
-    # ============================================================
-    # عرض البيانات مع مؤشر تحميل
-    # ============================================================
-    
-    with st.spinner("🔄 جاري تحميل بيانات الفترات..."):
-        data = load_period_data()
-    
-    if data is None:
-        st.error("❌ فشل تحميل البيانات")
-        st.stop()
-    
-    periods_df = data['periods']
-    columns_df = data['columns']
-    bookings_df = data['bookings']
-    
-    # التحقق من صحة البيانات
-    if periods_df is None or periods_df.empty:
-        st.warning("⚠️ لا توجد فترات في قاعدة البيانات")
-        st.stop()
-    
-    if columns_df is None or columns_df.empty:
-        st.warning("⚠️ لا توجد أعمدة في قاعدة البيانات")
-        st.stop()
-    
-    # ============================================================
-    # خيارات التصفية
-    # ============================================================
-    
-    col_filter1, col_filter2, col_filter3 = st.columns(3)
-    
-    with col_filter1:
-        # اختيار العام
-        available_years = bookings_df['العام'].unique().tolist() if bookings_df is not None and not bookings_df.empty else [2026]
-        selected_year = st.selectbox(
-            "📅 العام:",
-            sorted(available_years, reverse=True),
-            index=0,
-            key="period_year_select"
+    def load_period_data(selected_city, selected_size, PERIOD_ORDER):
+        conn = get_connection()
+        
+        where_conditions = []
+        if selected_city != 'جميع المحافظات':
+            where_conditions.append(f'"المحافظة" = \'{selected_city}\'')
+        if selected_size != 'جميع الأحجام':
+            where_conditions.append(f'"الحجم" = \'{selected_size}\'')
+        
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        
+        boards_query = f"""
+        SELECT 
+            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
+            "اسم العمود",
+            "المحافظة",
+            "الشبكة",
+            "الحجم",
+            "العدد"
+        FROM "اعمدة انارة"
+        WHERE {where_clause}
+        """
+        boards_df = pd.read_sql_query(boards_query, conn)
+        
+        bookings_query = """
+        SELECT 
+            CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
+            "اسم الزبون",
+            "فترة الحجز",
+            "العام"
+        FROM "حجوزات1"
+        WHERE "العام" = 2026
+        """
+        bookings_df = pd.read_sql_query(bookings_query, conn)
+        conn.close()
+        
+        bookings_df['period_num'] = bookings_df['فترة الحجز'].apply(
+            lambda x: PERIOD_ORDER.get(x, 99)
         )
+        
+        return boards_df, bookings_df
     
-    with col_filter2:
-        # اختيار المحافظة
-        cities = columns_df['المحافظة'].unique().tolist() if columns_df is not None else []
-        selected_city = st.selectbox(
-            "🏙️ المحافظة:",
-            ["جميع المحافظات"] + cities,
-            key="period_city_select"
-        )
-    
-    with col_filter3:
-        # اختيار الحجم
-        sizes = columns_df['الحجم'].unique().tolist() if columns_df is not None else []
-        selected_size = st.selectbox(
-            "📏 الحجم:",
-            ["جميع الأحجام"] + sizes,
-            key="period_size_select"
-        )
+    boards_df, bookings_df = load_period_data(selected_city, selected_size, PERIOD_ORDER)
     
     # ============================================================
-    # عرض إحصائيات سريعة
+    # الحصول على الفترات من PERIOD_ORDER
     # ============================================================
     
-    st.subheader("📊 إحصائيات سريعة")
+    sorted_periods = sorted(PERIOD_ORDER.items(), key=lambda x: x[1])
+    all_period_names = [p[0] for p in sorted_periods]
     
-    # حساب الإحصائيات
-    total_columns = len(columns_df) if columns_df is not None else 0
-    total_bookings = len(bookings_df[bookings_df['العام'] == selected_year]) if bookings_df is not None and not bookings_df.empty else 0
-    total_periods = len(periods_df) if periods_df is not None else 0
+    # ============================================================
+    # حساب الإحصائيات لكل فترة
+    # ============================================================
     
-    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+    total_boards = boards_df['العدد'].sum()
+    period_stats = []
+    period_details = {}
     
-    with col_stat1:
-        st.metric("📊 إجمالي الأعمدة", total_columns)
-    with col_stat2:
-        st.metric("📋 إجمالي الحجوزات", total_bookings)
-    with col_stat3:
-        st.metric("📅 عدد الفترات", total_periods)
-    with col_stat4:
-        available = total_columns - (total_bookings / total_periods if total_periods > 0 else 0)
-        st.metric("🟢 المتوسط المتاح", f"{available:.0f}")
+    for period_name, period_num in sorted_periods:
+        # اللوحات المحجوزة في هذه الفترة
+        booked_boards = bookings_df[bookings_df['period_num'] == period_num]['رقم اللوحة'].unique()
+        booked_boards_list = list(booked_boards)
+        
+        # تفاصيل اللوحات المحجوزة
+        booked_details = boards_df[boards_df['رقم اللوحة'].isin(booked_boards_list)]
+        
+        # ✅ اللوحات المتاحة في هذه الفترة (جميع اللوحات - المحجوزة)
+        available_boards = boards_df[~boards_df['رقم اللوحة'].isin(booked_boards_list)]
+        
+        # الزبائن في هذه الفترة
+        customers = bookings_df[bookings_df['period_num'] == period_num]['اسم الزبون'].unique()
+        customers_list = ', '.join(customers[:3]) + (f' و {len(customers)-3} آخرين' if len(customers) > 3 else '')
+        
+        period_stats.append({
+            'الفترة': period_name,
+            'رقم الفترة': period_num,
+            'إجمالي اللوحات': int(total_boards),
+            'محجوز': int(booked_details['العدد'].sum()),
+            'متاح': int(total_boards - booked_details['العدد'].sum()),
+            'عدد الزبائن': len(customers),
+            'الزبائن': customers_list if len(customers) > 0 else 'لا يوجد'
+        })
+        
+        period_details[period_name] = {
+            'booked_details': booked_details,
+            'available_details': available_boards,  # ✅ اللوحات المتاحة
+            'customers': customers,
+            'booked_boards': booked_boards_list
+        }
+    
+    period_df = pd.DataFrame(period_stats)
+    
+    # ============================================================
+    # عرض النتائج
+    # ============================================================
+    
+    st.subheader("📊 إحصائيات عامة")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🏢 إجمالي اللوحات", int(total_boards))
+    col2.metric("📅 عدد الفترات", len(all_period_names))
+    col3.metric("👥 عدد الزبائن", bookings_df['اسم الزبون'].nunique())
     
     st.divider()
     
+    st.subheader("📋 الفترات")
+    
+    for i in range(0, len(all_period_names), 4):
+        cols = st.columns(4)
+        for j, col in enumerate(cols):
+            if i + j < len(all_period_names):
+                period_name = all_period_names[i + j]
+                stats = period_stats[i + j]
+                
+                with col:
+                    if stats['محجوز'] == 0:
+                        bg_color = "#e8f5e9"
+                        border_color = "#4CAF50"
+                    else:
+                        bg_color = "#fff3e0"
+                        border_color = "#FF9800"
+                    
+                    st.markdown(f"""
+                    <div style="background:{bg_color};border:2px solid {border_color};border-radius:12px;padding:15px;text-align:center;margin:5px 0;">
+                        <div style="font-size:14px;font-weight:bold;">{period_name}</div>
+                        <div style="font-size:12px;margin-top:5px;">🟢 {stats['متاح']} | 🔴 {stats['محجوز']}</div>
+                        <div style="font-size:11px;margin-top:5px;color:#666;">👥 {stats['الزبائن']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"📋 تفاصيل", key=f"detail_{i+j}"):
+                        st.session_state[f'selected_period_{i+j}'] = period_name
+                        st.session_state['show_period_detail'] = True
+                        st.rerun()
+    
     # ============================================================
-    # عرض الفترات مع تفاصيل اللوحات
+    # التفاصيل للفترة المختارة (عرض المتاح)
     # ============================================================
     
-    st.subheader("📅 تفاصيل الفترات")
-    
-    # تصفية الأعمدة حسب الاختيارات
-    filtered_columns = columns_df.copy()
-    if selected_city != "جميع المحافظات":
-        filtered_columns = filtered_columns[filtered_columns['المحافظة'] == selected_city]
-    if selected_size != "جميع الأحجام":
-        filtered_columns = filtered_columns[filtered_columns['الحجم'] == selected_size]
-    
-    # عرض الفترات في جدول
-    for _, period_row in periods_df.iterrows():
-        period_name = period_row['namee']
-        period_no = period_row['no']
+    if st.session_state.get('show_period_detail', False):
+        selected_period = None
+        for key in st.session_state:
+            if key.startswith('selected_period_'):
+                selected_period = st.session_state[key]
+                break
         
-        with st.expander(f"📅 الفترة {period_no}: {period_name}", expanded=False):
-            # جلب الحجوزات لهذه الفترة والعام
-            period_bookings = bookings_df[
-                (bookings_df['فترة الحجز'] == period_name) & 
-                (bookings_df['العام'] == selected_year)
-            ] if bookings_df is not None and not bookings_df.empty else pd.DataFrame()
+        if selected_period and selected_period in period_details:
+            details = period_details[selected_period]
             
-            # أرقام اللوحات المحجوزة
-            booked_boards = period_bookings['رقم اللوحة'].tolist() if not period_bookings.empty else []
+            st.divider()
+            st.subheader(f"📋 تفاصيل الفترة: {selected_period}")
             
-            # الأعمدة المتاحة
-            available_columns = filtered_columns[~filtered_columns['رقم اللوحة'].isin(booked_boards)]
+            period_stat = next(p for p in period_stats if p['الفترة'] == selected_period)
+            col1, col2, col3 = st.columns(3)
+            col1.metric("📊 إجمالي اللوحات", period_stat['إجمالي اللوحات'])
+            col2.metric("🔴 محجوز", period_stat['محجوز'])
+            col3.metric("🟢 متاح", period_stat['متاح'])
             
-            # عرض الإحصائيات
-            col_stats1, col_stats2, col_stats3 = st.columns(3)
-            with col_stats1:
-                st.metric("📌 إجمالي الأعمدة", len(filtered_columns))
-            with col_stats2:
-                st.metric("🔴 محجوز", len(booked_boards))
-            with col_stats3:
-                st.metric("🟢 متاح", len(available_columns))
-            
-            # عرض الأعمدة المتاحة إذا كانت موجودة
-            if not available_columns.empty:
-                st.write("**📍 الأعمدة المتاحة:**")
-                st.dataframe(
-                    available_columns[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'العدد', 'المحافظة', 'الحجم']],
-                    use_container_width=True,
-                    height=200
-                )
-                
-                # زر لحجز عمود محدد (للمديرين)
-                if is_admin():
-                    with st.expander("➕ حجز عمود جديد", expanded=False):
-                        selected_board = st.selectbox(
-                            "اختر العمود:",
-                            available_columns['رقم اللوحة'].tolist(),
-                            format_func=lambda x: f"{x} - {available_columns[available_columns['رقم اللوحة'] == x]['اسم العمود'].iloc[0]}",
-                            key=f"book_board_{period_no}"
-                        )
-                        
-                        customer_name = st.text_input("اسم الزبون:", key=f"cust_{period_no}")
-                        
-                        if st.button("✅ حجز العمود", key=f"confirm_book_{period_no}"):
-                            if customer_name:
-                                if not st.session_state.processing:
-                                    st.session_state.processing = True
-                                    try:
-                                        # تنفيذ الحجز باستخدام run_query الآمن
-                                        result = run_query('''
-                                            INSERT INTO "حجوزات1" ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز") 
-                                            VALUES (%s, %s, %s, %s)
-                                        ''', (selected_board, customer_name, selected_year, period_name), use_cache=False)
-                                        
-                                        if result is not None:
-                                            st.success(f"✅ تم حجز العمود {selected_board} بنجاح")
-                                            # مسح cache لتحديث البيانات
-                                            st.cache_data.clear()
-                                            safe_rerun("حجز عمود جديد")
-                                        else:
-                                            st.error("❌ فشل الحجز")
-                                    except Exception as e:
-                                        st.error(f"❌ خطأ في الحجز: {str(e)}")
-                                    finally:
-                                        st.session_state.processing = False
-                            else:
-                                st.warning("⚠️ الرجاء إدخال اسم الزبون")
+            # عرض الزبائن في هذه الفترة
+            if len(details['customers']) > 0:
+                st.write("**👥 الزبائن في هذه الفترة:**")
+                st.write(", ".join(details['customers']))
             else:
-                st.info("📭 لا توجد أعمدة متاحة في هذه الفترة")
-    
-    # ============================================================
-    # عرض تقرير مفصل (اختياري)
-    # ============================================================
-    
-    with st.expander("📊 تقرير مفصل عن الحجوزات", expanded=False):
-        if bookings_df is not None and not bookings_df.empty:
-            # تصفية حسب العام
-            year_bookings = bookings_df[bookings_df['العام'] == selected_year]
+                st.write("**👥 الزبائن في هذه الفترة:** لا يوجد")
             
-            if not year_bookings.empty:
-                # إحصائيات حسب الفترة
-                period_stats = year_bookings.groupby('فترة الحجز').size().reset_index(name='عدد الحجوزات')
-                period_stats = period_stats.merge(
-                    periods_df[['namee', 'no']],
-                    left_on='فترة الحجز',
-                    right_on='namee',
-                    how='left'
-                ).sort_values('no')
-                
-                st.write("**📈 عدد الحجوزات لكل فترة:**")
-                st.bar_chart(period_stats.set_index('فترة الحجز')['عدد الحجوزات'])
-                
-                # عرض الحجوزات التفصيلية
-                st.write("**📋 تفاصيل الحجوزات:**")
+            # ✅ عرض اللوحات المتاحة (وليس المحجوزة)
+            if not details['available_details'].empty:
+                st.write("**📋 اللوحات المتاحة في هذه الفترة:**")
                 st.dataframe(
-                    year_bookings[['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'العام']],
+                    details['available_details'][['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']],
                     use_container_width=True
                 )
             else:
-                st.info("📭 لا توجد حجوزات في هذا العام")
-        else:
-            st.info("📭 لا توجد حجوزات مسجلة")
+                st.info("✅ لا توجد لوحات متاحة في هذه الفترة")
+            
+            if st.button("🔙 إغلاق التفاصيل", key="close_detail"):
+                st.session_state['show_period_detail'] = False
+                for key in list(st.session_state.keys()):
+                    if key.startswith('selected_period_'):
+                        del st.session_state[key]
+                st.rerun()
+    
+    # ============================================================
+    # الرسم البياني
+    # ============================================================
+    
+    st.divider()
+    st.subheader("📊 رسم بياني للمتاح والمحجوز")
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['متاح'], name='متاح', marker_color='#4CAF50'))
+    fig.add_trace(go.Bar(x=period_df['الفترة'], y=period_df['محجوز'], name='محجوز', marker_color='#f44336'))
+    fig.update_layout(
+        barmode='stack',
+        height=400,
+        xaxis_tickangle=-45,
+        xaxis_title='الفترة',
+        yaxis_title='عدد اللوحات'
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # ============================================================
+    # تصدير Excel (مع المتاح في التفاصيل)
+    # ============================================================
+    
+    st.divider()
+    st.subheader("📥 تصدير التقرير")
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # صفحة الملخص
+        period_df.to_excel(writer, sheet_name='ملخص الفترات', index=False)
+        
+        # صفحة لكل فترة تحتوي على اللوحات المتاحة
+        for period_name in all_period_names:
+            if period_name in period_details:
+                details = period_details[period_name]
+                if not details['available_details'].empty:
+                    sheet_name = period_name[:25]
+                    details['available_details'].to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    output.seek(0)
+    
+    st.download_button(
+        "📥 تحميل تقرير Excel",
+        output,
+        f"periods_report_{selected_city}_{selected_size}.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
 #=================
 # لوحة المراقبة
 #==================
@@ -1828,20 +1598,7 @@ elif page == "📊 Dashboard":
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    # ============================================================
-# التحقق من الاتصال قبل تنفيذ أي عملية
-# ============================================================
-
-def ensure_db_connection():
-    """التأكد من وجود اتصال صالح بقاعدة البيانات"""
-    conn = get_connection()
-    if conn is None or conn.closed:
-        st.error("❌ لا يوجد اتصال بقاعدة البيانات. يرجى تحديث الصفحة.")
-        st.stop()
-    return conn
-
-# استخدمها في بداية كل صفحة تحتاج إلى قاعدة بيانات
-# conn = ensure_db_connection()
+    
     try:
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
