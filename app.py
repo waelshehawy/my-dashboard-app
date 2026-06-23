@@ -1279,7 +1279,7 @@ elif page == "📅 لوحة الفترات":
         use_container_width=True
     )
 # ============================================================
-# صفحة: Dashboard (لوحة المراقبة) - نسخة مصححة بالكامل
+# صفحة: Dashboard (لوحة المراقبة)
 # ============================================================
 
 elif page == "📊 Dashboard":
@@ -1292,61 +1292,85 @@ elif page == "📊 Dashboard":
     
     current_year = datetime.now().year
     
-    # ✅ استخدام @st.cache_data لتجنب إعادة التحميل المتكرر
+    # ============================================================
+    # جلب البيانات (نفس منطق صفحة الفترات)
+    # ============================================================
+    
     @st.cache_data(ttl=300)
     def load_dashboard_data(current_year):
         # جلب جميع الأعمدة
         all_columns = run_query('SELECT "رقم اللوحة", "المحافظة", "الشبكة", "الحجم", "العدد" FROM "اعمدة انارة"')
         
-        # جلب الحجوزات للسنة الحالية
+        # جلب الحجوزات للسنة الحالية (مواقع فريدة)
         booked_query = 'SELECT DISTINCT "رقم اللوحة" FROM "حجوزات1" WHERE "العام" = %s'
         booked_df = run_query(booked_query, (current_year,))
         booked_boards_list = booked_df['رقم اللوحة'].tolist() if booked_df is not None and not booked_df.empty else []
-        
-        # تحديد الحالة
-        all_columns['الحالة'] = all_columns['رقم اللوحة'].apply(lambda x: 'محجوز' if x in booked_boards_list else 'متاح')
         
         return all_columns, booked_boards_list
     
     all_columns, booked_boards_list = load_dashboard_data(current_year)
     
-    # ✅ حساب الإحصائيات (نفس منهج صفحة الفترات)
-    # عدد المواقع (DISTINCT)
+    # ============================================================
+    # حساب الإحصائيات (نفس منطق صفحة الفترات)
+    # ============================================================
+    
+    # ✅ عدد المواقع الفريد (DISTINCT)
     total_sites = len(all_columns)
     booked_sites = len(booked_boards_list)
     available_sites = total_sites - booked_sites
     
-    # عدد اللوحات الفعلية (العدد)
+    # ✅ عدد اللوحات الفعلية (العدد)
     total_boards = all_columns['العدد'].sum()
-    booked_boards = all_columns[all_columns['الحالة'] == 'محجوز']['العدد'].sum()
+    booked_boards = all_columns[all_columns['رقم اللوحة'].isin(booked_boards_list)]['العدد'].sum()
     available_boards = total_boards - booked_boards
     
-    occupancy_rate_sites = (booked_sites / total_sites * 100) if total_sites > 0 else 0
-    occupancy_rate_boards = (booked_boards / total_boards * 100) if total_boards > 0 else 0
+    # ✅ نسبة الإشغال (مواقع)
+    occupancy_rate = (booked_sites / total_sites * 100) if total_sites > 0 else 0
     
-    # ✅ عرض البطاقات مع التفريق بين المواقع واللوحات
+    # ============================================================
+    # عرض البطاقات
+    # ============================================================
+    
     cols = st.columns(4)
+    metrics_data = [
+        ("إجمالي المواقع", total_sites, "🗺️", "primary"),
+        ("🔴 محجوز (مواقع)", booked_sites, "📌", "danger"),
+        ("🟢 متاح (مواقع)", available_sites, "✅", "success"),
+        ("📈 نسبة الإشغال", f"{occupancy_rate:.1f}%", "📊", "warning")
+    ]
     
-    # 1. إجمالي المواقع
-    with cols[0]:
-        st.markdown(create_metric_card_3d("إجمالي المواقع", total_sites, "🗺️", "primary"), unsafe_allow_html=True)
+    for idx, (title, value, icon, color) in enumerate(metrics_data):
+        with cols[idx]:
+            st.markdown(create_metric_card_3d(title, value, icon, color), unsafe_allow_html=True)
     
-    # 2. محجوز (مواقع)
-    with cols[1]:
-        st.markdown(create_metric_card_3d("محجوز (مواقع)", booked_sites, "🔴", "danger"), unsafe_allow_html=True)
+    # ============================================================
+    # شريط التقدم
+    # ============================================================
     
-    # 3. متاح (مواقع)
-    with cols[2]:
-        st.markdown(create_metric_card_3d("متاح (مواقع)", available_sites, "🟢", "success"), unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="margin: 20px 0;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>📊 نسبة إشغال المواقع</span>
+            <span style="font-weight: bold;">{occupancy_rate:.1f}%</span>
+        </div>
+        <div style="height: 12px; background: rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden;">
+            <div style="width: {occupancy_rate}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; color: #666;">
+            <span>🟢 {available_sites} موقع متاح</span>
+            <span>🔴 {booked_sites} موقع محجوز</span>
+            <span>📍 {total_sites} إجمالي المواقع</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # 4. نسبة الإشغال (مواقع)
-    with cols[3]:
-        st.markdown(create_metric_card_3d("نسبة الإشغال", f"{occupancy_rate_sites:.1f}%", "📈", "warning"), unsafe_allow_html=True)
-    
-    # ✅ عرض إحصائيات اللوحات الفعلية (أسفل البطاقات)
     st.divider()
-    st.subheader("📊 إحصائيات اللوحات الفعلية")
     
+    # ============================================================
+    # إحصائيات اللوحات الفعلية
+    # ============================================================
+    
+    st.subheader("📊 إحصائيات اللوحات الفعلية")
     col_boards1, col_boards2, col_boards3 = st.columns(3)
     with col_boards1:
         st.metric("📌 إجمالي اللوحات", f"{int(total_boards):,}")
@@ -1355,26 +1379,12 @@ elif page == "📊 Dashboard":
     with col_boards3:
         st.metric("🟢 لوحات متاحة", f"{int(available_boards):,}")
     
-    # ✅ شريط التقدم (نسبة الإشغال حسب المواقع)
-    st.markdown(f"""
-    <div style="margin: 20px 0;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span>📊 نسبة إشغال المواقع</span>
-            <span style="font-weight: bold;">{occupancy_rate_sites:.1f}%</span>
-        </div>
-        <div style="height: 12px; background: rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden;">
-            <div style="width: {occupancy_rate_sites}%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px;"></div>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; color: #666;">
-            <span>🟢 {available_sites} موقع متاح</span>
-            <span>🔴 {booked_sites} موقع محجوز</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
     st.divider()
     
-    # ✅ الرسوم البيانية (بنفس منهج صفحة الفترات)
+    # ============================================================
+    # الرسوم البيانية
+    # ============================================================
+    
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
@@ -1395,7 +1405,7 @@ elif page == "📊 Dashboard":
         for city in all_columns['المحافظة'].unique():
             city_data = all_columns[all_columns['المحافظة'] == city]
             city_total = len(city_data)
-            city_booked = city_data[city_data['الحالة'] == 'محجوز']['رقم اللوحة'].nunique()
+            city_booked = city_data[city_data['رقم اللوحة'].isin(booked_boards_list)]['رقم اللوحة'].nunique()
             city_stats.append({
                 'المحافظة': city,
                 'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
@@ -1409,7 +1419,10 @@ elif page == "📊 Dashboard":
     
     st.divider()
     
-    # ✅ الخريطة
+    # ============================================================
+    # الخريطة
+    # ============================================================
+    
     st.subheader("🗺️ توزع اللوحات على الخريطة")
     
     @st.cache_data(ttl=600)
@@ -1423,7 +1436,6 @@ elif page == "📊 Dashboard":
     
     for _, row in all_columns_map.iterrows():
         if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
-            # تحديد اللون حسب الحالة
             is_booked = row['رقم اللوحة'] in booked_boards_list
             color = 'red' if is_booked else 'green'
             
