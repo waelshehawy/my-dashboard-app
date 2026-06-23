@@ -796,7 +796,7 @@ if page == "🏢 لوحات الشركات":
             st.rerun()
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (مع حل مشكلة إعادة التحميل)
+# صفحة: الأعمدة المتاحة 
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
@@ -909,7 +909,17 @@ elif page == "📍 الأعمدة المتاحة":
         booked_temp_boards = df[df['status'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
         
         booked_full_sites = len(df[df['status'] == '🔴 محجوز بالكامل'])
-        booked_full_boards = df[df['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
+        booked_full_books = df[df['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
+        
+        # ✅ المجاميع الكلية
+        total_available_sites = available_now_sites + available_temp_sites
+        total_available_boards = available_now_boards + available_temp_boards
+        
+        total_booked_sites = booked_temp_sites + booked_full_sites
+        total_booked_boards = booked_temp_boards + booked_full_books
+        
+        total_sites = len(df)
+        total_boards = df['العدد'].sum()
         
         # عرض الإحصائيات
         st.subheader("📊 إحصائيات عامة")
@@ -934,7 +944,26 @@ elif page == "📍 الأعمدة المتاحة":
         with col4:
             st.markdown("#### 🔴 محجوز بالكامل")
             st.markdown(f"📍 **المواقع:** {booked_full_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(booked_full_boards):,}")
+            st.markdown(f"📌 **اللوحات:** {int(booked_full_books):,}")
+        
+        st.divider()
+        
+        # ✅ عرض المجاميع الكلية
+        col_total1, col_total2, col_total3 = st.columns(3)
+        with col_total1:
+            st.markdown(f"#### ✅ إجمالي المتاح")
+            st.markdown(f"📍 **المواقع:** {total_available_sites}")
+            st.markdown(f"📌 **اللوحات:** {int(total_available_boards):,}")
+        
+        with col_total2:
+            st.markdown(f"#### 🔴 إجمالي المحجوز")
+            st.markdown(f"📍 **المواقع:** {total_booked_sites}")
+            st.markdown(f"📌 **اللوحات:** {int(total_booked_boards):,}")
+        
+        with col_total3:
+            st.markdown(f"#### 📊 الإجمالي الكلي")
+            st.markdown(f"📍 **المواقع:** {total_sites}")
+            st.markdown(f"📌 **اللوحات:** {int(total_boards):,}")
         
         st.divider()
         
