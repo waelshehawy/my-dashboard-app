@@ -713,30 +713,28 @@ def filter_valid_coordinates(df, lat_col='Latitude', lon_col='Longitude'):
 # عرض الصفحات- لوحات الشركات
 # ============================================================
 
+# ============================================================
+# عرض الصفحة المحددة
+# ============================================================
 
-elif page == "🏢 لوحات الشركات":
+page = st.session_state.get('page', "🏢 لوحات الشركات')
+
+# ============================================================
+# الصفحة الأولى: لوحات الشركات (if)
+# ============================================================
+
+if page == "🏢 لوحات الشركات":
     st.title("🏢 لوحات الشركات المعلنة")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # ============================================================
-    # إعدادات الصفحة ومنع الريفريش
-    # ============================================================
     
     if st.session_state.get('processing', False):
         st.warning("⏳ جاري تحميل البيانات، الرجاء الانتظار...")
         st.stop()
     
-    # ============================================================
-    # تحميل بيانات الشركات مع التخزين المؤقت
-    # ============================================================
-    
     @st.cache_data(ttl=300)
     def load_companies_data():
-        """تحميل بيانات الشركات مع الحجوزات الحالية والمستقبلية فقط"""
         try:
             conn = get_connection()
-            
-            # جلب الفترات الحالية والمستقبلية
             periods_df = pd.read_sql_query('''
                 SELECT namee, no FROM "الفترة" 
                 WHERE no >= (SELECT MIN(no) FROM "الفترة" WHERE no >= (
@@ -752,7 +750,6 @@ elif page == "🏢 لوحات الشركات":
             
             current_periods = periods_df['namee'].tolist() if not periods_df.empty else []
             
-            # جلب الحجوزات للفترات الحالية والمستقبلية فقط
             if current_periods:
                 placeholders = ','.join([f"'{p}'" for p in current_periods])
                 bookings_df = pd.read_sql_query(f'''
@@ -775,19 +772,10 @@ elif page == "🏢 لوحات الشركات":
                 bookings_df = pd.DataFrame()
             
             conn.close()
-            
-            return {
-                'bookings': bookings_df,
-                'current_periods': current_periods
-            }
-            
+            return {'bookings': bookings_df, 'current_periods': current_periods}
         except Exception as e:
             st.error(f"❌ خطأ في تحميل البيانات: {str(e)}")
             return None
-    
-    # ============================================================
-    # عرض البيانات
-    # ============================================================
     
     with st.spinner("🔄 جاري تحميل بيانات الشركات..."):
         data = load_companies_data()
@@ -799,17 +787,12 @@ elif page == "🏢 لوحات الشركات":
     bookings_df = data['bookings']
     current_periods = data['current_periods']
     
-    # ============================================================
-    # إحصائيات سريعة
-    # ============================================================
-    
     if bookings_df is not None and not bookings_df.empty:
         total_companies = len(bookings_df)
         total_boards = bookings_df['total_boards'].sum()
         total_periods = bookings_df['total_periods'].sum()
         
         col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-        
         with col_stat1:
             st.metric("🏢 إجمالي الشركات", total_companies)
         with col_stat2:
@@ -821,28 +804,19 @@ elif page == "🏢 لوحات الشركات":
         
         st.markdown("---")
         
-        # ============================================================
-        # فلترة الشركات
-        # ============================================================
-        
         col_filter1, col_filter2 = st.columns([2, 1])
-        
         with col_filter1:
             search_term = st.text_input("🔍 بحث عن شركة:", placeholder="اكتب اسم الشركة...")
-        
         with col_filter2:
             sort_by = st.selectbox(
                 "ترتيب حسب:",
                 ["عدد اللوحات (الأكثر)", "عدد اللوحات (الأقل)", "عدد الفترات (الأكثر)", "اسم الشركة"]
             )
         
-        # تطبيق الفلترة
         filtered_df = bookings_df.copy()
-        
         if search_term:
             filtered_df = filtered_df[filtered_df['company_name'].str.contains(search_term, case=False, na=False)]
         
-        # تطبيق الترتيب
         if sort_by == "عدد اللوحات (الأكثر)":
             filtered_df = filtered_df.sort_values('total_boards', ascending=False)
         elif sort_by == "عدد اللوحات (الأقل)":
@@ -855,49 +829,29 @@ elif page == "🏢 لوحات الشركات":
         st.markdown(f"**📊 عرض {len(filtered_df)} شركة من أصل {total_companies}**")
         st.markdown("---")
         
-        # ============================================================
-        # عرض الشركات في شبكة (Grid)
-        # ============================================================
-        
-        # عدد الأعمدة في الشبكة
         COLS_PER_ROW = 3
-        
-        # تقسيم الشركات إلى صفوف
         companies_list = filtered_df.to_dict('records')
         
         for row_idx in range(0, len(companies_list), COLS_PER_ROW):
             row_companies = companies_list[row_idx:row_idx + COLS_PER_ROW]
-            
-            # إنشاء أعمدة للصف
             cols = st.columns(len(row_companies))
             
             for col_idx, company in enumerate(row_companies):
                 with cols[col_idx]:
-                    # ============================================================
-                    # بطاقة الشركة (Company Card)
-                    # ============================================================
-                    
                     company_name = company['company_name']
                     total_boards = company['total_boards']
                     total_periods = company['total_periods']
-                    periods_list = company.get('periods_list', '')
-                    boards_list = company.get('boards_list', '')
                     first_period = company.get('first_period', '')
                     last_period = company.get('last_period', '')
                     year = company.get('العام', '')
                     
-                    # تحديد لون البطاقة بناءً على عدد اللوحات
                     if total_boards >= 10:
                         card_color = "linear-gradient(135deg, #667eea, #764ba2)"
-                        badge_color = "success"
                     elif total_boards >= 5:
                         card_color = "linear-gradient(135deg, #11998e, #38ef7d)"
-                        badge_color = "info"
                     else:
                         card_color = "linear-gradient(135deg, #f093fb, #f5576c)"
-                        badge_color = "warning"
                     
-                    # عرض البطاقة
                     st.markdown(f"""
                     <div style="
                         background: {card_color};
@@ -959,46 +913,30 @@ elif page == "🏢 لوحات الشركات":
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # ============================================================
-                    # أزرار تفاعلية أسفل البطاقة
-                    # ============================================================
-                    
                     col_btn1, col_btn2 = st.columns(2)
-                    
                     with col_btn1:
                         if st.button(f"📋 تفاصيل", key=f"details_{company_name}_{row_idx}_{col_idx}", use_container_width=True):
                             st.session_state['selected_company'] = company_name
                             st.session_state['show_company_details'] = True
                             safe_rerun()
-                    
                     with col_btn2:
                         if st.button(f"🗺️ خريطة", key=f"map_{company_name}_{row_idx}_{col_idx}", use_container_width=True):
                             st.session_state['selected_company'] = company_name
                             st.session_state['show_company_map'] = True
                             safe_rerun()
-    
     else:
         st.warning("⚠️ لا توجد شركات معلنة حالياً")
-        st.info("💡 ستظهر الشركات هنا عندما يكون لديها حجوزات في الفترات الحالية أو المستقبلية")
-    
-    # ============================================================
-    # عرض تفاصيل الشركة (عند النقر على زر التفاصيل)
-    # ============================================================
     
     if st.session_state.get('show_company_details', False):
         company_name = st.session_state.get('selected_company', '')
-        
         if company_name:
             st.divider()
             st.subheader(f"📋 تفاصيل شركة {company_name}")
             
-            # جلب تفاصيل الحجوزات
             @st.cache_data(ttl=120)
             def get_company_details(name):
                 try:
                     conn = get_connection()
-                    
-                    # جلب جميع حجوزات الشركة
                     bookings_detail = pd.read_sql_query('''
                         SELECT 
                             "رقم اللوحة",
@@ -1009,7 +947,6 @@ elif page == "🏢 لوحات الشركات":
                         ORDER BY "العام" DESC, "فترة الحجز"
                     ''', conn, params=(name,))
                     
-                    # جلب تفاصيل اللوحات
                     if not bookings_detail.empty:
                         board_numbers = bookings_detail['رقم اللوحة'].unique().tolist()
                         placeholders = ','.join([f"'{b}'" for b in board_numbers])
@@ -1028,7 +965,6 @@ elif page == "🏢 لوحات الشركات":
                     
                     conn.close()
                     return bookings_detail, boards_info
-                    
                 except Exception as e:
                     st.error(f"❌ خطأ: {str(e)}")
                     return pd.DataFrame(), pd.DataFrame()
@@ -1037,7 +973,6 @@ elif page == "🏢 لوحات الشركات":
                 bookings_detail, boards_info = get_company_details(company_name)
             
             if not bookings_detail.empty:
-                # عرض إحصائيات
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("📊 إجمالي اللوحات", bookings_detail['رقم اللوحة'].nunique())
@@ -1046,10 +981,7 @@ elif page == "🏢 لوحات الشركات":
                 with col3:
                     st.metric("📆 السنوات", bookings_detail['العام'].nunique())
                 
-                # عرض الحجوزات في جدول
                 st.write("**📋 تفاصيل الحجوزات:**")
-                
-                # دمج البيانات
                 if not boards_info.empty:
                     merged = bookings_detail.merge(boards_info, on='رقم اللوحة', how='left')
                     st.dataframe(
@@ -1060,31 +992,18 @@ elif page == "🏢 لوحات الشركات":
                 else:
                     st.dataframe(bookings_detail, use_container_width=True, height=300)
                 
-                # عرض توزيع اللوحات على المحافظات
-                if not boards_info.empty:
-                    st.write("**📍 توزيع اللوحات حسب المحافظة:**")
-                    city_stats = boards_info['city'].value_counts()
-                    st.bar_chart(city_stats)
-                
-                # زر إغلاق
                 if st.button("🔙 إغلاق التفاصيل", use_container_width=True):
                     st.session_state['show_company_details'] = False
                     safe_rerun()
             else:
                 st.info("📭 لا توجد تفاصيل متاحة")
     
-    # ============================================================
-    # عرض الخريطة (عند النقر على زر الخريطة)
-    # ============================================================
-    
     if st.session_state.get('show_company_map', False):
         company_name = st.session_state.get('selected_company', '')
-        
         if company_name:
             st.divider()
             st.subheader(f"🗺️ خريطة مواقع شركة {company_name}")
             
-            # جلب مواقع الشركة
             @st.cache_data(ttl=120)
             def get_company_locations(name):
                 try:
@@ -1114,11 +1033,9 @@ elif page == "🏢 لوحات الشركات":
                 locations = get_company_locations(company_name)
             
             if not locations.empty:
-                # تحويل الإحداثيات إلى أرقام
                 locations['Latitude'] = pd.to_numeric(locations['Latitude'], errors='coerce')
                 locations['Longitude'] = pd.to_numeric(locations['Longitude'], errors='coerce')
                 
-                # تصفية الإحداثيات الصحيحة
                 valid_locations = locations[
                     (locations['Latitude'].notna()) & 
                     (locations['Latitude'] != 0) &
@@ -1127,11 +1044,9 @@ elif page == "🏢 لوحات الشركات":
                 ]
                 
                 if not valid_locations.empty:
-                    # إنشاء الخريطة
                     import folium
                     from streamlit_folium import st_folium
                     
-                    # مركز الخريطة على متوسط الإحداثيات
                     center_lat = valid_locations['Latitude'].mean()
                     center_lon = valid_locations['Longitude'].mean()
                     
@@ -1141,7 +1056,6 @@ elif page == "🏢 لوحات الشركات":
                         tiles='OpenStreetMap'
                     )
                     
-                    # إضافة نقاط
                     for _, row in valid_locations.iterrows():
                         popup_text = f"""
                         <div dir="rtl" style="text-align:right; min-width:200px; font-family: Arial;">
@@ -1160,10 +1074,8 @@ elif page == "🏢 لوحات الشركات":
                             icon=folium.Icon(color='green', icon='info-sign')
                         ).add_to(m)
                     
-                    # عرض الخريطة
                     st_folium(m, width="100%", height=500)
                     
-                    # عرض جدول المواقع
                     with st.expander("📍 قائمة المواقع", expanded=False):
                         st.dataframe(
                             valid_locations[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم']],
@@ -1174,31 +1086,15 @@ elif page == "🏢 لوحات الشركات":
             else:
                 st.warning("⚠️ لا توجد مواقع لهذه الشركة")
             
-            # زر إغلاق الخريطة
             if st.button("🔙 إغلاق الخريطة", use_container_width=True):
                 st.session_state['show_company_map'] = False
                 safe_rerun()
 
-# ============================================================
-# دوال مساعدة للصفحة
-# ============================================================
 
-def get_company_bookings():
-    """الحصول على الشركات مع حجوزاتها (للتوافق مع الكود القديم)"""
-    try:
-        data = load_companies_data()
-        if data and data['bookings'] is not None and not data['bookings'].empty:
-            return data['bookings']
-        return pd.DataFrame()
-    except:
-        return pd.DataFrame()
-
-def get_company_locations_with_map(company_name):
-    """الحصول على مواقع الشركة (للتوافق مع الكود القديم)"""
-    try:
-        return get_company_locations(company_name)
-    except:
-        return pd.DataFrame()
+else:
+    st.error("❌ الصفحة غير موجودة")
+    st.session_state.page = "🏢 لوحات الشركات"
+    safe_rerun()
 
 # ============================================================
 # صفحة: الأعمدة المتاحة 
