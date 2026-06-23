@@ -20,6 +20,16 @@ from psycopg2.extras import RealDictCursor
 from supabase import create_client
 from datetime import datetime
 from datetime import datetime, timedelta
+
+#============================================================
+# إعداد الصفحة
+#============================================================
+st.set_page_config(
+    page_title="PreView Ads ERP - نظام إدارة الإعلانات",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 #============================================================
 # إعدادات Supabase (من متغيرات البيئة)
 # ============================================================
@@ -35,6 +45,33 @@ def get_connection():
         sslmode="require",
         connect_timeout=30
     )
+
+# ============================================================
+# تهيئة session_state (قبل أي شيء آخر)
+# ============================================================
+
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'cart' not in st.session_state:
+    st.session_state.cart = {}
+if 'booking_cart' not in st.session_state:
+    st.session_state.booking_cart = []
+if 'selected_company' not in st.session_state:
+    st.session_state.selected_company = None
+if 'show_company_map' not in st.session_state:
+    st.session_state.show_company_map = False
+if 'selected_city' not in st.session_state:
+    st.session_state.selected_city = None
+if 'show_city_details' not in st.session_state:
+    st.session_state.show_city_details = False
+if 'show_all_cities' not in st.session_state:
+    st.session_state.show_all_cities = False
 # ============================================================
 # دوال المصادقة
 # ============================================================
@@ -200,12 +237,7 @@ ADVANCED_CSS = """
 </style>
 """
 
-st.set_page_config(
-    page_title="PreView Ads ERP - نظام إدارة الإعلانات",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+
 
 st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 
@@ -400,9 +432,7 @@ if "cart" not in st.session_state:
 if "temp_cust" not in st.session_state:
     st.session_state.temp_cust = ""
 
-# ============================================================
-# صفحة تسجيل الدخول
-# ============================================================
+
 # ============================================================
 # صفحة تسجيل الدخول
 # ============================================================
