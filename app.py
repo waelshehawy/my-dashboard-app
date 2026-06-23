@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import time  # ⬅️ أضف هذا السطر
 import io
 import folium
 import json
