@@ -31,17 +31,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-#============================================================
-# إعدادات Supabase (من متغيرات البيئة)
-# ============================================================
+
+
 
 # ============================================================
-# إدارة اتصال قاعدة البيانات مع التخزين المؤقت
+# إدارة اتصال قاعدة البيانات المتقدمة
 # ============================================================
 
-@st.cache_resource(ttl=300)  # تخزين مؤقت لمدة 5 دقائق
-def get_cached_connection():
-    """الحصول على اتصال مخزن مؤقتاً بقاعدة البيانات"""
+@st.cache_resource(ttl=300)  # تجديد كل 5 دقائق
+def create_db_connection():
+    """إنشاء اتصال جديد بقاعدة البيانات"""
     try:
         conn = psycopg2.connect(
             host=st.secrets["SUPABASE_HOST"],
@@ -50,7 +49,11 @@ def get_cached_connection():
             user=st.secrets["SUPABASE_USER"],
             password=st.secrets["SUPABASE_PASSWORD"],
             sslmode="require",
-            connect_timeout=30
+            connect_timeout=30,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5
         )
         return conn
     except Exception as e:
@@ -58,50 +61,129 @@ def get_cached_connection():
         return None
 
 def get_connection():
-    """الحصول على اتصال بقاعدة البيانات مع إعادة المحاولة"""
-    if st.session_state.db_connection is None or st.session_state.db_connection.closed:
-        st.session_state.db_connection = get_cached_connection()
-        st.session_state.connection_time = time.time()
-    return st.session_state.db_connection
-
-def safe_query(query, params=None, max_retries=3):
-    """تنفيذ استعلام آمن مع إعادة المحاولة والتخزين المؤقت"""
-    for attempt in range(max_retries):
+    """
+    الحصول على اتصال صالح بقاعدة البيانات
+    مع إعادة المحاولة إذا كان الاتصال مغلقاً
+    """
+    # التحقق من وجود اتصال في session_state
+    if 'db_connection' not in st.session_state:
+        st.session_state.db_connection = None
+    
+    # التحقق من صحة الاتصال الحالي
+    conn = st.session_state.db_connection
+    
+    # إذا لم يكن هناك اتصال أو كان مغلقاً
+    if conn is None or conn.closed:
         try:
-            conn = get_connection()
-            if conn is None or conn.closed:
-                conn = get_cached_connection()
-                st.session_state.db_connection = conn
-            
-            cursor = conn.cursor()
-            cursor.execute(query, params or ())
-            
-            # تحديد نوع النتيجة
+            # محاولة إعادة الاتصال
+            new_conn = create_db_connection()
+            if new_conn is not None:
+                st.session_state.db_connection = new_conn
+                st.session_state.connection_time = time.time()
+                return new_conn
+            else:
+                st.error("❌ لا يمكن إنشاء اتصال بقاعدة البيانات")
+                return None
+        except Exception as e:
+            st.error(f"❌ خطأ في الاتصال: {str(e)}")
+            return None
+    
+    # التحقق من أن الاتصال لا يزال صالحاً (ping)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        return conn
+    except Exception:
+        # الاتصال غير صالح، إعادة إنشائه
+        try:
+            new_conn = create_db_connection()
+            if new_conn is not None:
+                st.session_state.db_connection = new_conn
+                st.session_state.connection_time = time.time()
+                return new_conn
+        except:
+            pass
+        
+        # محاولة إغلاق الاتصال القديم إذا كان موجوداً
+        try:
+            if conn:
+                conn.close()
+        except:
+            pass
+        
+        st.session_state.db_connection = None
+        st.error("❌ انقطع الاتصال بقاعدة البيانات، يرجى تحديث الصفحة")
+        return None
+
+def safe_cursor():
+    """
+    الحصول على مؤشر آمن للتعامل مع قاعدة البيانات
+    """
+    conn = get_connection()
+    if conn is None or conn.closed:
+        st.error("❌ لا يوجد اتصال صالح بقاعدة البيانات")
+        return None
+    
+    try:
+        return conn.cursor()
+    except Exception as e:
+        st.error(f"❌ خطأ في إنشاء المؤشر: {str(e)}")
+        return None
+
+def execute_query(query, params=None, fetch_all=True):
+    """
+    تنفيذ استعلام مع إدارة الاتصال التلقائية
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        if conn is None or conn.closed:
+            st.error("❌ لا يوجد اتصال صالح بقاعدة البيانات")
+            return None
+        
+        cursor = conn.cursor()
+        cursor.execute(query, params or ())
+        
+        if fetch_all:
+            # استعلام SELECT
             if query.strip().upper().startswith('SELECT'):
                 result = cursor.fetchall()
                 # الحصول على أسماء الأعمدة
-                col_names = [desc[0] for desc in cursor.description] if cursor.description else []
-                cursor.close()
-                if col_names:
+                if cursor.description:
+                    col_names = [desc[0] for desc in cursor.description]
                     return pd.DataFrame(result, columns=col_names)
                 return pd.DataFrame(result)
             else:
+                # استعلام INSERT/UPDATE/DELETE
                 conn.commit()
-                affected = cursor.rowcount
+                return cursor.rowcount
+        else:
+            # لا نحتاج إلى النتيجة (مثل INSERT مع RETURNING)
+            conn.commit()
+            return cursor
+            
+    except psycopg2.InterfaceError as e:
+        # خطأ في الاتصال
+        st.error(f"❌ انقطع الاتصال بقاعدة البيانات: {str(e)}")
+        # إعادة تعيين الاتصال
+        st.session_state.db_connection = None
+        return None
+    except Exception as e:
+        st.error(f"❌ خطأ في تنفيذ الاستعلام: {str(e)}")
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if cursor:
+            try:
                 cursor.close()
-                return affected
-                
-        except Exception as e:
-            if attempt == max_retries - 1:
-                st.error(f"❌ خطأ في قاعدة البيانات (محاولة {attempt+1}): {str(e)}")
-                return None
-            time.sleep(0.5 * (attempt + 1))  # تأخير تصاعدي
-    
-    return None
+            except:
+                pass
 
-# ============================================================
-# تهيئة session_state (قبل أي شيء آخر)
-# ============================================================
+
 
 # ============================================================
 # تهيئة متقدمة لـ session_state (قبل أي شيء)
@@ -145,43 +227,33 @@ if 'rerun_counter' not in st.session_state:
 if 'last_action_time' not in st.session_state:
     st.session_state.last_action_time = time.time()
 # ============================================================
-# دوال المصادقة المحسنة
+# دوال الاستعلام المحسنة
 # ============================================================
 
-@st.cache_data(ttl=60)
-def get_user_by_id(user_id):
-    """جلب معلومات المستخدم مع تخزين مؤقت"""
-    if user_id is None:
-        return None
-    
-    result = run_query(
-        'SELECT id, username, role, full_name, created_at FROM users WHERE id = %s',
-        (user_id,),
-        use_cache=True
-    )
-    
-    if result is not None and not result.empty:
-        row = result.iloc[0]
-        return {
-            'id': row['id'],
-            'username': row['username'],
-            'role': row['role'],
-            'full_name': row['full_name'],
-            'created_at': row['created_at']
-        }
-    return None
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_query(query, params=None):
+    """استعلام مع تخزين مؤقت"""
+    result = execute_query(query, params, fetch_all=True)
+    return result
 
-def is_authenticated():
-    """التحقق من مصادقة المستخدم بشكل سريع"""
-    return st.session_state.get('auth', False) and st.session_state.get('user_id') is not None
-
-def get_current_user():
-    """الحصول على معلومات المستخدم الحالي مع تخزين مؤقت"""
-    if not is_authenticated():
-        return None
+def run_query(query, params=None, use_cache=True):
+    """
+    تنفيذ استعلام مع خيار التخزين المؤقت
+    """
+    # التحقق من نوع الاستعلام
+    query_upper = query.strip().upper()
+    modifying_queries = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE']
+    is_modifying = any(query_upper.startswith(keyword) for keyword in modifying_queries)
     
-    return get_user_by_id(st.session_state.user_id)
-
+    if is_modifying:
+        # استعلامات التعديل لا تستخدم cache
+        return execute_query(query, params, fetch_all=False)
+    else:
+        # استعلامات SELECT يمكن استخدام cache
+        if use_cache:
+            return cached_query(query, params)
+        else:
+            return execute_query(query, params, fetch_all=True)
 # ============================================================
 # التحكم في الريفريش
 # ============================================================
@@ -553,7 +625,7 @@ if "temp_cust" not in st.session_state:
 
 
 # ============================================================
-# صفحة تسجيل الدخول
+# صفحة تسجيل الدخول المحسنة
 # ============================================================
 
 if not st.session_state.auth:
@@ -574,22 +646,13 @@ if not st.session_state.auth:
         
         if submitted:
             try:
-                conn = get_connection()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id, username, password, role FROM users WHERE username = %s AND password = %s",
-                    (username, password)
-                )
-                user = cursor.fetchone()
-                cursor.close()
-                conn.close()
-                
+                user = authenticate_user(username, password)
                 if user:
                     st.session_state.auth = True
-                    st.session_state.role = user[3]
-                    st.session_state.username = user[1]
-                    st.session_state.user_id = user[0]
-                    st.rerun()
+                    st.session_state.role = user['role']
+                    st.session_state.username = user['username']
+                    st.session_state.user_id = user['id']
+                    safe_rerun("تسجيل الدخول")
                 else:
                     st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
             except Exception as e:
@@ -720,31 +783,33 @@ with st.sidebar:
 
 
 # ============================================================
-# دوال الاستعلام المحسنة (بدلاً من run_query القديمة)
+# دوال الاستعلام المحسنة
 # ============================================================
 
-@st.cache_data(ttl=60)  # تخزين مؤقت لمدة دقيقة
+@st.cache_data(ttl=60, show_spinner=False)
 def cached_query(query, params=None):
-    """استعلام مع تخزين مؤقت للنتائج المتكررة"""
-    return safe_query(query, params)
+    """استعلام مع تخزين مؤقت"""
+    result = execute_query(query, params, fetch_all=True)
+    return result
 
 def run_query(query, params=None, use_cache=True):
     """
     تنفيذ استعلام مع خيار التخزين المؤقت
-    تحل محل run_query القديمة مع تحسينات
     """
-    # لا نخزن الاستعلامات التي تغير البيانات
-    modifying_queries = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP']
-    is_modifying = any(query.strip().upper().startswith(keyword) for keyword in modifying_queries)
+    # التحقق من نوع الاستعلام
+    query_upper = query.strip().upper()
+    modifying_queries = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE']
+    is_modifying = any(query_upper.startswith(keyword) for keyword in modifying_queries)
     
-    if use_cache and not is_modifying:
-        return cached_query(query, params)
+    if is_modifying:
+        # استعلامات التعديل لا تستخدم cache
+        return execute_query(query, params, fetch_all=False)
     else:
-        return safe_query(query, params)
-
-# تصحيح: نعيد تعريف run_query لتكون متوافقة مع الكود القديم
-# (نحتفظ بالدالة القديمة ولكن مع التحسينات)
-
+        # استعلامات SELECT يمكن استخدام cache
+        if use_cache:
+            return cached_query(query, params)
+        else:
+            return execute_query(query, params, fetch_all=True)
 #=============================================
 
 def get_fees(draw_df, size, print_type, is_foreign):
@@ -978,7 +1043,20 @@ if page == "🏢 لوحات الشركات":
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
     st.info("📌 عرض الأعمدة حسب حالة الإتاحة مع عدد اللوحات الفعلية")
-    
+# ============================================================
+# التحقق من الاتصال قبل تنفيذ أي عملية
+# ============================================================
+
+def ensure_db_connection():
+    """التأكد من وجود اتصال صالح بقاعدة البيانات"""
+    conn = get_connection()
+    if conn is None or conn.closed:
+        st.error("❌ لا يوجد اتصال بقاعدة البيانات. يرجى تحديث الصفحة.")
+        st.stop()
+    return conn
+
+# استخدمها في بداية كل صفحة تحتاج إلى قاعدة بيانات
+# conn = ensure_db_connection()    
     # فلتر تاريخ البداية (بدون إعادة تحميل تلقائي)
     with st.form(key="filter_form"):
         st.subheader("📅 فلتر تاريخ بداية الإتاحة")
@@ -1774,7 +1852,20 @@ elif page == "📊 Dashboard":
 elif page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
+    # ============================================================
+# التحقق من الاتصال قبل تنفيذ أي عملية
+# ============================================================
+
+def ensure_db_connection():
+    """التأكد من وجود اتصال صالح بقاعدة البيانات"""
+    conn = get_connection()
+    if conn is None or conn.closed:
+        st.error("❌ لا يوجد اتصال بقاعدة البيانات. يرجى تحديث الصفحة.")
+        st.stop()
+    return conn
+
+# استخدمها في بداية كل صفحة تحتاج إلى قاعدة بيانات
+# conn = ensure_db_connection()
     try:
         with st.expander("🔔 العروض المنتهية (تحتاج إلى إجراء)", expanded=False):
             manage_expired_offers()
