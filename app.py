@@ -111,18 +111,13 @@ def get_current_user():
     return None
 
 def format_period_for_display(period_name):
-    """تحويل اسم الفترة إلى صيغة مفهومة للزبون"""
-    # مثال: 'حزيران 30-15' → '15 حزيران'
-    # مثال: 'كانون اول 30-15' → '30 كانون الأول'
-    
     parts = period_name.split(' ')
     if len(parts) == 2:
         month = parts[0]
         days = parts[1]
         day_parts = days.split('-')
         if len(day_parts) == 2:
-            # نأخذ الرقم الثاني (اليوم الذي تبدأ فيه الفترة)
-            start_day = day_parts[1]  # 15 أو 30
+            start_day = day_parts[1]  # الرقم الثاني
             return f"{start_day} {month}"
     return period_name
 
