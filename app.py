@@ -2291,7 +2291,10 @@ elif page == "📄 عرض سعر":
                     p_stat = doc.add_paragraph()
                     p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني اعتباراً من {start_display} لغاية {end_display}")
                     _force_rtl_style(p_stat)
-                    
+                    st.write(f"🔍 start_p: {start_p}")
+                    st.write(f"🔍 end_p: {end_p}")
+                    st.write(f"🔍 start_display: {start_display}")
+                    st.write(f"🔍 end_display: {end_display}")
                     # ... باقي الكود (الجداول، الحسابات، إلخ)
                     
                     for city, networks in st.session_state.cart.items():
