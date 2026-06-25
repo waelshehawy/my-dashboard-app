@@ -2287,7 +2287,7 @@ elif page == "📄 عرض سعر":
                     end_display = format_period_for_display(end_p)
                     p_stat = doc.add_paragraph()
                     p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني اعتباراً من {start_display} لغاية {end_display}")
-                    _force_ltr_style(p_stat)
+                    _force_rtl_style(p_stat)
                     
                     # ... باقي الكود (الجداول، الحسابات، إلخ)
                     
