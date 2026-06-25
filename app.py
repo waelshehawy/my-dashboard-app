@@ -419,8 +419,7 @@ def is_admin():
     return st.session_state.get('role') == 'admin'
 
 def _force_rtl_style(p):
-    # ✅ تغيير من LEFT إلى RIGHT
-    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     pPr = p._element.get_or_add_pPr()
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
@@ -430,31 +429,11 @@ def _force_rtl_style(p):
         rtl = OxmlElement('w:rtl')
         rtl.set(qn('w:val'), '1')
         rPr.append(rtl)
+        
 def set_table_rtl(table):
-    """تحويل اتجاه الجدول إلى RTL مع عكس الخلايا"""
-    # 1. عكس اتجاه الجدول
     tblPr = table._element.xpath('w:tblPr')[0]
     bidi = OxmlElement('w:bidiVisual')
     tblPr.append(bidi)
-    
-    # 2. عكس اتجاه كل خلية في الجدول
-    for row in table.rows:
-        for cell in row.cells:
-            for paragraph in cell.paragraphs:
-                # تطبيق RTL على كل فقرة في الخلية
-                pPr = paragraph._element.get_or_add_pPr()
-                bidi_paragraph = OxmlElement('w:bidi')
-                bidi_paragraph.set(qn('w:val'), '1')
-                pPr.append(bidi_paragraph)
-                
-                # محاذاة النص لليمين
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                
-                for run in paragraph.runs:
-                    rPr = run._element.get_or_add_rPr()
-                    rtl = OxmlElement('w:rtl')
-                    rtl.set(qn('w:val'), '1')
-                    rPr.append(rtl)
 
 SYRIA_COORDS = {
     "دمشق": [33.5138, 36.2765],
