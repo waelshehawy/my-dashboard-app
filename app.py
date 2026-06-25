@@ -418,6 +418,18 @@ def safe_split(value):
 def is_admin():
     return st.session_state.get('role') == 'admin'
 
+def _force_rtl_style(p):
+    # ✅ تغيير من LEFT إلى RIGHT
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    pPr = p._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+    for run in p.runs:
+        rPr = run._element.get_or_add_rPr()
+        rtl = OxmlElement('w:rtl')
+        rtl.set(qn('w:val'), '1')
+        rPr.append(rtl)
 def set_table_rtl(table):
     """تحويل اتجاه الجدول إلى RTL مع عكس الخلايا"""
     # 1. عكس اتجاه الجدول
