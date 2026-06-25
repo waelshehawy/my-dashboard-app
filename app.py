@@ -110,15 +110,19 @@ def get_current_user():
     
     return None
 
-def format_period_for_display(period_name):
+def format_period_for_display(period_name, take_first=False):
+    """تحويل اسم الفترة إلى صيغة مفهومة للزبون"""
+    # take_first=False → يأخذ الرقم الثاني (بداية الفترة) مثل '15 حزيران'
+    # take_first=True  → يأخذ الرقم الأول (نهاية الفترة) مثل '30 حزيران'
+    
     parts = period_name.split(' ')
     if len(parts) == 2:
         month = parts[0]
         days = parts[1]
         day_parts = days.split('-')
         if len(day_parts) == 2:
-            start_day = day_parts[1]  # الرقم الثاني
-            return f"{start_day} {month}"
+            day = day_parts[0] if take_first else day_parts[1]
+            return f"{day} {month}"
     return period_name
 
 def format_date_range(start_period, end_period):
