@@ -109,6 +109,24 @@ def get_current_user():
         st.error(f"❌ خطأ في جلب المستخدم: {e}")
     
     return None
+
+def format_period_for_display(period_name):
+    """تحويل اسم الفترة إلى صيغة مفهومة للزبون"""
+    parts = period_name.split(' ')
+    if len(parts) == 2:
+        month = parts[0]
+        days = parts[1]
+        day_parts = days.split('-')
+        if len(day_parts) == 2:
+            start_day = day_parts[1]  # الرقم الثاني (15 أو 30)
+            return f"{start_day} {month}"
+    return period_name
+
+def format_date_range(start_period, end_period):
+    """تنسيق نطاق الفترات بشكل مفهوم للزبون"""
+    start_formatted = format_period_for_display(start_period)
+    end_formatted = format_period_for_display(end_period)
+    return f"اعتباراً من {start_formatted} لغاية {end_formatted}"
 # ============================================================
 # التحسينات البصرية
 # ============================================================
@@ -2264,9 +2282,13 @@ elif page == "📄 عرض سعر":
                     p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
                     _force_rtl_style(p_cust)
                     
+                    # ✅ استخدام الصيغة المفهومة للزبون
+                    formatted_range = format_date_range(start_p, end_p)
                     p_stat = doc.add_paragraph()
-                    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني من فترة ({start_p}) ولغاية ({end_p})")
+                    p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني {formatted_range}")
                     _force_rtl_style(p_stat)
+                    
+                    # ... باقي الكود (الجداول، الحسابات، إلخ)
                     
                     for city, networks in st.session_state.cart.items():
                         p_city = doc.add_paragraph()
