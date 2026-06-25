@@ -2282,8 +2282,8 @@ elif page == "📄 عرض سعر":
                     _force_rtl_style(p_cust)
                     
                     # ✅ استخدام الصيغة المفهومة للزبون
-                    start_display = format_period_for_display(start_p)
-                    end_display = format_period_for_display(end_p)
+                    start_display = format_period_for_display(start_p, take_first=False)
+                    end_display = format_period_for_display(end_p, take_first=True)
                     p_stat = doc.add_paragraph()
                     p_stat.add_run(f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني اعتباراً من {start_display} لغاية {end_display}")
                     _force_rtl_style(p_stat)
