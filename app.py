@@ -568,23 +568,17 @@ with st.sidebar:
 # دوال استعلامات Supabase (بصيغة PostgreSQL)
 # ============================================================
 
-def run_query(query, params=None, fetch=True):
-    """تنفيذ استعلام على Supabase"""
-    cursor = conn.cursor()
+def run_query(query, params=None):
+    """تنفيذ استعلام والعودة كـ DataFrame"""
+    conn = get_connection()
     try:
-        cursor.execute(query, params or ())
-        if fetch and query.strip().upper().startswith('SELECT'):
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
-            return pd.DataFrame(rows, columns=columns)
+        if params:
+            df = pd.read_sql_query(query, conn, params=params)
         else:
-            conn.commit()
-            return cursor.rowcount
-    except Exception as e:
-        conn.rollback()
-        raise e
+            df = pd.read_sql_query(query, conn)
+        return df
     finally:
-        cursor.close()
+        conn.close()
 
 def get_fees(draw_df, size, print_type, is_foreign):
     subset = draw_df[draw_df['الحجم'] == size].copy()
