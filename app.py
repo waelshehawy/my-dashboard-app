@@ -2852,8 +2852,8 @@ elif page == "📝 الإدخال اليومي":
         tabs = st.tabs(["📅 حجز جديد", "🗺️ إضافة عمود", "📊 عرض الحجوزات", "⚡ إجراءات سريعة"])
     else:
         tabs = st.tabs(["📅 حجز جديد", "📊 عرض حجوزاتي"])
-        
-    #===============تبويب حجز جديد======================
+    
+    #=============== تبويب حجز جديد ======================
     with tabs[0]:
         st.markdown('<div class="input-card">', unsafe_allow_html=True)
         st.subheader("🆕 إنشاء حجز جديد")
@@ -2885,7 +2885,6 @@ elif page == "📝 الإدخال اليومي":
                     """, conn_local, params=(selected_city,))
                     conn_local.close()
                     network_options = df_networks['الشبكة'].tolist() if not df_networks.empty else []
-                    
                 except Exception as e:
                     st.error(f"❌ {e}")
                     network_options = []
@@ -2925,118 +2924,117 @@ elif page == "📝 الإدخال اليومي":
         else:
             df_boards = pd.DataFrame()
         
-                # ============================================================
-                # اختيار اللوحات
-                # ============================================================
-                
-                if not df_boards.empty:
-                    st.caption(f"📊 عدد الأعمدة: {len(df_boards)}")
-                    board_options = df_boards.apply(
-                        lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", 
-                        axis=1
-                    ).tolist()
-                    
-                    col_select, col_btn = st.columns([3, 1])
-                    
-                    with col_select:
-                        selected_boards = st.multiselect(
-                            "🏷️ اختيار اللوحات",
-                            board_options,
-                            key="boards_select_outside",
-                            placeholder="اختر لوحة أو أكثر..."
-                        )
-                    
-                    with col_btn:
-                        st.write("")
-                        st.write("")
-                        if st.button("➕ إضافة إلى السلة", key="add_to_cart_btn", use_container_width=True):
-                            if selected_boards:
-                                new_boards = [b.split(' - ')[0] for b in selected_boards]
-                                st.session_state.booking_cart.extend(new_boards)
-                                st.success(f"✅ تم إضافة {len(new_boards)} لوحة")
-                                # ✅ لا st.rerun()
+        # ============================================================
+        # اختيار اللوحات
+        # ============================================================
+        
+        if not df_boards.empty:
+            st.caption(f"📊 عدد الأعمدة: {len(df_boards)}")
+            board_options = df_boards.apply(
+                lambda row: f"{row['رقم اللوحة']} - {row['اسم العمود']} ({row['الحجم']}) - {row.get('الجاهزية', 'جاهز')}", 
+                axis=1
+            ).tolist()
+            
+            col_select, col_btn = st.columns([3, 1])
+            
+            with col_select:
+                selected_boards = st.multiselect(
+                    "🏷️ اختيار اللوحات",
+                    board_options,
+                    key="boards_select_outside",
+                    placeholder="اختر لوحة أو أكثر..."
+                )
+            
+            with col_btn:
+                st.write("")
+                st.write("")
+                if st.button("➕ إضافة إلى السلة", key="add_to_cart_btn", use_container_width=True):
+                    if selected_boards:
+                        new_boards = [b.split(' - ')[0] for b in selected_boards]
+                        st.session_state.booking_cart.extend(new_boards)
+                        st.success(f"✅ تم إضافة {len(new_boards)} لوحة")
+        else:
+            st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
+        
+        # ============================================================
+        # عرض سلة اللوحات المختارة
+        # ============================================================
+        
+        if st.session_state.booking_cart:
+            st.divider()
+            st.subheader(f"🛒 سلة اللوحات المختارة ({len(st.session_state.booking_cart)})")
+            
+            cart_df = pd.DataFrame(st.session_state.booking_cart, columns=['رقم اللوحة'])
+            st.dataframe(cart_df, use_container_width=True, height=150)
+            
+            if st.button("🗑️ تفريغ السلة", key="clear_cart_btn"):
+                st.session_state.booking_cart = []
+        
+        # ============================================================
+        # نموذج الحجز (فقط للحفظ)
+        # ============================================================
+        
+        with st.form("booking_save_form", clear_on_submit=False):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
+                year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
+            
+            with col2:
+                today = datetime.now().date()
+                booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
+                booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
+                board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
+            
+            notes = st.text_area("📝 ملاحظات", placeholder="أي معلومات إضافية...", height=80)
+            
+            col5, col6 = st.columns(2)
+            with col5:
+                phone = st.text_input("📞 الهاتف", placeholder="05xxxxxxxx")
+            with col6:
+                email = st.text_input("✉️ البريد", placeholder="example@email.com")
+            
+            if st.session_state.booking_cart:
+                st.info(f"📋 عدد اللوحات المراد حجزها: {len(st.session_state.booking_cart)}")
+            
+            submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
+            
+            if submitted:
+                if not st.session_state.booking_cart:
+                    st.error("⚠️ يرجى إضافة لوحات إلى السلة أولاً")
+                elif not customer_name:
+                    st.error("⚠️ يرجى إدخال اسم الزبون")
                 else:
-                    st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
-                
-                # ============================================================
-                # عرض سلة اللوحات المختارة
-                # ============================================================
-                
-                if st.session_state.booking_cart:
-                    st.divider()
-                    st.subheader(f"🛒 سلة اللوحات المختارة ({len(st.session_state.booking_cart)})")
+                    start_str = booking_start.strftime("%Y-%m-%d")
+                    end_str = booking_end.strftime("%Y-%m-%d")
                     
-                    cart_df = pd.DataFrame(st.session_state.booking_cart, columns=['رقم اللوحة'])
-                    st.dataframe(cart_df, use_container_width=True, height=150)
-                    
-                    if st.button("🗑️ تفريغ السلة", key="clear_cart_btn"):
+                    try:
+                        cursor = conn.cursor()
+                        inserted = 0
+                        
+                        for board_number in st.session_state.booking_cart:
+                            cursor.execute('''
+                                INSERT INTO "حجوزات1" 
+                                ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
+                                 "نوع اللوحة", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                            ''', (board_number, customer_name, year, start_str, end_str,
+                                  board_type, notes, phone, email))
+                            inserted += 1
+                        
+                        conn.commit()
+                        cursor.close()
+                        
                         st.session_state.booking_cart = []
-                        # ✅ لا st.rerun()
-                
-                # ============================================================
-                # نموذج الحجز
-                # ============================================================
-                
-                with st.form("booking_save_form", clear_on_submit=False):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        customer_name = st.text_input("👤 اسم الزبون", placeholder="أدخل اسم الزبون كاملاً")
-                        year = st.number_input("📅 العام", min_value=2020, max_value=2030, value=2026, step=1)
-                    
-                    with col2:
-                        today = datetime.now().date()
-                        booking_start = st.date_input("📆 بداية الحجز", value=today, min_value=today)
-                        booking_end = st.date_input("📆 نهاية الحجز", value=today + timedelta(days=30), min_value=booking_start)
-                        board_type = st.selectbox("📋 نوع اللوحة", ["عادية", "سكوتش"])
-                    
-                    notes = st.text_area("📝 ملاحظات", placeholder="أي معلومات إضافية...", height=80)
-                    
-                    col5, col6 = st.columns(2)
-                    with col5:
-                        phone = st.text_input("📞 الهاتف", placeholder="05xxxxxxxx")
-                    with col6:
-                        email = st.text_input("✉️ البريد", placeholder="example@email.com")
-                    
-                    if st.session_state.booking_cart:
-                        st.info(f"📋 عدد اللوحات المراد حجزها: {len(st.session_state.booking_cart)}")
-                    
-                    submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
-                    
-                    if submitted:
-                        if not st.session_state.booking_cart:
-                            st.error("⚠️ يرجى إضافة لوحات إلى السلة أولاً")
-                        elif not customer_name:
-                            st.error("⚠️ يرجى إدخال اسم الزبون")
-                        else:
-                            start_str = booking_start.strftime("%Y-%m-%d")
-                            end_str = booking_end.strftime("%Y-%m-%d")
-                            
-                            try:
-                                cursor = conn.cursor()
-                                inserted = 0
-                                
-                                for board_number in st.session_state.booking_cart:
-                                    cursor.execute('''
-                                        INSERT INTO "حجوزات1" 
-                                        ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
-                                         "نوع اللوحة", "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                                    ''', (board_number, customer_name, year, start_str, end_str,
-                                          board_type, notes, phone, email))
-                                    inserted += 1
-                                
-                                conn.commit()
-                                cursor.close()
-                                
-                                st.session_state.booking_cart = []
-                                
-                                st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
-                                st.balloons()
-                                # ✅ لا st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"❌ حدث خطأ: {str(e)}")
+                        
+                        st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
+                        st.balloons()
+                        
+                    except Exception as e:
+                        st.error(f"❌ حدث خطأ: {str(e)}")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # ========== تبويب إضافة عمود (للمدير فقط) ==========
     if len(tabs) > 1 and user_info and user_info.get('role') == 'admin':
@@ -3044,7 +3042,7 @@ elif page == "📝 الإدخال اليومي":
             st.markdown('<div class="input-card">', unsafe_allow_html=True)
             st.subheader("🗺️ إضافة عمود إنارة جديد")
             
-            with st.form("new_board_form", clear_on_submit=True):
+            with st.form("new_board_form", clear_on_submit=False):
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -3057,24 +3055,18 @@ elif page == "📝 الإدخال اليومي":
                 
                 with col2:
                     network = st.text_input("🌐 الشبكة", placeholder="اسم الشبكة")
-                    
-                    # ✅ استخدام قائمة الحجوم من قاعدة البيانات
                     board_size = st.selectbox(
                         "📐 الحجم",
                         size_options if size_options else ["صغير", "متوسط", "كبير"],
                         help="اختر حجم اللوحة من القائمة"
                     )
-                    
-                    # ✅ خيارات الجاهزية
                     readiness = st.selectbox(
                         "🔧 الجاهزية",
                         readiness_options,
                         help="حالة اللوحة الحالية"
                     )
-                    
                     quantity = st.number_input("🔢 العدد", min_value=1, value=1)
                 
-                # الموقع الجغرافي
                 st.markdown("---")
                 st.markdown("📍 **الموقع الجغرافي (اختياري)**")
                 col3, col4 = st.columns(2)
@@ -3108,11 +3100,10 @@ elif page == "📝 الإدخال اليومي":
             st.markdown('</div>', unsafe_allow_html=True)
     
     # ========== تبويب عرض الحجوزات ==========
-    # تحديد index التبويب الصحيح
     if user_info and user_info.get('role') == 'admin':
-        tab_index = 2  # التبويب الثالث (0,1,2)
+        tab_index = 2
     else:
-        tab_index = 1  # التبويب الثاني (0,1)
+        tab_index = 1
     
     with tabs[tab_index]:
         st.markdown('<div class="input-card">', unsafe_allow_html=True)
@@ -3129,7 +3120,6 @@ elif page == "📝 الإدخال اليومي":
             ''')
         
         if not df.empty:
-            # فلترة وتصفية
             col_filter1, col_filter2, col_filter3 = st.columns(3)
             with col_filter1:
                 search = st.text_input("🔍 بحث", placeholder="بحث بالزبون أو اللوحة...")
@@ -3157,7 +3147,6 @@ elif page == "📝 الإدخال اليومي":
                     "نوع اللوحة": "📋 النوع"
                 }
             )
-            
         else:
             st.info("📭 لا توجد حجوزات لعرضها")
         
@@ -3226,7 +3215,6 @@ elif page == "📝 الإدخال اليومي":
                         """)
             
             st.markdown('</div>', unsafe_allow_html=True)
-
 
 
 # ============================
