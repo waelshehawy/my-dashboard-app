@@ -2813,11 +2813,7 @@ elif page == "⚙️ الإعدادات":
                         st.error(f"خطأ: {e}")
 
 # =============
-# صفحة الإدخال اليومي (النسخة المعدلة)
-# =============
-
-# =============
-# صفحة الإدخال اليومي (النسخة المحسنة بالكامل)
+# صفحة الإدخال اليومي (نسخة خالية من TimeOfTask ومشاكل إعادة الاتصال)
 # =============
 
 elif page == "📝 الإدخال اليومي":
@@ -2827,22 +2823,28 @@ elif page == "📝 الإدخال اليومي":
         st.stop()
     
     # ============================================================
-    # دوال مساعدة مع caching
+    # دوال مساعدة مع caching محسّن
     # ============================================================
     
-    @st.cache_data(ttl=600)  # تخزين مؤقت لمدة 10 دقائق
+    @st.cache_data(ttl=300)  # تخزين مؤقت 5 دقائق
     def get_cached_sizes():
         """جلب الحجوم مع تخزين مؤقت"""
-        df = run_query('SELECT DISTINCT "الحجم" FROM "اعمدة انارة" WHERE "الحجم" IS NOT NULL ORDER BY "الحجم"')
-        return df['الحجم'].tolist() if not df.empty else []
+        try:
+            df = run_query('SELECT DISTINCT "الحجم" FROM "اعمدة انارة" WHERE "الحجم" IS NOT NULL ORDER BY "الحجم"')
+            return df['الحجم'].tolist() if not df.empty else []
+        except:
+            return []
     
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=300)
     def get_cached_cities():
         """جلب المحافظات مع تخزين مؤقت"""
-        df = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
-        return df['المحافظة'].tolist() if not df.empty else []
+        try:
+            df = run_query('SELECT DISTINCT "المحافظة" FROM "اعمدة انارة" ORDER BY "المحافظة"')
+            return df['المحافظة'].tolist() if not df.empty else []
+        except:
+            return []
     
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=300)
     def get_cached_networks(city):
         """جلب الشبكات حسب المحافظة مع تخزين مؤقت"""
         if not city:
@@ -2861,7 +2863,7 @@ elif page == "📝 الإدخال اليومي":
         except Exception as e:
             return []
     
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=300)
     def get_cached_boards(city, network):
         """جلب اللوحات حسب المحافظة والشبكة مع تخزين مؤقت"""
         if not city:
@@ -2890,17 +2892,21 @@ elif page == "📝 الإدخال اليومي":
         except Exception as e:
             return pd.DataFrame()
     
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=120)  # 2 دقائق فقط للحجوزات لأنها تتغير كثيراً
     def get_cached_bookings(user_role, user_name):
         """جلب الحجوزات مع تخزين مؤقت"""
-        if user_role == 'admin':
-            return run_query('SELECT * FROM "حجوزات1" ORDER BY "TimeOfTask" DESC NULLS LAST')
-        else:
-            return run_query(f'''
-                SELECT * FROM "حجوزات1" 
-                WHERE "اسم الزبون" LIKE '%{user_name}%'
-                ORDER BY "TimeOfTask" DESC NULLS LAST
-            ''')
+        try:
+            # استخدام ORDER BY "تاريخ الانشاء" بدلاً من TimeOfTask
+            if user_role == 'admin':
+                return run_query('SELECT * FROM "حجوزات1" ORDER BY "تاريخ الانشاء" DESC NULLS LAST')
+            else:
+                return run_query(f'''
+                    SELECT * FROM "حجوزات1" 
+                    WHERE "اسم الزبون" LIKE '%{user_name}%'
+                    ORDER BY "تاريخ الانشاء" DESC NULLS LAST
+                ''')
+        except:
+            return pd.DataFrame()
     
     # ============================================================
     # الهيدر
@@ -2957,39 +2963,56 @@ elif page == "📝 الإدخال اليومي":
             st.session_state.booking_cart = []
         
         # ============================================================
-        # الفلاتر
+        # الفلاتر - استخدام session_state لتجنب إعادة التحميل
         # ============================================================
+        
+        # استخدام session_state لتخزين الفلاتر
+        if 'selected_city' not in st.session_state:
+            st.session_state.selected_city = city_options[0] if city_options else ""
+        
+        if 'selected_network' not in st.session_state:
+            st.session_state.selected_network = "جميع الشبكات"
         
         col_filters = st.columns(3)
         with col_filters[0]:
             selected_city = st.selectbox(
                 "📍 المحافظة", 
-                city_options,
-                key="city_filter_unique"
+                city_options if city_options else ["لا توجد محافظات"],
+                key="city_filter_unique",
+                index=0
             )
+            st.session_state.selected_city = selected_city
         
         with col_filters[1]:
-            network_options = get_cached_networks(selected_city) if selected_city else []
+            network_options = get_cached_networks(selected_city) if selected_city and selected_city != "لا توجد محافظات" else []
             selected_network = st.selectbox(
                 "🌐 الشبكة", 
                 ["جميع الشبكات"] + network_options,
-                key="network_filter_unique"
+                key="network_filter_unique",
+                index=0
             )
+            st.session_state.selected_network = selected_network
         
         with col_filters[2]:
             # زر تحديث البيانات
-            if st.button("🔄 تحديث البيانات", use_container_width=True, key="refresh_data_btn"):
+            if st.button("🔄 تحديث", use_container_width=True, key="refresh_data_btn"):
                 st.cache_data.clear()
-                st.success("✅ تم تحديث البيانات!")
+                st.session_state.booking_cart = []
+                st.success("✅ تم التحديث!")
                 st.rerun()
         
         # ============================================================
-        # جلب اللوحات وعرضها
+        # جلب اللوحات وعرضها - فقط عند تغيير الفلاتر
         # ============================================================
         
-        # استخدام caching مع مفتاح يعتمد على المدينة والشبكة
-        cache_key = f"{selected_city}_{selected_network}"
-        df_boards = get_cached_boards(selected_city, selected_network)
+        # استخدام session_state لتخزين اللوحات
+        cache_key = f"boards_{selected_city}_{selected_network}"
+        if cache_key not in st.session_state or st.session_state.get('last_update') != cache_key:
+            df_boards = get_cached_boards(selected_city, selected_network) if selected_city and selected_city != "لا توجد محافظات" else pd.DataFrame()
+            st.session_state[cache_key] = df_boards
+            st.session_state.last_update = cache_key
+        else:
+            df_boards = st.session_state[cache_key]
         
         if not df_boards.empty:
             st.caption(f"📊 عدد الأعمدة: {len(df_boards)}")
@@ -3011,7 +3034,7 @@ elif page == "📝 الإدخال اليومي":
             with col_btn:
                 st.write("")
                 st.write("")
-                if st.button("➕ إضافة إلى السلة", key="add_to_cart_unique", use_container_width=True):
+                if st.button("➕ إضافة", key="add_to_cart_unique", use_container_width=True):
                     if selected_boards:
                         new_boards = [b.split(' - ')[0] for b in selected_boards]
                         st.session_state.booking_cart.extend(new_boards)
@@ -3026,25 +3049,23 @@ elif page == "📝 الإدخال اليومي":
         
         if st.session_state.booking_cart:
             st.divider()
-            st.subheader(f"🛒 سلة اللوحات المختارة ({len(st.session_state.booking_cart)})")
+            st.subheader(f"🛒 السلة ({len(st.session_state.booking_cart)})")
             
-            # عرض السلة في جدول
             cart_df = pd.DataFrame(st.session_state.booking_cart, columns=['رقم اللوحة'])
             st.dataframe(cart_df, use_container_width=True, height=150)
             
             col_clear, col_info = st.columns([1, 3])
             with col_clear:
-                if st.button("🗑️ تفريغ السلة", key="clear_cart_unique", use_container_width=True):
+                if st.button("🗑️ تفريغ", key="clear_cart_unique", use_container_width=True):
                     st.session_state.booking_cart = []
                     st.rerun()
             with col_info:
-                st.info(f"📋 عدد اللوحات: {len(st.session_state.booking_cart)}")
+                st.info(f"📋 العدد: {len(st.session_state.booking_cart)}")
         
         # ============================================================
         # نموذج الحجز
         # ============================================================
         
-        # استخدام form للحفاظ على البيانات ومنع إعادة التحميل
         with st.form("booking_save_form", clear_on_submit=True):
             st.markdown("### 📋 معلومات الحجز")
             
@@ -3106,19 +3127,16 @@ elif page == "📝 الإدخال اليومي":
                     key="email_unique"
                 )
             
-            # عرض عدد اللوحات في السلة
             if st.session_state.booking_cart:
-                st.info(f"📋 عدد اللوحات المراد حجزها: {len(st.session_state.booking_cart)}")
+                st.info(f"📋 عدد اللوحات: {len(st.session_state.booking_cart)}")
             else:
-                st.warning("⚠️ لم تقم بإضافة أي لوحات إلى السلة")
+                st.warning("⚠️ لم تقم بإضافة أي لوحات")
             
-            # زر الحفظ
             submitted = st.form_submit_button("💾 حفظ الحجز", use_container_width=True)
             
             if submitted:
-                # التحقق من البيانات
                 if not st.session_state.booking_cart:
-                    st.error("⚠️ يرجى إضافة لوحات إلى السلة أولاً")
+                    st.error("⚠️ يرجى إضافة لوحات إلى السلة")
                 elif not customer_name:
                     st.error("⚠️ يرجى إدخال اسم الزبون")
                 else:
@@ -3126,7 +3144,6 @@ elif page == "📝 الإدخال اليومي":
                     end_str = booking_end.strftime("%Y-%m-%d")
                     
                     try:
-                        # استخدام اتصال محلي
                         conn_local = get_connection()
                         cursor = conn_local.cursor()
                         inserted = 0
@@ -3145,25 +3162,20 @@ elif page == "📝 الإدخال اليومي":
                         cursor.close()
                         conn_local.close()
                         
-                        # تفريغ السلة بعد الحفظ
                         st.session_state.booking_cart = []
-                        
-                        # مسح الكاش لتحديث البيانات
                         st.cache_data.clear()
                         
-                        st.success(f"✅ تم إنشاء {inserted} حجز بنجاح!")
+                        st.success(f"✅ تم إنشاء {inserted} حجز!")
                         st.balloons()
-                        
-                        # إعادة تحميل الصفحة لعرض البيانات المحدثة
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"❌ حدث خطأ: {str(e)}")
+                        st.error(f"❌ خطأ: {str(e)}")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
     # ============================================================
-    # تبويب إضافة عمود (للمدير فقط)
+    # تبويب إضافة عمود
     # ============================================================
     
     if len(tabs) > 1 and user_info and user_info.get('role') == 'admin':
@@ -3250,15 +3262,13 @@ elif page == "📝 الإدخال اليومي":
                             cursor.close()
                             conn_local.close()
                             
-                            # مسح الكاش لتحديث البيانات
                             st.cache_data.clear()
-                            
-                            st.success("✅ تم إضافة العمود بنجاح!")
+                            st.success("✅ تم إضافة العمود!")
                             st.balloons()
                             st.rerun()
                             
                         except Exception as e:
-                            st.error(f"❌ حدث خطأ: {str(e)}")
+                            st.error(f"❌ خطأ: {str(e)}")
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -3283,7 +3293,7 @@ elif page == "📝 الإدخال اليومي":
         
         if not df.empty:
             # فلتر البحث
-            col_filter1, col_filter2, col_filter3 = st.columns(3)
+            col_filter1, col_filter2 = st.columns(2)
             with col_filter1:
                 search = st.text_input(
                     "🔍 بحث", 
@@ -3291,59 +3301,52 @@ elif page == "📝 الإدخال اليومي":
                     key="search_unique"
                 )
             with col_filter2:
-                status_filter = st.selectbox(
-                    "📌 الحالة", 
-                    ["الكل", "نشط", "منتهي", "قادم"],
-                    key="status_filter_unique"
-                )
-            with col_filter3:
                 date_filter = st.date_input(
                     "📅 من تاريخ",
                     key="date_filter_unique"
                 )
             
-            # تطبيق الفلاتر
             if search:
                 df = df[df['اسم الزبون'].str.contains(search, case=False) | 
                        df['رقم اللوحة'].str.contains(search, case=False)]
             
-            # تحديد الأعمدة للعرض
+            # عرض الأعمدة المتاحة
             display_cols = ['رقم اللوحة', 'اسم الزبون', 'فترة الحجز', 'تاريخ النهاية', 'نوع اللوحة']
             available_cols = [col for col in display_cols if col in df.columns]
             
-            # عرض البيانات
-            st.dataframe(
-                df[available_cols],
-                use_container_width=True,
-                height=400,
-                column_config={
-                    "رقم اللوحة": "🏷️ رقم اللوحة",
-                    "اسم الزبون": "👤 الزبون",
-                    "فترة الحجز": "📅 بداية الحجز",
-                    "تاريخ النهاية": "📅 نهاية الحجز",
-                    "نوع اللوحة": "📋 النوع"
-                }
-            )
+            if available_cols:
+                st.dataframe(
+                    df[available_cols],
+                    use_container_width=True,
+                    height=400,
+                    column_config={
+                        "رقم اللوحة": "🏷️ رقم اللوحة",
+                        "اسم الزبون": "👤 الزبون",
+                        "فترة الحجز": "📅 بداية الحجز",
+                        "تاريخ النهاية": "📅 نهاية الحجز",
+                        "نوع اللوحة": "📋 النوع"
+                    }
+                )
             
-            # إحصائيات سريعة
+            # إحصائيات بسيطة
             st.divider()
-            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            col_stat1, col_stat2 = st.columns(2)
             with col_stat1:
                 st.metric("📊 إجمالي الحجوزات", len(df))
             with col_stat2:
-                active = len(df[pd.to_datetime(df['تاريخ النهاية']) >= datetime.now().date()]) if 'تاريخ النهاية' in df.columns else 0
-                st.metric("✅ حجوزات نشطة", active)
-            with col_stat3:
                 if 'رقم اللوحة' in df.columns and not df['رقم اللوحة'].empty:
-                    most_booked = df['رقم اللوحة'].mode().iloc[0]
-                    st.metric("🏆 أكثر لوحة حجزاً", most_booked)
+                    try:
+                        most_booked = df['رقم اللوحة'].mode().iloc[0]
+                        st.metric("🏆 أكثر لوحة", most_booked)
+                    except:
+                        st.metric("🏆 أكثر لوحة", "غير محدد")
         else:
-            st.info("📭 لا توجد حجوزات لعرضها")
+            st.info("📭 لا توجد حجوزات")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
     # ============================================================
-    # تبويب الإجراءات السريعة (للمدير فقط)
+    # تبويب الإجراءات السريعة
     # ============================================================
     
     if len(tabs) > 3 and user_info and user_info.get('role') == 'admin':
@@ -3388,7 +3391,7 @@ elif page == "📝 الإدخال اليومي":
             col3, col4 = st.columns(2)
             
             with col3:
-                if st.button("🧹 تنظيف الحجوزات المنتهية", use_container_width=True, key="cleanup_unique"):
+                if st.button("🧹 تنظيف المنتهية", use_container_width=True, key="cleanup_unique"):
                     try:
                         conn_local = get_connection()
                         cursor = conn_local.cursor()
@@ -3401,22 +3404,21 @@ elif page == "📝 الإدخال اليومي":
                         cursor.close()
                         conn_local.close()
                         
-                        # مسح الكاش
                         st.cache_data.clear()
-                        st.success(f"✅ تم حذف {deleted_count} حجز منتهي")
+                        st.success(f"✅ تم حذف {deleted_count} حجز")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ خطأ: {str(e)}")
             
             with col4:
-                if st.button("📊 تقرير الأداء", use_container_width=True, key="report_unique"):
+                if st.button("📊 تقرير", use_container_width=True, key="report_unique"):
                     df_bookings = run_query('SELECT * FROM "حجوزات1"')
                     if not df_bookings.empty:
+                        most_booked = df_bookings['رقم اللوحة'].mode().iloc[0] if 'رقم اللوحة' in df_bookings.columns and not df_bookings['رقم اللوحة'].mode().empty else 'N/A'
                         st.info(f"""
-                        📈 **إحصائيات الأداء:**
-                        - إجمالي الحجوزات: {len(df_bookings)}
-                        - أكثر العمود طلباً: {df_bookings['رقم اللوحة'].mode().iloc[0] if 'رقم اللوحة' in df_bookings.columns and not df_bookings['رقم اللوحة'].empty else 'N/A'}
-                        - متوسط مدة الحجز: {df_bookings['TimeOfTask'].mean() if 'TimeOfTask' in df_bookings.columns else 'غير محدد'}
+                        📈 **إحصائيات:**
+                        - إجمالي: {len(df_bookings)}
+                        - أكثر لوحة: {most_booked}
                         """)
             
             st.markdown('</div>', unsafe_allow_html=True)
