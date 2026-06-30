@@ -45,9 +45,10 @@ def get_connection():
         sslmode="require",
         connect_timeout=30
     )
-
+# منع إعادة التحميل التلقائي
+st.cache_data.clear()
 # ============================================================
-# تهيئة session_state (قبل أي شيء آخر)
+# تهيئة session_state 
 # ============================================================
 
 if 'auth' not in st.session_state:
