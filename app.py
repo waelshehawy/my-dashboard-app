@@ -3173,16 +3173,6 @@ elif page == "📝 الإدخال اليومي":
                 }
             )
             
-            # إحصائيات سريعة
-            col_stat1, col_stat2, col_stat3 = st.columns(3)
-            with col_stat1:
-                st.metric("📊 إجمالي الحجوزات", len(df))
-            with col_stat2:
-                active = len(df[pd.to_datetime(df['تاريخ النهاية']) >= datetime.now()])
-                st.metric("🟢 حجوزات نشطة", active)
-            with col_stat3:
-                expiring_soon = len(df[pd.to_datetime(df['تاريخ النهاية']) <= datetime.now() + timedelta(days=7)])
-                st.metric("⏰ تنتهي قريباً", expiring_soon)
         else:
             st.info("📭 لا توجد حجوزات لعرضها")
         
