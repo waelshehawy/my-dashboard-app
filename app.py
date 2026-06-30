@@ -493,7 +493,6 @@ if not st.session_state.auth:
                     st.session_state.role = user[3]
                     st.session_state.username = user[1]
                     st.session_state.user_id = user[0]
-                    st.rerun()
                 else:
                     st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
             except Exception as e:
@@ -554,7 +553,6 @@ with st.sidebar:
     # تحديث الصفحة عند التغيير
     if selected_page != st.session_state.get('page'):
         st.session_state.page = selected_page
-        st.rerun()
     
     st.divider()
     
@@ -689,7 +687,6 @@ def manage_expired_offers():
                 conn.commit()
                 cur.close()
                 st.success("تم التمديد بنجاح")
-                st.rerun()
             
             if col3.button("❌ إلغاء العرض", key=f"del_{row['id']}"):
                 cur = conn.cursor()
@@ -697,7 +694,6 @@ def manage_expired_offers():
                 conn.commit()
                 cur.close()
                 st.success("تم إلغاء العرض")
-                st.rerun()
         else:
             col2.write("🔒")
             col3.write("🔒")
@@ -1515,7 +1511,6 @@ elif page == "📅 لوحة الفترات":
                     if st.button(f"📋 تفاصيل", key=f"detail_{i+j}"):
                         st.session_state[f'selected_period_{i+j}'] = period_name
                         st.session_state['show_period_detail'] = True
-                        st.rerun()
     
     # ============================================================
     # التفاصيل للفترة المختارة (عرض المتاح)
@@ -1562,7 +1557,6 @@ elif page == "📅 لوحة الفترات":
                 for key in list(st.session_state.keys()):
                     if key.startswith('selected_period_'):
                         del st.session_state[key]
-                st.rerun()
     
     # ============================================================
     # الرسم البياني
@@ -1971,7 +1965,6 @@ elif page == "📄 عرض سعر":
                         
                         st.session_state.temp_cust = row['client_name']
                         st.success("✅ تم تحميل العرض بنجاح")
-                        st.rerun()
                 except Exception as e:
                     st.error(f"خطأ في تحميل العرض: {str(e)}")
         
@@ -2120,7 +2113,6 @@ elif page == "📄 عرض سعر":
                         
                         st.session_state.cart[selected_city][f"شبكة {selected_network} (كاملة)"] = net_data
                         st.success(f"✅ تمت إضافة شبكة {selected_network} كاملة ({len(net_data)} أعمدة)")
-                        st.rerun()
                 
                 with col_add2:
                     # اختيار أعمدة محددة من الشبكة
@@ -2144,7 +2136,6 @@ elif page == "📄 عرض سعر":
                         
                         st.session_state.cart[selected_city][f"أعمدة من شبكة {selected_network}"] = individual_data
                         st.success(f"✅ تمت إضافة {len(individual_data)} أعمدة محددة")
-                        st.rerun()
         
         if st.session_state.cart:
             st.divider()
@@ -2185,7 +2176,6 @@ elif page == "📄 عرض سعر":
                         
                         if st.button("🗑️ حذف", key=f"delete_{city}_{item_name}"):
                             del st.session_state.cart[city][item_name]
-                            st.rerun()
             
             st.divider()
             
@@ -2258,7 +2248,6 @@ elif page == "📄 عرض سعر":
                                 conn.commit()
                                 st.session_state.cart = {}
                                 st.success("✅ تم تثبيت الحجز بنجاح")
-                                st.rerun()
                             except Exception as e:
                                 conn.rollback()
                                 st.error(f"❌ حدث خطأ: {str(e)}")
@@ -2401,7 +2390,6 @@ elif page == "📄 عرض سعر":
             with col_btn4:
                 if st.button("🔴 تفريغ السلة", use_container_width=True, key="clear_cart"):
                     st.session_state.cart = {}
-                    st.rerun()
     
     except Exception as e:
         st.error(f"❌ حدث خطأ: {str(e)}")
@@ -2737,7 +2725,6 @@ elif page == "⚙️ الإعدادات":
             conn.commit()
             cursor.close()
             st.success("✅ تم تحديث أعمدة الإنارة")
-            st.rerun()
     
     with tab2:
         st.subheader("إدارة سجل الحجوزات")
@@ -2754,7 +2741,6 @@ elif page == "⚙️ الإعدادات":
             conn.commit()
             cursor.close()
             st.success("✅ تم تحديث سجل الحجوزات")
-            st.rerun()
     
     with tab3:
         st.subheader("إدارة أجور الرسم")
@@ -2772,7 +2758,6 @@ elif page == "⚙️ الإعدادات":
             conn.commit()
             cursor.close()
             st.success("✅ تم تحديث أجور الرسم")
-            st.rerun()
     
     with tab4:
         st.subheader("👥 إدارة المستخدمين")
@@ -2790,7 +2775,6 @@ elif page == "⚙️ الإعدادات":
                 conn.commit()
                 cursor.close()
                 st.success("✅ تم تحديث المستخدمين")
-                st.rerun()
         
         with col2:
             with st.expander("➕ إضافة مستخدم جديد"):
@@ -2808,7 +2792,6 @@ elif page == "⚙️ الإعدادات":
                         conn.commit()
                         cursor.close()
                         st.success("✅ تم إضافة المستخدم")
-                        st.rerun()
                     except Exception as e:
                         st.error(f"خطأ: {e}")
 
@@ -2999,7 +2982,6 @@ elif page == "📝 الإدخال اليومي":
                 st.cache_data.clear()
                 st.session_state.booking_cart = []
                 st.success("✅ تم التحديث!")
-                st.rerun()
         
         # ============================================================
         # جلب اللوحات وعرضها - فقط عند تغيير الفلاتر
@@ -3039,7 +3021,6 @@ elif page == "📝 الإدخال اليومي":
                         new_boards = [b.split(' - ')[0] for b in selected_boards]
                         st.session_state.booking_cart.extend(new_boards)
                         st.success(f"✅ تم إضافة {len(new_boards)} لوحة")
-                        st.rerun()
         else:
             st.warning("⚠️ لا توجد لوحات في هذه المحافظة")
         
@@ -3058,7 +3039,6 @@ elif page == "📝 الإدخال اليومي":
             with col_clear:
                 if st.button("🗑️ تفريغ", key="clear_cart_unique", use_container_width=True):
                     st.session_state.booking_cart = []
-                    st.rerun()
             with col_info:
                 st.info(f"📋 العدد: {len(st.session_state.booking_cart)}")
         
@@ -3167,7 +3147,6 @@ elif page == "📝 الإدخال اليومي":
                         
                         st.success(f"✅ تم إنشاء {inserted} حجز!")
                         st.balloons()
-                        st.rerun()
                         
                     except Exception as e:
                         st.error(f"❌ خطأ: {str(e)}")
@@ -3265,7 +3244,6 @@ elif page == "📝 الإدخال اليومي":
                             st.cache_data.clear()
                             st.success("✅ تم إضافة العمود!")
                             st.balloons()
-                            st.rerun()
                             
                         except Exception as e:
                             st.error(f"❌ خطأ: {str(e)}")
@@ -3406,7 +3384,6 @@ elif page == "📝 الإدخال اليومي":
                         
                         st.cache_data.clear()
                         st.success(f"✅ تم حذف {deleted_count} حجز")
-                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ خطأ: {str(e)}")
             
@@ -3649,7 +3626,6 @@ elif page == "📋 كتالوج عام":
                 col_controls1, col_controls2, col_controls3 = st.columns(3)
                 with col_controls1:
                     if st.button("🔄 تحديث القائمة", use_container_width=True):
-                        st.rerun()
                 with col_controls2:
                     if st.button("🗑️ مسح جميع اللوحات", use_container_width=True):
                         st.session_state.catalog_selected_boards = {}
