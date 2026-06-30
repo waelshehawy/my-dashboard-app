@@ -3626,6 +3626,7 @@ elif page == "📋 كتالوج عام":
                 col_controls1, col_controls2, col_controls3 = st.columns(3)
                 with col_controls1:
                     if st.button("🔄 تحديث القائمة", use_container_width=True):
+                       st.write("محتوى العمود")
                 with col_controls2:
                     if st.button("🗑️ مسح جميع اللوحات", use_container_width=True):
                         st.session_state.catalog_selected_boards = {}
