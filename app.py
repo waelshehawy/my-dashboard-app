@@ -3141,7 +3141,7 @@ elif page == "📝 الإدخال اليومي":
                             cursor.execute('''
                                 INSERT INTO "حجوزات1" 
                                 ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية")
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                                VALUES (%s, %s, %s, %s, %s)
                             ''', (board_number, customer_name, year, start_str, end_str))
                             inserted += 1
                         
