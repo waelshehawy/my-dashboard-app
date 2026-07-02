@@ -1325,11 +1325,20 @@ elif page == "📍 الأعمدة المتاحة":
         csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_csv(
             index=False, encoding='utf-8-sig'
         )
+        # ✅ تصدير Excel بدلاً من CSV
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_excel(
+                writer, sheet_name='الأعمدة المتاحة', index=False
+            )
+        
+        output.seek(0)
+        
         st.download_button(
-            "📥 تحميل التقرير (CSV)",
-            csv_data,
-            f"available_boards_{start_date.strftime('%Y%m%d')}.csv",
-            "text/csv",
+            "📥 تحميل التقرير (Excel)",
+            output,
+            f"available_boards_{start_date.strftime('%Y%m%d')}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
