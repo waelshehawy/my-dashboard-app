@@ -3140,11 +3140,9 @@ elif page == "📝 الإدخال اليومي":
                         for board_number in st.session_state.booking_cart:
                             cursor.execute('''
                                 INSERT INTO "حجوزات1" 
-                                ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية", 
-                                  "ملاحظات", "الهاتف", "البريد", "تاريخ الانشاء")
+                                ("رقم اللوحة", "اسم الزبون", "العام", "فترة الحجز", "تاريخ النهاية")
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                            ''', (board_number, customer_name, year, start_str, end_str,
-                                  board_type, notes, phone, email))
+                            ''', (board_number, customer_name, year, start_str, end_str))
                             inserted += 1
                         
                         conn_local.commit()
