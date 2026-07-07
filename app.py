@@ -398,6 +398,65 @@ def verify_period_order():
 # شغّل التحقق
 verify_period_order()
 
+
+import streamlit as st
+
+def verify_period_order():
+    """التحقق من اكتمال الفترات"""
+    PERIOD_ORDER = {
+        'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
+        'شباط 15-1': 3, 'شباط 30-15': 4,
+        'اذار 15-1': 5, 'اذار 30-15': 6,
+        'نيسان 15-1': 7, 'نيسان 30-15': 8,
+        'ايار15-1': 9, 'أيار 30-15': 10,
+        'حزيران 15-1': 11, 'حزيران 30-15': 12,
+        'تموز 15-1': 13, 'تموز 30-15': 14,
+        'اب 15-1': 15, 'اب 30-15': 16,
+        'أيلول 15-1': 17, 'ايلول30-15': 18,
+        'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
+        'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
+        'كانون اول 15-1': 23, 'كانون اول 30-15': 24
+    }
+    
+    expected = 24
+    actual = len(PERIOD_ORDER)
+    
+    st.write(f"📊 عدد الفترات في PERIOD_ORDER: **{actual}**")
+    
+    if actual == expected:
+        st.success("✅ جميع الفترات موجودة بشكل صحيح")
+        
+        # عرض جميع الفترات
+        st.write("📋 قائمة الفترات:")
+        for name, num in sorted(PERIOD_ORDER.items(), key=lambda x: x[1]):
+            st.write(f"   {num}. {name}")
+            
+    else:
+        st.error(f"❌ ينقص {expected - actual} فترة")
+        
+        all_numbers = set(range(1, 25))
+        existing_numbers = set(PERIOD_ORDER.values())
+        missing = all_numbers - existing_numbers
+        if missing:
+            st.warning(f"⚠️ الفترات المفقودة: {sorted(missing)}")
+    
+    return actual == expected
+
+
+# ============================================================
+# ضع هذا في صفحة Streamlit
+# ============================================================
+
+st.title("🔍 اختبار الفترات")
+
+# زر لبدء الاختبار
+if st.button("🧪 تشغيل اختبار الفترات"):
+    with st.spinner("جاري التحقق..."):
+        result = verify_period_order()
+        if result:
+            st.balloons()
+        else:
+            st.error("❌ يوجد خطأ في الفترات")
 # ============================================================
 # دوال مساعدة
 # ============================================================
