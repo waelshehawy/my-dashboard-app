@@ -612,7 +612,7 @@ def run_query(query, params=None):
         if params:
             df = pd.read_sql_query(query, conn, params=params)
         else:
-            df = pd.read_sql_query(query, conn)
+            df = pd.read_sql_query(query, conn, params=(period_name, year))
         return df
     finally:
         conn.close()
@@ -1260,7 +1260,7 @@ elif page == "📍 الأعمدة المتاحة":
             ORDER BY a."المحافظة", a."رقم اللوحة"
             """
             
-            df = pd.read_sql_query(query, conn)
+            df = pd.read_sql_query(query, conn, params=(period_name, year))
             conn.close()
             return df
         
@@ -1739,7 +1739,7 @@ elif page == "📊 Dashboard":
         ORDER BY a."المحافظة", a."رقم اللوحة"
         """
         
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=(period_name, year))
         conn.close()
         return df
     
