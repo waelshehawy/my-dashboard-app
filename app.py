@@ -356,63 +356,24 @@ def get_period_number(period_name):
     return PERIOD_ORDER.get(period_name, 99)
 
 def get_period_from_date(date_obj):
-    """
-    تحويل تاريخ إلى اسم الفترة (بنفس الصيغة الموجودة في قاعدة البيانات)
-    """
-    if not isinstance(date_obj, datetime):
-        try:
-            date_obj = pd.to_datetime(date_obj)
-        except:
-            raise ValueError(f"❌ تاريخ غير صالح: {date_obj}")
-    
-    month = date_obj.month
     day = date_obj.day
+    month = date_obj.month
     
-    # أسماء الأشهر (بدون همزات للشهور العادية)
     month_names = {
-        1: 'كانون ثاني',
-        2: 'شباط',
-        3: 'اذار',
-        4: 'نيسان',
-        5: 'ايار',      # بدون همزة للصيغة الأولى
-        6: 'حزيران',
-        7: 'تموز',
-        8: 'اب',
-        9: 'ايلول',     # بدون همزة للصيغة الأولى
-        10: 'تشرين اول',
-        11: 'تشرين ثاني',
-        12: 'كانون اول'
+        1: 'كانون ثاني', 2: 'شباط', 3: 'اذار', 4: 'نيسان',
+        5: 'ايار', 6: 'حزيران', 7: 'تموز', 8: 'اب',
+        9: 'ايلول', 10: 'تشرين اول', 11: 'تشرين ثاني', 12: 'كانون اول'
     }
     
     month_name = month_names[month]
     
-    # ============================================================
-    # تحديد اسم الفترة حسب الصيغة الصحيحة في قاعدة البيانات
-    # ============================================================
-    
     if day <= 15:
-        # النصف الأول من الشهر
-        
-        # حالات خاصة: بدون مسافة
-        if month == 5:  # ايار
-            return f"ايار{15}-{1}"  # 'ايار15-1'
-        elif month == 9:  # ايلول (بهمزة)
-            return f"أيلول 15-1"    # 'أيلول 15-1'
-        else:
-            return f"{month_name} 15-1"  # مع مسافة
-        
+        period_name = f"{month_name} 15-1"
     else:
-        # النصف الثاني من الشهر
-        
-        # حالات خاصة
-        if month == 5:  # ايار (بهمزة)
-            return "أيار 30-15"      # 'أيار 30-15'
-        elif month == 9:  # ايلول (بدون مسافة)
-            return f"ايلول{30}-{15}"  # 'ايلول30-15'
-        elif month == 10:  # تشرين اول (بدون مسافة)
-            return f"تشرين اول{30}-{15}"  # 'تشرين اول30-15'
-        else:
-            return f"{month_name} 30-15"  # مع مسافة    
+        period_name = f"{month_name} 30-15"
+    
+    return PERIOD_ORDER.get(period_name, 99)
+    
 
 # ============================================================
 # دوال مساعدة
@@ -612,7 +573,7 @@ def run_query(query, params=None):
         if params:
             df = pd.read_sql_query(query, conn, params=params)
         else:
-            df = pd.read_sql_query(query, conn, params=(period_name, year))
+            df = pd.read_sql_query(query, conn)
         return df
     finally:
         conn.close()
@@ -1260,7 +1221,7 @@ elif page == "📍 الأعمدة المتاحة":
             ORDER BY a."المحافظة", a."رقم اللوحة"
             """
             
-            df = pd.read_sql_query(query, conn, params=(period_name, year))
+            df = pd.read_sql_query(query, conn)
             conn.close()
             return df
         
@@ -1739,7 +1700,7 @@ elif page == "📊 Dashboard":
         ORDER BY a."المحافظة", a."رقم اللوحة"
         """
         
-        df = pd.read_sql_query(query, conn, params=(period_name, year))
+        df = pd.read_sql_query(query, conn)
         conn.close()
         return df
     
