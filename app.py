@@ -373,7 +373,30 @@ def get_period_from_date(date_obj):
         period_name = f"{month_name} 30-15"
     
     return PERIOD_ORDER.get(period_name, 99)
+
+def verify_period_order():
+    """التحقق من اكتمال الفترات"""
+    expected = 24
+    actual = len(PERIOD_ORDER)
     
+    print(f"📊 عدد الفترات في PERIOD_ORDER: {actual}")
+    
+    if actual == expected:
+        print("✅ جميع الفترات موجودة بشكل صحيح")
+    else:
+        print(f"❌ ينقص {expected - actual} فترة")
+        
+        # عرض الفترات المفقودة
+        all_numbers = set(range(1, 25))
+        existing_numbers = set(PERIOD_ORDER.values())
+        missing = all_numbers - existing_numbers
+        if missing:
+            print(f"⚠️ الفترات المفقودة: {sorted(missing)}")
+    
+    return actual == expected
+
+# شغّل التحقق
+verify_period_order()
 
 # ============================================================
 # دوال مساعدة
