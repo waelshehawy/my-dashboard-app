@@ -1164,77 +1164,48 @@ elif page == "📍 الأعمدة المتاحة":
         st.write(f"📅 رقم الفترة: {target_period_num}")
         # جلب البيانات مع تخزين مؤقت
         @st.cache_data(ttl=300)
-        def load_data(target_period_num, target_year):
-            conn = get_connection()
-            
-            query = f"""
-            WITH booking_periods AS (
-                SELECT 
-                    CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-                    "فترة الحجز",
-                    "العام",
-                    CASE
-                        WHEN "فترة الحجز" = 'كانون ثاني 15-1' THEN 1
-                        WHEN "فترة الحجز" = 'كانون ثاني 30-15' THEN 2
-                        WHEN "فترة الحجز" = 'شباط 15-1' THEN 3
-                        WHEN "فترة الحجز" = 'شباط 30-15' THEN 4
-                        WHEN "فترة الحجز" = 'اذار 15-1' THEN 5
-                        WHEN "فترة الحجز" = 'اذار 30-15' THEN 6
-                        WHEN "فترة الحجز" = 'نيسان 15-1' THEN 7
-                        WHEN "فترة الحجز" = 'نيسан 30-15' THEN 8
-                        WHEN "فترة الحجز" = 'ايار15-1' THEN 9
-                        WHEN "فترة الحجز" = 'أيار 30-15' THEN 10
-                        WHEN "فترة الحجز" = 'حزيران 15-1' THEN 11
-                        WHEN "فترة الحجز" = 'حزيران 30-15' THEN 12
-                        WHEN "فترة الحجز" = 'تموز 15-1' THEN 13
-                        WHEN "فترة الحجز" = 'تموز 30-15' THEN 14
-                        WHEN "فترة الحجز" = 'اب 15-1' THEN 15
-                        WHEN "فترة الحجز" = 'اب 30-15' THEN 16
-                        WHEN "فترة الحجز" = 'أيلول 15-1' THEN 17
-                        WHEN "فترة الحجز" = 'ايلول30-15' THEN 18
-                        WHEN "فترة الحجز" = 'تشرين اول 15-1' THEN 19
-                        WHEN "فترة الحجز" = 'تشرين اول30-15' THEN 20
-                        WHEN "فترة الحجز" = 'تشرين ثاني 15-1' THEN 21
-                        WHEN "فترة الحجز" = 'تشرين ثاني 30-15' THEN 22
-                        WHEN "فترة الحجز" = 'كانون اول 15-1' THEN 23
-                        WHEN "فترة الحجز" = 'كانون اول 30-15' THEN 24
-                    END as period_num
-                FROM "حجوزات1"
-                WHERE "العام" >= {target_year}
-            ),
-            board_aggregated AS (
-                SELECT 
-                    "رقم اللوحة",
-                    MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
-                    MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future,
-                    MIN(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN period_num ELSE NULL END) as min_future_period,
-                    MAX(CASE WHEN "period_num" <= {target_period_num} THEN period_num ELSE NULL END) as max_current_period
-                FROM booking_periods
-                GROUP BY "رقم اللوحة"
-            )
-            SELECT 
-                a."رقم اللوحة",
-                a."اسم العمود",
-                a."المحافظة",
-                a."الشبكة",
-                a."الحجم",
-                a."العدد",
-                CASE 
-                    WHEN b.has_current = 1 AND b.has_future = 1 THEN '🔴 محجوز بالكامل'
-                    WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز مؤقتاً'
-                    WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح مؤقتاً'
-                    ELSE '🟢 متاح فوراً'
-                END as status,
-                b.min_future_period as next_booking_period,
-                b.max_current_period as end_booking_period
-            FROM "اعمدة انارة" a
-            LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
-            ORDER BY a."المحافظة", a."رقم اللوحة"
-            """
-            
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            return df
+def load_data(target_period_num, target_year):
+    """تحميل بيانات الحجوزات لفترة محددة"""
+    
+    # الحصول على اسم الفترة
+    period_names = {v: k for k, v in PERIOD_ORDER.items()}
+    target_period_name = period_names.get(target_period_num)
+    
+    if target_period_name is None:
+        st.error(f"❌ لا توجد فترة بالرقم {target_period_num}")
+        return pd.DataFrame()
+    
+    conn = get_connection()
+    
+    # استعلام مباشر باستخدام اسم الفترة
+    query = """
+        SELECT 
+            a."رقم اللوحة",
+            a."اسم العمود",
+            a."المحافظة",
+            a."الشبكة",
+            a."الحجم",
+            a."العدد",
+            CASE 
+                WHEN b."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                ELSE '🟢 متاح'
+            END as الحالة
+        FROM "اعمدة انارة" a
+        LEFT JOIN "حجوزات1" b 
+            ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+            AND b."فترة الحجز" = %s
+            AND b."العام" = %s
+        ORDER BY a."المحافظة", a."رقم اللوحة"
+    """
+    
+    try:
+        df = pd.read_sql_query(query, conn, params=(target_period_name, target_year))
+        conn.close()
+        return df
+    except Exception as e:
+        st.error(f"❌ خطأ في تحميل البيانات: {e}")
+        conn.close()
+        return pd.DataFrame()
         
         df = load_data(target_period_num, target_year)
         
