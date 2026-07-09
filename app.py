@@ -1164,7 +1164,6 @@ elif page == "📍 الأعمدة المتاحة":
         st.write(f"📅 رقم الفترة: {target_period_num}")
         # جلب البيانات مع تخزين مؤقت
         @st.cache_data(ttl=300)
-@st.cache_data
         def load_data(target_period_num, target_year):
             """تحميل بيانات الحجوزات لفترة محددة"""
             
