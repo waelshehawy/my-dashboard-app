@@ -1158,9 +1158,12 @@ elif page == "📍 الأعمدة المتاحة":
     
     if submitted:
         # حساب الفترة المستهدفة
-        target_period_num = get_period_from_date(start_date)
+        period_name = get_period_from_date(start_date)  # اسم الفترة
+        target_period_num = get_period_number(period_name)  # رقم الفترة
         target_year = start_date.year
+        
         st.write(f"📅 التاريخ المختار: {start_date}")
+        st.write(f"📅 اسم الفترة: {period_name}")
         st.write(f"📅 رقم الفترة: {target_period_num}")
         
         # جلب البيانات مع تخزين مؤقت
@@ -1207,6 +1210,22 @@ elif page == "📍 الأعمدة المتاحة":
                 st.error(f"❌ خطأ في تحميل البيانات: {e}")
                 conn.close()
                 return pd.DataFrame()
+        
+        # تحميل البيانات
+        df = load_data(target_period_num, target_year)
+        
+        if not df.empty:
+            st.dataframe(df)
+            
+            # إحصائيات سريعة
+            available = len(df[df['الحالة'] == '🟢 متاح'])
+            booked = len(df[df['الحالة'] == '🔴 محجوز'])
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("🟢 متاح", available)
+            with col2:
+                st.metric("🔴 محجوز", booked)
         
         df = load_data(target_period_num, target_year)
         
