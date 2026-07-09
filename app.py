@@ -1158,8 +1158,8 @@ elif page == "📍 الأعمدة المتاحة":
     
     if submitted:
         # حساب الفترة المستهدفة
-        period_name = get_period_from_date(start_date)  # اسم الفترة
-        target_period_num = get_period_number(period_name)  # رقم الفترة
+        period_name = get_period_from_date(start_date)
+        target_period_num = get_period_number(period_name)
         target_year = start_date.year
         
         st.write(f"📅 التاريخ المختار: {start_date}")
@@ -1181,7 +1181,7 @@ elif page == "📍 الأعمدة المتاحة":
             
             conn = get_connection()
             
-            # استعلام مباشر باستخدام اسم الفترة
+            # استعلام مع CAST لكلا العمودين
             query = """
                 SELECT 
                     a."رقم اللوحة",
@@ -1196,7 +1196,7 @@ elif page == "📍 الأعمدة المتاحة":
                     END as الحالة
                 FROM "اعمدة انارة" a
                 LEFT JOIN "حجوزات1" b 
-                    ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+                    ON CAST(a."رقم اللوحة" AS TEXT) = CAST(b."رقم اللوحة" AS TEXT)
                     AND b."فترة الحجز" = %s
                     AND b."العام" = %s
                 ORDER BY a."المحافظة", a."رقم اللوحة"
@@ -1210,6 +1210,22 @@ elif page == "📍 الأعمدة المتاحة":
                 st.error(f"❌ خطأ في تحميل البيانات: {e}")
                 conn.close()
                 return pd.DataFrame()
+        
+        # تحميل البيانات
+        df = load_data(target_period_num, target_year)
+        
+        if not df.empty:
+            st.dataframe(df)
+            
+            # إحصائيات سريعة
+            available = len(df[df['الحالة'] == '🟢 متاح'])
+            booked = len(df[df['الحالة'] == '🔴 محجوز'])
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("🟢 متاح", available)
+            with col2:
+                st.metric("🔴 محجوز", booked)
         
         # تحميل البيانات
         df = load_data(target_period_num, target_year)
