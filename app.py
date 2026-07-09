@@ -275,6 +275,7 @@ st.markdown(ADVANCED_CSS, unsafe_allow_html=True)
 # ============================================================
 # دوال المتاح
 # ============================================================
+# ==================== دوال الأعمدة المتاحة (جديدة) ====================
 
 MONTHS_AR = {
     1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
@@ -282,83 +283,16 @@ MONTHS_AR = {
     9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
 }
 
-# ============================================================
-# دوال تحويل الفترات (نسخة مصححة)
-# ============================================================
-
-PERIOD_ORDER = {
-    'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
-    'شباط 15-1': 3, 'شباط 30-15': 4,
-    'اذار 15-1': 5, 'اذار 30-15': 6,
-    'نيسان 15-1': 7, 'نيسان 30-15': 8,
-    'ايار15-1': 9, 'أيار 30-15': 10,
-    'حزيران 15-1': 11, 'حزيران 30-15': 12,
-    'تموز 15-1': 13, 'تموز 30-15': 14,
-    'اب 15-1': 15, 'اب 30-15': 16,
-    'أيلول 15-1': 17, 'ايلول30-15': 18,
-    'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
-    'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
-    'كانون اول 15-1': 23, 'كانون اول 30-15': 24
-}
-
-def get_period_number(period_name):
-    """تحويل اسم الفترة إلى رقم (1-24)"""
-    if period_name is None:
-        return 99
-    return PERIOD_ORDER.get(period_name, 99)
-
-def get_period_from_date(date_obj):
-    """
-    تحويل تاريخ إلى اسم الفترة (بنفس الصيغة الموجودة في PERIOD_ORDER)
-    """
-    if not isinstance(date_obj, datetime):
-        try:
-            date_obj = pd.to_datetime(date_obj)
-        except:
-            raise ValueError(f"❌ تاريخ غير صالح: {date_obj}")
-    
-    month = date_obj.month
-    day = date_obj.day
-    
-    month_names = {
-        1: 'كانون ثاني', 2: 'شباط', 3: 'اذار', 4: 'نيسان',
-        5: 'ايار', 6: 'حزيران', 7: 'تموز', 8: 'اب',
-        9: 'ايلول', 10: 'تشرين اول', 11: 'تشرين ثاني', 12: 'كانون اول'
-    }
-    
-    month_name = month_names[month]
-    
-    # النصف الأول من الشهر (1-15)
-    if day <= 15:
-        # حالات خاصة
-        if month == 5:  # ايار - بدون مسافة
-            return "ايار15-1"
-        elif month == 9:  # ايلول - بهمزة
-            return "أيلول 15-1"
-        else:
-            return f"{month_name} 15-1"
-    
-    # النصف الثاني من الشهر (16-31)
-    else:
-        # حالات خاصة
-        if month == 5:  # ايار - بهمزة
-            return "أيار 30-15"
-        elif month == 9:  # ايلول - بدون مسافة
-            return "ايلول30-15"
-        elif month == 10:  # تشرين اول - بدون مسافة
-            return "تشرين اول30-15"
-        else:
-            return f"{month_name} 30-15"
-
 def convert_date_to_period_name(date):
-    """
-    تحويل تاريخ إلى اسم الفترة (نسخة مبسطة - تستخدم الدالة الجديدة)
-    """
-    return get_period_from_date(date)
+    month_name = MONTHS_AR[date.month]
+    if date.day <= 15:
+        return f"{month_name} 15-1"
+    else:
+        return f"{month_name} 30-15"
 
 def get_available_boards_from_date(start_date):
     """اللوحات المتاحة ابتداءً من تاريخ محدد - تستخدم اتصال PostgreSQL الموجود"""
-    target_period = get_period_from_date(start_date)
+    target_period = convert_date_to_period_name(start_date)
     target_year = start_date.year
     
     conn = get_connection()
@@ -384,6 +318,61 @@ def get_available_boards_from_date(start_date):
     available_df = all_boards_df[~all_boards_df['رقم اللوحة'].isin(booked_ids)]
     
     return available_df
+
+# ============================================================
+# دوال تحويل الفترات
+# ============================================================
+
+PERIOD_ORDER = {
+    # كانون الثاني
+    'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
+    # شباط
+    'شباط 15-1': 3, 'شباط 30-15': 4,
+    # آذار
+    'اذار 15-1': 5, 'اذار 30-15': 6,
+    # نيسان
+    'نيسان 15-1': 7, 'نيسان 30-15': 8,
+    # أيار
+    'ايار15-1': 9, 'أيار 30-15': 10,
+    # حزيران
+    'حزيران 15-1': 11, 'حزيران 30-15': 12,
+    # تموز
+    'تموز 15-1': 13, 'تموز 30-15': 14,
+    # آب
+    'اب 15-1': 15, 'اب 30-15': 16,
+    # أيلول
+    'أيلول 15-1': 17, 'ايلول30-15': 18,
+    # تشرين الأول
+    'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
+    # تشرين الثاني
+    'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
+    # كانون الأول
+    'كانون اول 15-1': 23, 'كانون اول 30-15': 24
+}
+def get_period_number(period_name):
+    """تحويل اسم الفترة إلى رقم (1-24)"""
+    if period_name is None:
+        return 99
+    return PERIOD_ORDER.get(period_name, 99)
+
+def get_period_from_date(date_obj):
+    day = date_obj.day
+    month = date_obj.month
+    
+    month_names = {
+        1: 'كانون ثاني', 2: 'شباط', 3: 'اذار', 4: 'نيسان',
+        5: 'ايار', 6: 'حزيران', 7: 'تموز', 8: 'اب',
+        9: 'ايلول', 10: 'تشرين اول', 11: 'تشرين ثاني', 12: 'كانون اول'
+    }
+    
+    month_name = month_names[month]
+    
+    if day <= 15:
+        period_name = f"{month_name} 15-1"
+    else:
+        period_name = f"{month_name} 30-15"
+    
+    return PERIOD_ORDER.get(period_name, 99)
     
 
 # ============================================================
@@ -1158,106 +1147,98 @@ elif page == "📍 الأعمدة المتاحة":
     
     if submitted:
         # حساب الفترة المستهدفة
-        period_name = get_period_from_date(start_date)
-        target_period_num = get_period_number(period_name)
+        target_period_num = get_period_from_date(start_date)
         target_year = start_date.year
-        
         st.write(f"📅 التاريخ المختار: {start_date}")
-        st.write(f"📅 اسم الفترة: {period_name}")
         st.write(f"📅 رقم الفترة: {target_period_num}")
-        
         # جلب البيانات مع تخزين مؤقت
         @st.cache_data(ttl=300)
         def load_data(target_period_num, target_year):
-            """تحميل بيانات الحجوزات لفترة محددة"""
-            
-            # الحصول على اسم الفترة
-            period_names = {v: k for k, v in PERIOD_ORDER.items()}
-            target_period_name = period_names.get(target_period_num)
-            
-            if target_period_name is None:
-                st.error(f"❌ لا توجد فترة بالرقم {target_period_num}")
-                return pd.DataFrame()
-            
             conn = get_connection()
             
-            # استعلام مع CAST لكلا العمودين
-            query = """
+            query = f"""
+            WITH booking_periods AS (
                 SELECT 
-                    a."رقم اللوحة",
-                    a."اسم العمود",
-                    a."المحافظة",
-                    a."الشبكة",
-                    a."الحجم",
-                    a."العدد",
-                    CASE 
-                        WHEN b."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
-                        ELSE '🟢 متاح'
-                    END as الحالة
-                FROM "اعمدة انارة" a
-                LEFT JOIN "حجوزات1" b 
-                    ON CAST(a."رقم اللوحة" AS TEXT) = CAST(b."رقم اللوحة" AS TEXT)
-                    AND b."فترة الحجز" = %s
-                    AND b."العام" = %s
-                ORDER BY a."المحافظة", a."رقم اللوحة"
+                    CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
+                    "فترة الحجز",
+                    "العام",
+                    CASE
+                        WHEN "فترة الحجز" = 'كانون ثاني 15-1' THEN 1
+                        WHEN "فترة الحجز" = 'كانون ثاني 30-15' THEN 2
+                        WHEN "فترة الحجز" = 'شباط 15-1' THEN 3
+                        WHEN "فترة الحجز" = 'شباط 30-15' THEN 4
+                        WHEN "فترة الحجز" = 'اذار 15-1' THEN 5
+                        WHEN "فترة الحجز" = 'اذار 30-15' THEN 6
+                        WHEN "فترة الحجز" = 'نيسان 15-1' THEN 7
+                        WHEN "فترة الحجز" = 'نيسан 30-15' THEN 8
+                        WHEN "فترة الحجز" = 'ايار15-1' THEN 9
+                        WHEN "فترة الحجز" = 'أيار 30-15' THEN 10
+                        WHEN "فترة الحجز" = 'حزيران 15-1' THEN 11
+                        WHEN "فترة الحجز" = 'حزيران 30-15' THEN 12
+                        WHEN "فترة الحجز" = 'تموز 15-1' THEN 13
+                        WHEN "فترة الحجز" = 'تموز 30-15' THEN 14
+                        WHEN "فترة الحجز" = 'اب 15-1' THEN 15
+                        WHEN "فترة الحجز" = 'اب 30-15' THEN 16
+                        WHEN "فترة الحجز" = 'أيلول 15-1' THEN 17
+                        WHEN "فترة الحجز" = 'ايلول30-15' THEN 18
+                        WHEN "فترة الحجز" = 'تشرين اول 15-1' THEN 19
+                        WHEN "فترة الحجز" = 'تشرين اول30-15' THEN 20
+                        WHEN "فترة الحجز" = 'تشرين ثاني 15-1' THEN 21
+                        WHEN "فترة الحجز" = 'تشرين ثاني 30-15' THEN 22
+                        WHEN "فترة الحجز" = 'كانون اول 15-1' THEN 23
+                        WHEN "فترة الحجز" = 'كانون اول 30-15' THEN 24
+                    END as period_num
+                FROM "حجوزات1"
+                WHERE "العام" >= {target_year}
+            ),
+            board_aggregated AS (
+                SELECT 
+                    "رقم اللوحة",
+                    MAX(CASE WHEN "العام" = {target_year} AND "period_num" = {target_period_num} THEN 1 ELSE 0 END) as has_current,
+                    MAX(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN 1 ELSE 0 END) as has_future,
+                    MIN(CASE WHEN ("العام" > {target_year}) OR ("العام" = {target_year} AND "period_num" > {target_period_num}) THEN period_num ELSE NULL END) as min_future_period,
+                    MAX(CASE WHEN "period_num" <= {target_period_num} THEN period_num ELSE NULL END) as max_current_period
+                FROM booking_periods
+                GROUP BY "رقم اللوحة"
+            )
+            SELECT 
+                a."رقم اللوحة",
+                a."اسم العمود",
+                a."المحافظة",
+                a."الشبكة",
+                a."الحجم",
+                a."العدد",
+                CASE 
+                    WHEN b.has_current = 1 AND b.has_future = 1 THEN '🔴 محجوز بالكامل'
+                    WHEN b.has_current = 1 AND b.has_future = 0 THEN '🟠 محجوز مؤقتاً'
+                    WHEN b.has_current = 0 AND b.has_future = 1 THEN '🟡 متاح مؤقتاً'
+                    ELSE '🟢 متاح فوراً'
+                END as status,
+                b.min_future_period as next_booking_period,
+                b.max_current_period as end_booking_period
+            FROM "اعمدة انارة" a
+            LEFT JOIN board_aggregated b ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+            ORDER BY a."المحافظة", a."رقم اللوحة"
             """
             
-            try:
-                df = pd.read_sql_query(query, conn, params=(target_period_name, target_year))
-                conn.close()
-                return df
-            except Exception as e:
-                st.error(f"❌ خطأ في تحميل البيانات: {e}")
-                conn.close()
-                return pd.DataFrame()
-        
-        # تحميل البيانات
-        df = load_data(target_period_num, target_year)
-        
-        if not df.empty:
-            st.dataframe(df)
-            
-            # إحصائيات سريعة
-            available = len(df[df['الحالة'] == '🟢 متاح'])
-            booked = len(df[df['الحالة'] == '🔴 محجوز'])
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("🟢 متاح", available)
-            with col2:
-                st.metric("🔴 محجوز", booked)
-        
-        # تحميل البيانات
-        df = load_data(target_period_num, target_year)
-        
-        if not df.empty:
-            st.dataframe(df)
-            
-            # إحصائيات سريعة
-            available = len(df[df['الحالة'] == '🟢 متاح'])
-            booked = len(df[df['الحالة'] == '🔴 محجوز'])
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("🟢 متاح", available)
-            with col2:
-                st.metric("🔴 محجوز", booked)
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            return df
         
         df = load_data(target_period_num, target_year)
         
         # حساب الإحصائيات
-        # ✅ هذا صحيح
-        available_now_sites = len(df[df['الحالة'] == '🟢 متاح'])
-        available_now_boards = df[df['الحالة'] == '🟢 متاح فوراً']['العدد'].sum()
+        available_now_sites = len(df[df['status'] == '🟢 متاح فوراً'])
+        available_now_boards = df[df['status'] == '🟢 متاح فوراً']['العدد'].sum()
         
-        available_temp_sites = len(df[df['الحالة'] == '🟡 متاح مؤقتاً'])
-        available_temp_boards = df[df['الحالة'] == '🟡 متاح مؤقتاً']['العدد'].sum()
+        available_temp_sites = len(df[df['status'] == '🟡 متاح مؤقتاً'])
+        available_temp_boards = df[df['status'] == '🟡 متاح مؤقتاً']['العدد'].sum()
         
-        booked_temp_sites = len(df[df['الحالة'] == '🟠 محجوز مؤقتاً'])
-        booked_temp_boards = df[df['الحالة'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
+        booked_temp_sites = len(df[df['status'] == '🟠 محجوز مؤقتاً'])
+        booked_temp_boards = df[df['status'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
         
-        booked_full_sites = len(df[df['الحالة'] == '🔴 محجوز بالكامل'])
-        booked_full_books = df[df['الحالة'] == '🔴 محجوز بالكامل']['العدد'].sum()
+        booked_full_sites = len(df[df['status'] == '🔴 محجوز بالكامل'])
+        booked_full_books = df[df['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
         
         # ✅ المجاميع الكلية
         total_available_sites = available_now_sites + available_temp_sites
@@ -1334,19 +1315,19 @@ elif page == "📍 الأعمدة المتاحة":
                 
                 # استخدام use_container_width=False لتقليل إعادة التحميل
                 st.dataframe(
-                    display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'الحالة', 'تاريخ البدء', 'تاريخ الانتهاء']],
+                    display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء', 'تاريخ الانتهاء']],
                     use_container_width=False,
                     height=300
                 )
         
         # تصدير
-        csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'الحالة', 'next_booking_period', 'end_booking_period']].to_csv(
+        csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_csv(
             index=False, encoding='utf-8-sig'
         )
         # ✅ تصدير Excel بدلاً من CSV
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'الحالة', 'next_booking_period', 'end_booking_period']].to_excel(
+            df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_excel(
                 writer, sheet_name='الأعمدة المتاحة', index=False
             )
         
@@ -1733,12 +1714,12 @@ elif page == "📊 Dashboard":
     total_boards = df['العدد'].sum()
     
     # محجوز حالياً (has_current = 1)
-    booked_current = df[df['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
+    booked_current = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
     booked_current_sites = len(booked_current)
     booked_current_boards = booked_current['العدد'].sum()
     
     # متاح حالياً (has_current = 0)
-    available_current = df[~df['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
+    available_current = df[~df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
     available_current_sites = len(available_current)
     available_current_boards = available_current['العدد'].sum()
     
@@ -1820,7 +1801,7 @@ elif page == "📊 Dashboard":
         for city in df['المحافظة'].unique():
             city_data = df[df['المحافظة'] == city]
             city_total = len(city_data)
-            city_booked = len(city_data[city_data['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])])
+            city_booked = len(city_data[city_data['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])])
             city_stats.append({
                 'المحافظة': city,
                 'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
@@ -1902,7 +1883,7 @@ elif page == "📊 Dashboard":
         )
         marker_cluster = MarkerCluster().add_to(m)
         
-        booked_boards_list = df[df['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
+        booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
         
         for _, row in all_columns_map.iterrows():
             if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
