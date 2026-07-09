@@ -1164,6 +1164,7 @@ elif page == "📍 الأعمدة المتاحة":
         st.write(f"📅 رقم الفترة: {target_period_num}")
         # جلب البيانات مع تخزين مؤقت
         @st.cache_data(ttl=300)
+@st.cache_data
 def load_data(target_period_num, target_year):
     """تحميل بيانات الحجوزات لفترة محددة"""
     
@@ -1201,6 +1202,11 @@ def load_data(target_period_num, target_year):
     try:
         df = pd.read_sql_query(query, conn, params=(target_period_name, target_year))
         conn.close()
+        return df
+    except Exception as e:
+        st.error(f"❌ خطأ في تحميل البيانات: {e}")
+        conn.close()
+        return pd.DataFrame()
         return df
     except Exception as e:
         st.error(f"❌ خطأ في تحميل البيانات: {e}")
