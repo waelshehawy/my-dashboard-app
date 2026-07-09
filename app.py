@@ -1248,16 +1248,16 @@ elif page == "📍 الأعمدة المتاحة":
         # حساب الإحصائيات
         # ✅ هذا صحيح
         available_now_sites = len(df[df['الحالة'] == '🟢 متاح'])
-        available_now_boards = df[df['status'] == '🟢 متاح فوراً']['العدد'].sum()
+        available_now_boards = df[df['الحالة'] == '🟢 متاح فوراً']['العدد'].sum()
         
-        available_temp_sites = len(df[df['status'] == '🟡 متاح مؤقتاً'])
-        available_temp_boards = df[df['status'] == '🟡 متاح مؤقتاً']['العدد'].sum()
+        available_temp_sites = len(df[df['الحالة'] == '🟡 متاح مؤقتاً'])
+        available_temp_boards = df[df['الحالة'] == '🟡 متاح مؤقتاً']['العدد'].sum()
         
-        booked_temp_sites = len(df[df['status'] == '🟠 محجوز مؤقتاً'])
-        booked_temp_boards = df[df['status'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
+        booked_temp_sites = len(df[df['الحالة'] == '🟠 محجوز مؤقتاً'])
+        booked_temp_boards = df[df['الحالة'] == '🟠 محجوز مؤقتاً']['العدد'].sum()
         
-        booked_full_sites = len(df[df['status'] == '🔴 محجوز بالكامل'])
-        booked_full_books = df[df['status'] == '🔴 محجوز بالكامل']['العدد'].sum()
+        booked_full_sites = len(df[df['الحالة'] == '🔴 محجوز بالكامل'])
+        booked_full_books = df[df['الحالة'] == '🔴 محجوز بالكامل']['العدد'].sum()
         
         # ✅ المجاميع الكلية
         total_available_sites = available_now_sites + available_temp_sites
@@ -1334,19 +1334,19 @@ elif page == "📍 الأعمدة المتاحة":
                 
                 # استخدام use_container_width=False لتقليل إعادة التحميل
                 st.dataframe(
-                    display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status', 'تاريخ البدء', 'تاريخ الانتهاء']],
+                    display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'الحالة', 'تاريخ البدء', 'تاريخ الانتهاء']],
                     use_container_width=False,
                     height=300
                 )
         
         # تصدير
-        csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_csv(
+        csv_data = df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'الحالة', 'next_booking_period', 'end_booking_period']].to_csv(
             index=False, encoding='utf-8-sig'
         )
         # ✅ تصدير Excel بدلاً من CSV
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'next_booking_period', 'end_booking_period']].to_excel(
+            df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'الحالة', 'next_booking_period', 'end_booking_period']].to_excel(
                 writer, sheet_name='الأعمدة المتاحة', index=False
             )
         
@@ -1733,12 +1733,12 @@ elif page == "📊 Dashboard":
     total_boards = df['العدد'].sum()
     
     # محجوز حالياً (has_current = 1)
-    booked_current = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
+    booked_current = df[df['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
     booked_current_sites = len(booked_current)
     booked_current_boards = booked_current['العدد'].sum()
     
     # متاح حالياً (has_current = 0)
-    available_current = df[~df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
+    available_current = df[~df['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]
     available_current_sites = len(available_current)
     available_current_boards = available_current['العدد'].sum()
     
@@ -1820,7 +1820,7 @@ elif page == "📊 Dashboard":
         for city in df['المحافظة'].unique():
             city_data = df[df['المحافظة'] == city]
             city_total = len(city_data)
-            city_booked = len(city_data[city_data['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])])
+            city_booked = len(city_data[city_data['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])])
             city_stats.append({
                 'المحافظة': city,
                 'نسبة الإشغال': (city_booked / city_total * 100) if city_total > 0 else 0
@@ -1902,7 +1902,7 @@ elif page == "📊 Dashboard":
         )
         marker_cluster = MarkerCluster().add_to(m)
         
-        booked_boards_list = df[df['status'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
+        booked_boards_list = df[df['الحالة'].isin(['محجوز مؤقتاً', 'محجوز بالكامل'])]['رقم اللوحة'].tolist()
         
         for _, row in all_columns_map.iterrows():
             if pd.notnull(row.get('Latitude')) and pd.notnull(row.get('Longitude')) and row.get('Latitude') != 0:
