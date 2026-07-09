@@ -1162,67 +1162,51 @@ elif page == "📍 الأعمدة المتاحة":
         target_year = start_date.year
         st.write(f"📅 التاريخ المختار: {start_date}")
         st.write(f"📅 رقم الفترة: {target_period_num}")
+        
         # جلب البيانات مع تخزين مؤقت
         @st.cache_data(ttl=300)
-def load_data(target_period_num, target_year):
-    """تحميل بيانات الحجوزات لفترة محددة"""
-    
-    # الحصول على اسم الفترة
-    period_names = {v: k for k, v in PERIOD_ORDER.items()}
-    target_period_name = period_names.get(target_period_num)
-    
-    if target_period_name is None:
-        st.error(f"❌ لا توجد فترة بالرقم {target_period_num}")
-        return pd.DataFrame()
-    
-    conn = get_connection()
-    
-    # استعلام مباشر باستخدام اسم الفترة
-    query = """
-        SELECT 
-            a."رقم اللوحة",
-            a."اسم العمود",
-            a."المحافظة",
-            a."الشبكة",
-            a."الحجم",
-            a."العدد",
-            CASE 
-                WHEN b."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
-                ELSE '🟢 متاح'
-            END as الحالة
-        FROM "اعمدة انارة" a
-        LEFT JOIN "حجوزات1" b 
-            ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
-            AND b."فترة الحجز" = %s
-            AND b."العام" = %s
-        ORDER BY a."المحافظة", a."رقم اللوحة"
-    """
-    
-    try:
-        df = pd.read_sql_query(query, conn, params=(target_period_name, target_year))
-        conn.close()
-        return df
-    except Exception as e:
-        st.error(f"❌ خطأ في تحميل البيانات: {e}")
-        conn.close()
-        return pd.DataFrame()
+        def load_data(target_period_num, target_year):
+            """تحميل بيانات الحجوزات لفترة محددة"""
+            
+            # الحصول على اسم الفترة
+            period_names = {v: k for k, v in PERIOD_ORDER.items()}
+            target_period_name = period_names.get(target_period_num)
+            
+            if target_period_name is None:
+                st.error(f"❌ لا توجد فترة بالرقم {target_period_num}")
+                return pd.DataFrame()
+            
+            conn = get_connection()
+            
+            # استعلام مباشر باستخدام اسم الفترة
+            query = """
+                SELECT 
+                    a."رقم اللوحة",
+                    a."اسم العمود",
+                    a."المحافظة",
+                    a."الشبكة",
+                    a."الحجم",
+                    a."العدد",
+                    CASE 
+                        WHEN b."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                        ELSE '🟢 متاح'
+                    END as الحالة
+                FROM "اعمدة انارة" a
+                LEFT JOIN "حجوزات1" b 
+                    ON CAST(a."رقم اللوحة" AS TEXT) = b."رقم اللوحة"
+                    AND b."فترة الحجز" = %s
+                    AND b."العام" = %s
+                ORDER BY a."المحافظة", a."رقم اللوحة"
+            """
+            
+            try:
+                df = pd.read_sql_query(query, conn, params=(target_period_name, target_year))
+                conn.close()
+                return df
             except Exception as e:
                 st.error(f"❌ خطأ في تحميل البيانات: {e}")
                 conn.close()
                 return pd.DataFrame()
-        except Exception as e:
-            st.error(f"❌ خطأ في تحميل البيانات: {e}")
-            conn.close()
-            return pd.DataFrame()
-    except Exception as e:
-        st.error(f"❌ خطأ في تحميل البيانات: {e}")
-        conn.close()
-        return pd.DataFrame()
-        return df
-    except Exception as e:
-        st.error(f"❌ خطأ في تحميل البيانات: {e}")
-        conn.close()
-        return pd.DataFrame()
         
         df = load_data(target_period_num, target_year)
         
