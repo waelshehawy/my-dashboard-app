@@ -1246,7 +1246,8 @@ elif page == "📍 الأعمدة المتاحة":
         df = load_data(target_period_num, target_year)
         
         # حساب الإحصائيات
-        available_now_sites = len(df[df['status'] == '🟢 متاح فوراً'])
+        # ✅ هذا صحيح
+        available_now_sites = len(df[df['الحالة'] == '🟢 متاح'])
         available_now_boards = df[df['status'] == '🟢 متاح فوراً']['العدد'].sum()
         
         available_temp_sites = len(df[df['status'] == '🟡 متاح مؤقتاً'])
