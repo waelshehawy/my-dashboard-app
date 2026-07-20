@@ -579,24 +579,56 @@ def run_query(query, params=None):
         conn.close()
 
 def get_fees(draw_df, size, print_type, is_foreign):
+    """
+    حساب أجور الطباعة والعرض بناءً على الحجم ونوع الطباعة ونوع المنتج
+    
+    Args:
+        draw_df: DataFrame من جدول اسماء الرسم
+        size: قياس اللوحة (مثل '3*6')
+        print_type: 'عادي' أو 'سكوتش'
+        is_foreign: True إذا كان المنتج أجنبي
+    
+    Returns:
+        (fee_print, fee_ads): أجور الطباعة والعرض
+    """
     subset = draw_df[draw_df['الحجم'] == size].copy()
     
+    # ============================================================
+    # 1. حساب أجر الطباعة
+    # ============================================================
     if print_type == "عادي":
+        # البحث عن الطباعة العادية
         f_pr = subset[subset['اسم الرسم'].str.contains("اجور الطباعة عادي", na=False)]
         if f_pr.empty:
+            # إذا لم يوجد، استخدم الطباعة العادية (سكوتش)
             f_pr = subset[subset['اسم الرسم'].str.contains("اجور الطباعة", na=False)]
     else:
+        # البحث عن الطباعة (سكوتش)
         f_pr = subset[subset['اسم الرسم'].str.contains("اجور الطباعة", na=False)]
+        # استبعاد العادي
         f_pr = f_pr[~f_pr['اسم الرسم'].str.contains("عادي", na=False)]
+    
+    # إذا كان المنتج أجنبي، حاول البحث عن الطباعة الأجنبية
+    if is_foreign and not f_pr.empty:
+        foreign_print = f_pr[f_pr['اسم الرسم'].str.contains("اجنبي", na=False)]
+        if not foreign_print.empty:
+            f_pr = foreign_print
     
     fee_print = float(f_pr['اجرة الرسم'].iloc[0]) if not f_pr.empty else 0.0
     
+    # ============================================================
+    # 2. حساب أجر العرض
+    # ============================================================
     if is_foreign:
+        # البحث عن العرض الأجنبي
         f_ad = subset[subset['اسم الرسم'].str.contains("اجور العرض اجنبي", na=False)]
         if f_ad.empty:
+            # إذا لم يوجد، استخدم العرض العادي (وطني)
             f_ad = subset[subset['اسم الرسم'].str.contains("اجور العرض", na=False)]
     else:
+        # البحث عن العرض (وطني)
         f_ad = subset[subset['اسم الرسم'].str.contains("اجور العرض", na=False)]
+        # استبعاد الأجنبي
         f_ad = f_ad[~f_ad['اسم الرسم'].str.contains("اجنبي", na=False)]
     
     fee_ads = float(f_ad['اجرة الرسم'].iloc[0]) if not f_ad.empty else 0.0
