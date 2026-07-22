@@ -1175,12 +1175,12 @@ if page == "🏢 لوحات الشركات":
 
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (نسخة Supabase - مبدأ التداخل)
+# صفحة: الأعمدة المتاحة (عرض المتاح فقط)
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة المتاحة خلال فترة زمنية محددة (على أساس التداخل الفعلي)")
+    st.info("📌 عرض الأعمدة المتاحة خلال فترة زمنية محددة")
 
     # ===== فلتر الفترة =====
     with st.form(key="filter_form"):
@@ -1231,15 +1231,12 @@ elif page == "📍 الأعمدة المتاحة":
                 a."المحافظة",
                 a."الشبكة",
                 a."الحجم",
-                a."العدد",
-                CASE 
-                    WHEN b.panel_id IS NOT NULL THEN '🔴 محجوز'
-                    ELSE '🟢 متاح'
-                END as status,
-                NULL::date as next_booking_date
+                a."العدد"
             FROM "اعمدة انارة" a
-            LEFT JOIN active_bookings b 
-                ON CAST(a."رقم اللوحة" AS TEXT) = b.panel_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM active_bookings b 
+                WHERE CAST(a."رقم اللوحة" AS TEXT) = b.panel_id
+            )
             ORDER BY a."المحافظة", a."رقم اللوحة"
             """
 
@@ -1250,33 +1247,28 @@ elif page == "📍 الأعمدة المتاحة":
         df = load_data(start_date, end_date)
 
         # ===== إحصائيات المتاح فقط =====
-        available = len(df[df['status'] == '🟢 متاح'])
-        booked = len(df[df['status'] == '🔴 محجوز'])
         total_sites = len(df)
-        total_boards = df['العدد'].sum()
-        available_boards = df[df['status'] == '🟢 متاح']['العدد'].sum()
+        total_boards = df['العدد'].sum() if not df.empty else 0
 
-        st.subheader("📊 إحصائيات الفترة")
+        st.subheader("📊 الأعمدة المتاحة")
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
-            st.metric("🟢 متاح", available)
+            st.metric("📍 المواقع المتاحة", total_sites)
         with col2:
-            st.metric("🔴 محجوز", booked)
-        with col3:
-            st.metric("📊 إجمالي المواقع", total_sites)
+            st.metric("📌 اللوحات المتاحة", int(total_boards))
 
         st.divider()
 
         # ===== عرض حسب المحافظة =====
         if df.empty:
-            st.info("📭 لا توجد بيانات في هذه الفترة")
+            st.info("📭 لا توجد أعمدة متاحة في هذه الفترة")
         else:
             for city in df['المحافظة'].unique():
                 city_data = df[df['المحافظة'] == city]
                 with st.expander(f"🏙️ {city} - {len(city_data)} موقع", expanded=False):
                     st.dataframe(
-                        city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
+                        city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد']],
                         use_container_width=True,
                         height=300
                     )
@@ -1285,7 +1277,7 @@ elif page == "📍 الأعمدة المتاحة":
         if not df.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_excel(
+                df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد']].to_excel(
                     writer, sheet_name='الأعمدة المتاحة', index=False
                 )
             output.seek(0)
