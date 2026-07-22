@@ -1175,23 +1175,17 @@ if page == "🏢 لوحات الشركات":
 
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (نسخة التواريخ)
-# ============================================================
-
-# ============================================================
-# صفحة: الأعمدة المتاحة (عرض المتاح فقط)
+# صفحة: الأعمدة المتاحة (نسخة Supabase - مبدأ التداخل)
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
     st.title("📍 الأعمدة المتاحة للإيجار")
-    st.info("📌 عرض الأعمدة المتاحة خلال فترة زمنية محددة")
-    
-    # ============================================================
-    # فلتر الفترة
-    # ============================================================
+    st.info("📌 عرض الأعمدة المتاحة خلال فترة زمنية محددة (على أساس التداخل الفعلي)")
+
+    # ===== فلتر الفترة =====
     with st.form(key="filter_form"):
         st.subheader("📅 فلتر فترة الإتاحة")
-        
+
         col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
@@ -1203,42 +1197,33 @@ elif page == "📍 الأعمدة المتاحة":
             end_date = st.date_input(
                 "📅 تاريخ النهاية:",
                 value=date(date.today().year, 12, 31),
-                help="نهاية الفترة التي تريد البحث فيها (افتراضي: 31 كانون الأول)"
+                help="نهاية الفترة (افتراضي: 31 كانون الأول)"
             )
-        
+
         if start_date > end_date:
             st.error("❌ تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
-        
+
         submitted = st.form_submit_button("🔍 تطبيق الفلتر")
-    
+
     if not submitted and 'df' not in st.session_state:
         submitted = True
-    
+
     if submitted:
         st.write(f"📅 الفترة المحددة: من {start_date.strftime('%Y-%m-%d')} إلى {end_date.strftime('%Y-%m-%d')}")
-        
-        # ============================================================
-        # تحميل البيانات
-        # ============================================================
+
+        # ===== تحميل البيانات =====
         @st.cache_data(ttl=300)
         def load_data(start_date, end_date):
             conn = get_connection()
-            
+
             query = """
-            WITH future_bookings AS (
-                SELECT 
-                    CAST("رقم اللوحة" AS TEXT) as panel_id,
-                    MIN("تاريخ_البداية") as next_start
-                FROM "حجوزات1"
-                WHERE "تاريخ_البداية" > %s
-                GROUP BY "رقم اللوحة"
-            ),
-            active_bookings AS (
+            WITH active_bookings AS (
                 SELECT 
                     CAST("رقم اللوحة" AS TEXT) as panel_id
                 FROM "حجوزات1"
-                WHERE "تاريخ_البداية" <= %s 
-                AND "تاريخ_النهاية" >= %s
+                WHERE 
+                    "تاريخ_البداية" <= %s 
+                    AND "تاريخ_النهاية" >= %s
             )
             SELECT 
                 a."رقم اللوحة",
@@ -1247,87 +1232,63 @@ elif page == "📍 الأعمدة المتاحة":
                 a."الشبكة",
                 a."الحجم",
                 a."العدد",
-                f.next_start as next_booking_date
+                CASE 
+                    WHEN b.panel_id IS NOT NULL THEN '🔴 محجوز'
+                    ELSE '🟢 متاح'
+                END as status,
+                NULL::date as next_booking_date
             FROM "اعمدة انارة" a
-            LEFT JOIN future_bookings f ON CAST(a."رقم اللوحة" AS TEXT) = f.panel_id
-            WHERE NOT EXISTS (
-                SELECT 1 FROM active_bookings b 
-                WHERE CAST(a."رقم اللوحة" AS TEXT) = b.panel_id
-            )
+            LEFT JOIN active_bookings b 
+                ON CAST(a."رقم اللوحة" AS TEXT) = b.panel_id
             ORDER BY a."المحافظة", a."رقم اللوحة"
             """
-            
-            df = pd.read_sql_query(query, conn, params=(end_date, end_date, start_date))
+
+            df = pd.read_sql_query(query, conn, params=(end_date, start_date))
             conn.close()
             return df
-        
+
         df = load_data(start_date, end_date)
-        
-        # ============================================================
-        # إحصائيات المتاح فقط
-        # ============================================================
+
+        # ===== إحصائيات المتاح فقط =====
+        available = len(df[df['status'] == '🟢 متاح'])
+        booked = len(df[df['status'] == '🔴 محجوز'])
         total_sites = len(df)
         total_boards = df['العدد'].sum()
-        
-        st.subheader("📊 إحصائيات الأعمدة المتاحة")
-        
-        col1, col2 = st.columns(2)
+        available_boards = df[df['status'] == '🟢 متاح']['العدد'].sum()
+
+        st.subheader("📊 إحصائيات الفترة")
+
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown(f"#### 📍 المواقع المتاحة")
-            st.markdown(f"📌 **{total_sites}** موقع")
+            st.metric("🟢 متاح", available)
         with col2:
-            st.markdown(f"#### 📌 اللوحات المتاحة")
-            st.markdown(f"📌 **{int(total_boards):,}** لوحة")
-        
+            st.metric("🔴 محجوز", booked)
+        with col3:
+            st.metric("📊 إجمالي المواقع", total_sites)
+
         st.divider()
-        
-        # ============================================================
-        # عرض حسب المحافظة
-        # ============================================================
-        def format_date_arabic(date_val):
-            if pd.isna(date_val) or date_val is None:
-                return ""
-            if isinstance(date_val, str):
-                try:
-                    date_val = datetime.strptime(date_val, '%Y-%m-%d')
-                except:
-                    return date_val
-            month_names = {
-                1: 'كانون الثاني', 2: 'شباط', 3: 'آذار', 4: 'نيسان',
-                5: 'أيار', 6: 'حزيران', 7: 'تموز', 8: 'آب',
-                9: 'أيلول', 10: 'تشرين الأول', 11: 'تشرين الثاني', 12: 'كانون الأول'
-            }
-            return f"{date_val.day} {month_names[date_val.month]} {date_val.year}"
-        
+
+        # ===== عرض حسب المحافظة =====
         if df.empty:
-            st.info("📭 لا توجد أعمدة متاحة في هذه الفترة")
+            st.info("📭 لا توجد بيانات في هذه الفترة")
         else:
             for city in df['المحافظة'].unique():
                 city_data = df[df['المحافظة'] == city]
-                
                 with st.expander(f"🏙️ {city} - {len(city_data)} موقع", expanded=False):
-                    
-                    display_df = city_data.copy()
-                    display_df['تاريخ الحجز القادم'] = display_df['next_booking_date'].apply(format_date_arabic)
-                    
                     st.dataframe(
-                        display_df[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'تاريخ الحجز القادم']],
+                        city_data[['رقم اللوحة', 'اسم العمود', 'الشبكة', 'الحجم', 'العدد', 'status']],
                         use_container_width=True,
                         height=300
                     )
-        
-        # ============================================================
-        # تصدير Excel
-        # ============================================================
+
+        # ===== تصدير =====
         if not df.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'next_booking_date']].to_excel(
+                df[['رقم اللوحة', 'اسم العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']].to_excel(
                     writer, sheet_name='الأعمدة المتاحة', index=False
                 )
-            
             output.seek(0)
-            
             st.download_button(
                 "📥 تحميل التقرير (Excel)",
                 output,
