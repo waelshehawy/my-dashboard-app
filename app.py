@@ -1346,14 +1346,35 @@ elif page == "📍 الأعمدة المتاحة":
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
                 
-                params = (
-                    current_year, next_year,
-                    *periods,
-                    current_year, next_year,
-                    current_year, next_year,
-                    *periods,
-                    current_year, next_year
-                )
+                # ✅ بناء params بشكل صحيح
+                params = []
+                
+                # 1. أول فترة حجز قادمة: current_year, next_year (2)
+                params.append(current_year)
+                params.append(next_year)
+                
+                # 2. أول فترة حجز قادمة: NOT IN (periods) (len(periods))
+                params.extend(periods)
+                
+                # 3. آخر فترة حجز: current_year, next_year (2)
+                params.append(current_year)
+                params.append(next_year)
+                
+                # 4. جميع فترات الحجز: current_year, next_year (2)
+                params.append(current_year)
+                params.append(next_year)
+                
+                # 5. LEFT JOIN: periods (len(periods))
+                params.extend(periods)
+                
+                # 6. LEFT JOIN: current_year, next_year (2)
+                params.append(current_year)
+                params.append(next_year)
+                
+                # ✅ تحويل إلى tuple
+                params = tuple(params)
+                
+                df = pd.read_sql_query(query, conn, params=params)
                 
                 df = pd.read_sql_query(query, conn, params=params)
                 conn.close()
