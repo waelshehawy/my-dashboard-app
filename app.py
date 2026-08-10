@@ -2094,362 +2094,184 @@ elif page == "📊 Dashboard":
 #=============================
 
 # ============================================================
-# صفحة: عرض سعر (نسخة Supabase) - القسم الأول
+# صفحة: عرض سعر (نسخة PostgreSQL/Supabase)
 # ============================================================
 
-import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta, date
-import json
-import os
-from supabase import create_client, Client
-
-# ============================================================
-# 1. تهيئة عميل Supabase (استخدام المتغيرات البيئية)
-# ============================================================
-
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://your-project.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "your-anon-key")
-
-@st.cache_resource
-def get_supabase_client() -> Client:
-    """إنشاء عميل Supabase (مخبأ لتحسين الأداء)"""
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-def get_connection():
-    """وظيفة تمثيلية للتوافق مع الكود القديم - تعيد العميل مباشرة"""
-    return get_supabase_client()
-
-# ============================================================
-# 2. دوال مساعدة للتحويل من Supabase إلى DataFrame
-# ============================================================
-
-def supabase_to_df(response):
-    """تحويل استجابة Supabase إلى pandas DataFrame"""
-    if response and hasattr(response, 'data') and response.data is not None:
-        return pd.DataFrame(response.data)
-    return pd.DataFrame()
-
-def supabase_execute(table, method='select', **kwargs):
-    """
-    تنفيذ عملية على جدول مع معالجة الأخطاء.
-    method: 'select', 'insert', 'update', 'delete'
-    kwargs: columns, filters (dict), order (dict), data (dict)
-    """
-    client = get_supabase_client()
-    try:
-        if method == 'select':
-            query = client.table(table).select(kwargs.get('columns', '*'))
-            if 'filters' in kwargs:
-                for col, val in kwargs['filters'].items():
-                    query = query.eq(col, val)
-            if 'order' in kwargs:
-                query = query.order(kwargs['order']['column'], desc=kwargs['order'].get('desc', False))
-            response = query.execute()
-        elif method == 'insert':
-            response = client.table(table).insert(kwargs['data']).execute()
-        elif method == 'update':
-            query = client.table(table).update(kwargs['data'])
-            if 'filters' in kwargs:
-                for col, val in kwargs['filters'].items():
-                    query = query.eq(col, val)
-            response = query.execute()
-        elif method == 'delete':
-            query = client.table(table).delete()
-            if 'filters' in kwargs:
-                for col, val in kwargs['filters'].items():
-                    query = query.eq(col, val)
-            response = query.execute()
-        else:
-            raise ValueError(f"طريقة غير معروفة: {method}")
-        
-        if response and hasattr(response, 'error') and response.error:
-            st.error(f"خطأ Supabase: {response.error}")
-            return None
-        return response
-    except Exception as e:
-        st.error(f"استثناء في Supabase: {e}")
-        return None
-
-# ============================================================
-# 3. دوال الوصول إلى البيانات (معدلة لـ Supabase)
-# ============================================================
-
-def get_networks_in_previous_offers(current_client, start_date, end_date):
-    """
-    تعيد قائمة بأرقام الشبكات التي ظهرت في عروض سابقة (لشركات أخرى)
-    خلال الفترة المحددة.
-    """
-    client = get_supabase_client()
-    try:
-        response = client.table('offers_history')\
-            .select('cart_json')\
-            .eq('status', 'Pending')\
-            .gt('valid_until', datetime.now().isoformat())\
-            .neq('client_name', current_client)\
-            .lte('start_date', end_date.isoformat())\
-            .gte('end_date', start_date.isoformat())\
-            .execute()
-        
-        if response.error:
-            return []
-        
-        networks = set()
-        for row in response.data:
-            try:
-                data = json.loads(row['cart_json'])
-                for city, networks_dict in data.get('data', {}).items():
-                    for net_name in networks_dict.keys():
-                        if 'شبكة' in net_name:
-                            parts = net_name.split()
-                            for part in parts:
-                                if part.isdigit():
-                                    networks.add(int(part))
-                                    break
-            except:
-                pass
-        return list(networks)
-    except Exception as e:
-        st.error(f"استثناء في get_networks_in_previous_offers: {e}")
-        return []
-
-def check_board_conflict(board_number, current_client, start_date, end_date):
-    """بحث عن تعارضات مع عروض سابقة"""
-    client = get_supabase_client()
-    try:
-        response = client.table('offers_history')\
-            .select('client_name, valid_until, sent_at')\
-            .eq('status', 'Pending')\
-            .gt('valid_until', datetime.now().isoformat())\
-            .neq('client_name', current_client)\
-            .lte('start_date', end_date.isoformat())\
-            .gte('end_date', start_date.isoformat())\
-            .like('cart_json', f'%"{board_number}"%')\
-            .execute()
-        
-        if response.error:
-            return []
-        results = [(row['client_name'], row['valid_until'], row['sent_at']) for row in response.data]
-        return results
-    except Exception as e:
-        st.error(f"استثناء في check_board_conflict: {e}")
-        return []
-
-def get_client_discount(client_name):
-    """الحصول على نسبة الحسم الخاصة بالعميل"""
-    try:
-        response = supabase_execute('clients', 'select', filters={'name': client_name})
-        if response and response.data:
-            return response.data[0].get('discount_rate', 0)
-        return 0
-    except:
-        return 0
-
-def get_fees_by_size(size, description, print_type, ad_type):
-    """الحصول على أجور الطباعة والعرض من جدول اسماء الرسم"""
-    client = get_supabase_client()
-    try:
-        response = client.table('اسماء الرسم').select('*').execute()
-        if response.error:
-            return 0.0, 0.0
-        draw_df = pd.DataFrame(response.data)
-        if draw_df.empty:
-            return 0.0, 0.0
-    except:
-        return 0.0, 0.0
-
-    # تطبيع الحجم
-    normalized_size = size.replace('*', '×').replace('x', '×').replace('X', '×')
-    if normalized_size in ['2×1', '185×125']:
-        actual_size = 'أعمدة ومنصفات'
-    else:
-        actual_size = normalized_size
-
-    if ad_type == "وطني":
-        product_types = ['وطني']
-    elif ad_type == "أجنبي":
-        product_types = ['أجنبي', 'اجنبي']
-    else:
-        product_types = ['تصنيع محلي']
-
-    subset = draw_df[
-        (draw_df['الحجم'] == actual_size) & 
-        (draw_df['نوع_المنتج'].isin(product_types))
-    ].copy()
-
-    if subset.empty:
-        st.warning(f"⚠️ لا توجد أسعار للحجم {actual_size} ونوع {ad_type}")
-        return 0.0, 0.0
-
-    if print_type == "عادي":
-        print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة عادي"]
-        if print_subset.empty:
-            print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة"]
-    else:  # سكوتش
-        print_subset = subset[
-            (subset['اسم الرسم'] == "اجور الطباعة") & 
-            (subset['نوع_الطباعة'] == "سكوتش")
-        ]
-        if print_subset.empty:
-            print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة"]
-            print_subset = print_subset[~print_subset['اسم الرسم'].str.contains("عادي", na=False)]
-
-    fee_print = float(print_subset['اجرة الرسم'].iloc[0]) if not print_subset.empty else 0.0
-    ads_subset = subset[subset['اسم الرسم'] == "اجور العرض"]
-    fee_ads = float(ads_subset['اجرة الرسم'].iloc[0]) if not ads_subset.empty else 0.0
-
-    return fee_print, fee_ads
-
-# ============================================================
-# 4. دوال التنسيق والدوال المساعدة الأخرى (بدون تعديل)
-# ============================================================
-
-def format_date_arabic(date_obj):
-    if not date_obj:
-        return ""
-    if isinstance(date_obj, str):
-        try:
-            date_obj = datetime.strptime(date_obj, '%Y-%m-%d')
-        except:
-            try:
-                date_obj = datetime.strptime(date_obj, '%Y-%m-%d %H:%M:%S')
-            except:
-                return date_obj
-    month_names = {
-        1: 'كانون الثاني', 2: 'شباط', 3: 'آذار', 4: 'نيسان',
-        5: 'أيار', 6: 'حزيران', 7: 'تموز', 8: 'آب',
-        9: 'أيلول', 10: 'تشرين الأول', 11: 'تشرين الثاني', 12: 'كانون الأول'
-    }
-    return f"{date_obj.day} {month_names[date_obj.month]} {date_obj.year}"
-
-def format_date_range_arabic(start_date, end_date):
-    return f"من {format_date_arabic(start_date)} إلى {format_date_arabic(end_date)}"
-
-def _force_rtl_style(p):
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    pPr = p._element.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi')
-    bidi.set(qn('w:val'), '1')
-    pPr.append(bidi)
-    for run in p.runs:
-        rPr = run._element.get_or_add_rPr()
-        rtl = OxmlElement('w:rtl')
-        rtl.set(qn('w:val'), '1')
-        rPr.append(rtl)
-
-def set_table_rtl(table):
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-    tblPr = table._element.xpath('w:tblPr')[0]
-    bidi = OxmlElement('w:bidiVisual')
-    tblPr.append(bidi)
-
-def get_periods_between_dates(start_date, end_date):
-    from datetime import datetime
-    period_map = {
-        'كانون ثاني 15-1': ('01-01', '01-15'),
-        'كانون ثاني 30-15': ('01-15', '01-31'),
-        'شباط 15-1': ('02-01', '02-15'),
-        'شباط 30-15': ('02-15', '02-28'),
-        'اذار 15-1': ('03-01', '03-15'),
-        'اذار 30-15': ('03-15', '03-31'),
-        'نيسان 15-1': ('04-01', '04-15'),
-        'نيسان 30-15': ('04-15', '04-30'),
-        'ايار15-1': ('05-01', '05-15'),
-        'أيار 30-15': ('05-15', '05-31'),
-        'حزيران 15-1': ('06-01', '06-15'),
-        'حزيران 30-15': ('06-15', '06-30'),
-        'تموز 15-1': ('07-01', '07-15'),
-        'تموز 30-15': ('07-15', '07-31'),
-        'اب 15-1': ('08-01', '08-15'),
-        'اب 30-15': ('08-15', '08-31'),
-        'أيلول 15-1': ('09-01', '09-15'),
-        'ايلول30-15': ('09-15', '09-30'),
-        'تشرين اول 15-1': ('10-01', '10-15'),
-        'تشرين اول30-15': ('10-15', '10-31'),
-        'تشرين ثاني 15-1': ('11-01', '11-15'),
-        'تشرين ثاني 30-15': ('11-15', '11-30'),
-        'كانون اول 15-1': ('12-01', '12-15'),
-        'كانون اول 30-15': ('12-15', '12-31'),
-    }
-    period_order = {
-        'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
-        'شباط 15-1': 3, 'شباط 30-15': 4,
-        'اذار 15-1': 5, 'اذار 30-15': 6,
-        'نيسان 15-1': 7, 'نيسان 30-15': 8,
-        'ايار15-1': 9, 'أيار 30-15': 10,
-        'حزيران 15-1': 11, 'حزيران 30-15': 12,
-        'تموز 15-1': 13, 'تموز 30-15': 14,
-        'اب 15-1': 15, 'اب 30-15': 16,
-        'أيلول 15-1': 17, 'ايلول30-15': 18,
-        'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
-        'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
-        'كانون اول 15-1': 23, 'كانون اول 30-15': 24,
-    }
-    year = start_date.year
-    selected_periods = []
-    for period_name, (p_start, p_end) in period_map.items():
-        p_start_date = datetime.strptime(f"{year}-{p_start}", '%Y-%m-%d').date()
-        p_end_date = datetime.strptime(f"{year}-{p_end}", '%Y-%m-%d').date()
-        if not (p_end_date < start_date or p_start_date > end_date):
-            selected_periods.append(period_name)
-    selected_periods.sort(key=lambda x: period_order.get(x, 0))
-    return selected_periods
-
-def calculate_months(start_date, end_date):
-    if not start_date or not end_date:
-        return 0
-    days = (end_date - start_date).days
-    return max(1, days / 30)
-
-def is_admin():
-    return True  # يمكن تعديلها حسب الحاجة
-
-# ============================================================
-# نهاية القسم الأول
-# ============================================================
-
-# ============================================================
-# صفحة: عرض سعر (نسخة Supabase) - القسم الثاني
-# ============================================================
-
-# (يُفترض أن القسم الأول قد تم تشغيله مسبقاً)
-
-# ============================================================
-# بداية الصفحة
-# ============================================================
-
-if selected_page == "📄 عرض سعر":
+elif selected_page == "📄 عرض سعر":
     st.title("📄 بناء عرض سعر جديد")
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
 
-    # تهيئة session_state
-    if 'cart' not in st.session_state:
-        st.session_state.cart = {}
-    if 'temp_cust' not in st.session_state:
-        st.session_state.temp_cust = ""
-    if 'show_add_client' not in st.session_state:
-        st.session_state.show_add_client = False
+    # ============================================================
+    # دوال خاصة بالصفحة (تستخدم الدوال العامة إن وجدت)
+    # ============================================================
+    
+    # دالة تحويل الفترات (قد تكون موجودة في الأعلى، لكن نضيفها احتياطاً)
+    def get_periods_between_dates(start_date, end_date):
+        """تحويل نطاق تواريخ إلى قائمة من الفترات النصف شهرية (باستخدام PERIOD_ORDER العام)"""
+        # نستخدم الدوال العامة إن وجدت، وإلا نعرفها محلياً
+        try:
+            # محاولة استخدام الدوال العامة إن وجدت
+            from . import convert_date_to_period_name, get_period_number  # قد لا تعمل
+        except:
+            # تعريف محلي
+            MONTHS_AR = {
+                1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
+                5: "ايار", 6: "حزيران", 7: "تموز", 8: "اب",
+                9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
+            }
+            def convert_date_to_period_name(date):
+                month_name = MONTHS_AR[date.month]
+                if date.day <= 15:
+                    return f"{month_name} 15-1"
+                else:
+                    return f"{month_name} 30-15"
+            
+            PERIOD_ORDER = {
+                'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
+                'شباط 15-1': 3, 'شباط 30-15': 4,
+                'اذار 15-1': 5, 'اذار 30-15': 6,
+                'نيسان 15-1': 7, 'نيسان 30-15': 8,
+                'ايار15-1': 9, 'أيار 30-15': 10,
+                'حزيران 15-1': 11, 'حزيران 30-15': 12,
+                'تموز 15-1': 13, 'تموز 30-15': 14,
+                'اب 15-1': 15, 'اب 30-15': 16,
+                'أيلول 15-1': 17, 'ايلول30-15': 18,
+                'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
+                'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
+                'كانون اول 15-1': 23, 'كانون اول 30-15': 24
+            }
+            def get_period_number(period_name):
+                return PERIOD_ORDER.get(period_name, 99)
+        
+        selected = []
+        current = start_date
+        while current <= end_date:
+            period_name = convert_date_to_period_name(current)
+            if period_name not in selected:
+                selected.append(period_name)
+            current += timedelta(days=1)
+        selected.sort(key=lambda x: get_period_number(x))
+        return selected
+
+    # دوال استعلامات خاصة بالصفحة (تستخدم run_query)
+    def get_networks_in_previous_offers(current_client, start_date, end_date):
+        """تعيد قائمة بأرقام الشبكات التي ظهرت في عروض سابقة"""
+        query = '''
+            SELECT cart_json
+            FROM offers_history
+            WHERE status IN ('Pending', 'Sent')
+            AND valid_until > NOW()
+            AND client_name != %s
+            AND (start_date <= %s AND end_date >= %s)
+        '''
+        df = run_query(query, (current_client, end_date, start_date))
+        networks = set()
+        if df is not None and not df.empty:
+            import json
+            for cart_json in df['cart_json']:
+                try:
+                    data = json.loads(cart_json)
+                    for city, networks_dict in data.get('data', {}).items():
+                        for net_name in networks_dict.keys():
+                            if 'شبكة' in net_name:
+                                parts = net_name.split()
+                                for part in parts:
+                                    if part.isdigit():
+                                        networks.add(int(part))
+                                        break
+                except:
+                    pass
+        return list(networks)
+
+    def check_board_conflict(board_number, current_client, start_date, end_date):
+        """تبحث عن تعارضات مع عروض سابقة"""
+        query = '''
+            SELECT client_name, valid_until, sent_at
+            FROM offers_history
+            WHERE status IN ('Pending', 'Sent')
+            AND valid_until > NOW()
+            AND client_name != %s
+            AND (start_date <= %s AND end_date >= %s)
+            AND cart_json LIKE %s
+        '''
+        df = run_query(query, (current_client, end_date, start_date, f'%"{board_number}"%'))
+        if df is not None and not df.empty:
+            return list(zip(df['client_name'], df['valid_until'], df['sent_at']))
+        return []
+
+    def get_client_discount(client_name):
+        """الحصول على نسبة الحسم من جدول clients"""
+        query = 'SELECT discount_rate FROM clients WHERE name = %s'
+        df = run_query(query, (client_name,))
+        if df is not None and not df.empty:
+            return float(df.iloc[0]['discount_rate'])
+        return 0
+
+    def get_fees_by_size(size, description, print_type, ad_type):
+        """الحصول على أجور الطباعة والعرض من جدول اسماء الرسم"""
+        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+        if draw_df is None or draw_df.empty:
+            return 0.0, 0.0
+        
+        # تطبيع الحجم
+        normalized_size = size.replace('*', '×').replace('x', '×').replace('X', '×')
+        if normalized_size in ['2×1', '185×125']:
+            actual_size = 'أعمدة ومنصفات'
+        else:
+            actual_size = normalized_size
+
+        # تحديد أنواع المنتجات حسب ad_type
+        if ad_type == "وطني":
+            product_types = ['وطني']
+        elif ad_type == "أجنبي":
+            product_types = ['أجنبي', 'اجنبي']
+        else:  # أجنبي امتياز وطني
+            product_types = ['تصنيع محلي']
+
+        subset = draw_df[
+            (draw_df['الحجم'] == actual_size) & 
+            (draw_df['نوع_المنتج'].isin(product_types))
+        ].copy()
+
+        if subset.empty:
+            st.warning(f"⚠️ لا توجد أسعار للحجم {actual_size} ونوع {ad_type}")
+            return 0.0, 0.0
+
+        # البحث عن أجور الطباعة
+        if print_type == "عادي":
+            print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة عادي"]
+            if print_subset.empty:
+                print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة"]
+        else:  # سكوتش
+            print_subset = subset[
+                (subset['اسم الرسم'] == "اجور الطباعة") & 
+                (subset['نوع_الطباعة'] == "سكوتش")
+            ]
+            if print_subset.empty:
+                print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة"]
+                print_subset = print_subset[~print_subset['اسم الرسم'].str.contains("عادي", na=False)]
+
+        fee_print = float(print_subset['اجرة الرسم'].iloc[0]) if not print_subset.empty else 0.0
+
+        # البحث عن أجور العرض
+        ads_subset = subset[subset['اسم الرسم'] == "اجور العرض"]
+        fee_ads = float(ads_subset['اجرة الرسم'].iloc[0]) if not ads_subset.empty else 0.0
+
+        return fee_print, fee_ads
+
+    def calculate_months(start_date, end_date):
+        if not start_date or not end_date:
+            return 0
+        days = (end_date - start_date).days
+        return max(1, days / 30)
 
     # ============================================================
     # 1. اختيار العميل والفترة
     # ============================================================
     
-    # جلب قائمة العملاء من Supabase
-    try:
-        client = get_supabase_client()
-        response = client.table('clients').select('name').order('name').execute()
-        if response.error:
-            st.error(f"خطأ في جلب العملاء: {response.error}")
-            client_list = []
-        else:
-            clients_df = pd.DataFrame(response.data)
-            client_list = clients_df['name'].tolist() if not clients_df.empty else []
-    except:
-        client_list = []
+    # جلب قائمة العملاء
+    clients_df = run_query('SELECT name FROM clients ORDER BY name')
+    client_list = clients_df['name'].tolist() if clients_df is not None and not clients_df.empty else []
 
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -2463,13 +2285,15 @@ if selected_page == "📄 عرض سعر":
             new_client = st.text_input("اسم العميل الجديد")
             if st.button("💾 حفظ العميل"):
                 try:
-                    response = supabase_execute('clients', 'insert', data={'name': new_client})
-                    if response and not response.error:
-                        st.success(f"✅ تم إضافة العميل {new_client}")
-                        st.session_state.show_add_client = False
-                        st.rerun()
-                    else:
-                        st.error(f"❌ فشل الإضافة: {response.error if response else 'خطأ غير معروف'}")
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('INSERT INTO clients (name) VALUES (%s)', (new_client,))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    st.success(f"✅ تم إضافة العميل {new_client}")
+                    st.session_state.show_add_client = False
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ فشل الإضافة: {e}")
     
@@ -2494,39 +2318,27 @@ if selected_page == "📄 عرض سعر":
     # 2. اختيار تفاصيل الطباعة
     # ============================================================
     
-    # جلب قائمة الأحجام من Supabase
-    try:
-        client = get_supabase_client()
-        response = client.table('اسماء الرسم').select('الحجم').execute()
-        if response.error:
-            size_list = ['3*6', '2*1']
-        else:
-            df_sizes = pd.DataFrame(response.data)
-            size_list = df_sizes['الحجم'].unique().tolist() if not df_sizes.empty else ['3*6', '2*1']
-    except:
-        size_list = ['3*6', '2*1']
-
-    # جلب خيارات الأعمدة من Supabase
-    try:
-        client = get_supabase_client()
-        response = client.table('اعمدة انارة')\
-            .select('توصيف العمود, الحجم')\
-            .eq('عاملة', 1)\
-            .gt('العدد', 0)\
-            .order('توصيف العمود')\
-            .execute()
-        if response.error:
-            options = ['لوحة - 3*6', 'لوحة - 2*1']
-        else:
-            df_options = pd.DataFrame(response.data)
-            df_options = df_options.drop_duplicates(subset=['توصيف العمود', 'الحجم'])
-            if not df_options.empty:
-                options = [f"{row['توصيف العمود']} - {row['الحجم']}" for _, row in df_options.iterrows()]
-            else:
-                options = ['لوحة - 3*6', 'لوحة - 2*1']
-    except:
+    draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+    if draw_df is None or draw_df.empty:
+        st.error("❌ لا توجد بيانات في جدول اسماء الرسم")
+        st.stop()
+    
+    size_list = draw_df['الحجم'].unique().tolist()
+    
+    # جلب خيارات الأعمدة (توصيف العمود + الحجم)
+    df_options = run_query('''
+        SELECT DISTINCT "توصيف العمود", "الحجم"
+        FROM "اعمدة انارة"
+        WHERE "عاملة" = 1
+        AND "العدد" > 0
+        AND "العدد" IS NOT NULL
+        ORDER BY "توصيف العمود", "الحجم"
+    ''')
+    if df_options is not None and not df_options.empty:
+        options = [f"{row['توصيف العمود']} - {row['الحجم']}" for _, row in df_options.iterrows()]
+    else:
         options = ['لوحة - 3*6', 'لوحة - 2*1']
-
+    
     col3, col4, col5 = st.columns(3)
     with col3:
         selected_option = st.selectbox("📏 اختيار النوع والحجم:", options)
@@ -2541,7 +2353,8 @@ if selected_page == "📄 عرض سعر":
         ad_type = st.selectbox(
             "🏷️ نوع الإعلان:",
             options=["وطني", "أجنبي", "أجنبي امتياز وطني"],
-            index=0
+            index=0,
+            help="اختر نوع الإعلان لتحديد التسعيرة المناسبة"
         )
 
     # ============================================================
@@ -2570,26 +2383,19 @@ if selected_page == "📄 عرض سعر":
     # 4. اختيار المحافظة
     # ============================================================
     
-    try:
-        client = get_supabase_client()
-        response = client.table('اعمدة انارة')\
-            .select('المحافظة')\
-            .eq('عاملة', 1)\
-            .gt('العدد', 0)\
-            .order('المحافظة')\
-            .execute()
-        if response.error:
-            city_list = []
-        else:
-            cities_df = pd.DataFrame(response.data)
-            city_list = cities_df['المحافظة'].unique().tolist()
-    except:
-        city_list = []
-
+    cities_df = run_query('''
+        SELECT DISTINCT "المحافظة" 
+        FROM "اعمدة انارة"
+        WHERE "عاملة" = 1
+        AND "العدد" > 0
+        AND "العدد" IS NOT NULL
+        ORDER BY "المحافظة"
+    ''')
+    city_list = cities_df['المحافظة'].tolist() if cities_df is not None and not cities_df.empty else []
     if not city_list:
         st.warning("⚠️ لا توجد محافظات في قاعدة البيانات")
         st.stop()
-
+    
     selected_city = st.selectbox("اختر المحافظة:", city_list)
 
     # ============================================================
@@ -2597,51 +2403,40 @@ if selected_page == "📄 عرض سعر":
     # ============================================================
     
     if periods_for_quote:
-        try:
-            client = get_supabase_client()
-            # جلب جميع الأعمدة العاملة في المحافظة والحجم المحدد
-            response_columns = client.table('اعمدة انارة')\
-                .select('رقم اللوحة, اسم العمود, العدد, الشبكة, الحجم, توصيف العمود')\
-                .eq('عاملة', 1)\
-                .gt('العدد', 0)\
-                .eq('المحافظة', selected_city)\
-                .eq('الحجم', selected_size)\
-                .execute()
-            
-            if response_columns.error:
-                available_df = pd.DataFrame()
-            else:
-                columns_df = pd.DataFrame(response_columns.data)
-                
-                # جلب الحجوزات لهذه الأعمدة في الفترات المحددة
-                # (نستخدم or_ للبحث عن أي فترة من القائمة)
-                # لكن Supabase لا يدعم IN مع array بسهولة، لذا نستخدم loop أو filter لاحقاً
-                # طريقة مبسطة: نجلب كل الحجوزات للفترات ثم ندمج
-                all_bookings = pd.DataFrame()
-                current_year = start_date.year
-                next_year = str(int(current_year) + 1)
-                
-                for period in periods_for_quote:
-                    response_bookings = client.table('حجوزات1')\
-                        .select('رقم اللوحة')\
-                        .eq('فترة الحجز', period)\
-                        .in_('العام', [str(current_year), next_year])\
-                        .execute()
-                    if not response_bookings.error and response_bookings.data:
-                        df_book = pd.DataFrame(response_bookings.data)
-                        all_bookings = pd.concat([all_bookings, df_book], ignore_index=True)
-                
-                # تحديد الأعمدة المحجوزة
-                booked_boards = set(all_bookings['رقم اللوحة'].astype(str).tolist()) if not all_bookings.empty else set()
-                
-                # إضافة عمود الحالة
-                columns_df['status'] = columns_df['رقم اللوحة'].astype(str).apply(
-                    lambda x: '🔴 محجوز' if x in booked_boards else '🟢 متاح'
-                )
-                available_df = columns_df[columns_df['status'] == '🟢 متاح'].copy()
-                
-        except Exception as e:
-            st.error(f"❌ خطأ في جلب البيانات: {e}")
+        placeholders = ','.join(['%s'] * len(periods_for_quote))
+        current_year = start_date.year
+        next_year = str(int(current_year) + 1)
+        
+        query = f"""
+        SELECT 
+            a."رقم اللوحة",
+            a."اسم العمود" as "الموقع",
+            a."العدد",
+            a."الشبكة",
+            a."الحجم",
+            a."توصيف العمود",
+            CASE 
+                WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                ELSE '🟢 متاح'
+            END as status
+        FROM "اعمدة انارة" a
+        LEFT JOIN "حجوزات1" h 
+            ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+            AND h."فترة الحجز" IN ({placeholders})
+            AND h."العام" IN (%s, %s)
+        WHERE a."عاملة" = 1
+        AND a."العدد" > 0
+        AND a."العدد" IS NOT NULL
+        AND a."المحافظة" = %s
+        AND a."الحجم" = %s
+        GROUP BY a."رقم اللوحة", a."اسم العمود", a."العدد", a."الشبكة", a."الحجم", a."توصيف العمود"
+        ORDER BY a."الشبكة", a."رقم اللوحة"
+        """
+        params = periods_for_quote + [str(current_year), str(next_year), selected_city, selected_size]
+        all_columns_df = run_query(query, params)
+        if all_columns_df is not None and not all_columns_df.empty:
+            available_df = all_columns_df[all_columns_df['status'] == '🟢 متاح'].copy()
+        else:
             available_df = pd.DataFrame()
     else:
         st.warning("⚠️ لا توجد فترات في النطاق المحدد")
@@ -2654,7 +2449,6 @@ if selected_page == "📄 عرض سعر":
     if available_df.empty:
         st.warning("⚠️ لا توجد مواقع متاحة في هذه الفترة")
     else:
-        # إحصائيات الشبكات
         network_summary = available_df.groupby('الشبكة').agg({
             'رقم اللوحة': 'count',
             'العدد': 'sum'
@@ -2863,7 +2657,7 @@ if selected_page == "📄 عرض سعر":
                     st.error("❌ الرجاء إدخال اسم الزبون")
                 else:
                     try:
-                        # تحضير البيانات
+                        import json
                         save_data = {
                             "data": {
                                 c: {n: df.to_dict() for n, df in ns.items()} 
@@ -2871,29 +2665,33 @@ if selected_page == "📄 عرض سعر":
                             }
                         }
                         cart_json = json.dumps(save_data, ensure_ascii=False)
-                        
                         now = datetime.now()
                         valid_until = now + timedelta(hours=48)
                         
-                        # إدراج في offers_history
-                        response = supabase_execute('offers_history', 'insert', data={
-                            'client_name': customer_name,
-                            'ad_type': ad_type,
-                            'print_type': print_type,
-                            'discount_percent': discount_percent if apply_discount else 0,
-                            'apply_discount': 1 if apply_discount else 0,
-                            'start_date': start_date.strftime('%Y-%m-%d'),
-                            'end_date': end_date.strftime('%Y-%m-%d'),
-                            'cart_json': cart_json,
-                            'sent_at': now.strftime('%Y-%m-%d %H:%M:%S'),
-                            'valid_until': valid_until.strftime('%Y-%m-%d %H:%M:%S'),
-                            'status': 'Pending'
-                        })
-                        
-                        if response and not response.error:
-                            st.success("✅ تم الحفظ كمسودة مع صلاحية 48 ساعة")
-                        else:
-                            st.error(f"❌ فشل الحفظ: {response.error if response else 'خطأ غير معروف'}")
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            INSERT INTO offers_history 
+                            (client_name, ad_type, print_type, discount_percent, apply_discount, 
+                             start_date, end_date, cart_json, sent_at, valid_until, status)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ''', (
+                            customer_name,
+                            ad_type,
+                            print_type,
+                            discount_percent if apply_discount else 0,
+                            1 if apply_discount else 0,
+                            start_date.strftime('%Y-%m-%d'),
+                            end_date.strftime('%Y-%m-%d'),
+                            cart_json,
+                            now.strftime('%Y-%m-%d %H:%M:%S'),
+                            valid_until.strftime('%Y-%m-%d %H:%M:%S'),
+                            'Pending'
+                        ))
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        st.success("✅ تم الحفظ كمسودة مع صلاحية 48 ساعة")
                     except Exception as e:
                         st.error(f"❌ فشل الحفظ: {e}")
         
@@ -2903,30 +2701,25 @@ if selected_page == "📄 عرض سعر":
             
             if st.session_state.get('show_saved_offers', False):
                 try:
-                    client = get_supabase_client()
-                    response = client.table('offers_history')\
-                        .select('id, client_name, start_date, end_date, offer_date')\
-                        .eq('status', 'Pending')\
-                        .order('id', desc=True)\
-                        .execute()
-                    
-                    if response.error:
-                        st.error(f"خطأ: {response.error}")
+                    saved_offers = run_query('''
+                        SELECT id, client_name, start_date, end_date, offer_date 
+                        FROM offers_history 
+                        WHERE status = 'Pending' 
+                        ORDER BY id DESC
+                    ''')
+                    if saved_offers is not None and not saved_offers.empty:
+                        offer_options = {}
+                        for _, row in saved_offers.iterrows():
+                            client = row['client_name']
+                            start = row['start_date']
+                            end = row['end_date']
+                            offer_options[f"{client} ({start} → {end})"] = row['id']
+                        
+                        selected = st.selectbox("اختر عرضاً:", list(offer_options.keys()), key="load_offer")
+                        if st.button("🔄 تحميل", key="load_offer_btn"):
+                            st.info("سيتم تفعيل هذه الميزة قريباً")
                     else:
-                        saved_offers = pd.DataFrame(response.data)
-                        if not saved_offers.empty:
-                            offer_options = {}
-                            for _, row in saved_offers.iterrows():
-                                client = row['client_name']
-                                start = row['start_date']
-                                end = row['end_date']
-                                offer_options[f"{client} ({start} → {end})"] = row['id']
-                            
-                            selected = st.selectbox("اختر عرضاً:", list(offer_options.keys()), key="load_offer")
-                            if st.button("🔄 تحميل", key="load_offer_btn"):
-                                st.info("سيتم تفعيل هذه الميزة قريباً")
-                        else:
-                            st.info("لا توجد عروض محفوظة")
+                        st.info("لا توجد عروض محفوظة")
                 except Exception as e:
                     st.error(f"❌ خطأ: {e}")
         
@@ -2937,54 +2730,45 @@ if selected_page == "📄 عرض سعر":
                         st.error("❌ الرجاء إدخال اسم الزبون")
                     else:
                         try:
-                            client = get_supabase_client()
-                            # بدء المعاملة (Supabase لا يدعم transaction بشكل مباشر، لكن يمكن تنفيذها كـ batch)
-                            # سنقوم بإدراج الحجوزات واحداً تلو الآخر
+                            conn = get_connection()
+                            cursor = conn.cursor()
+                            # نبدأ معاملة
                             for city, networks in st.session_state.cart.items():
                                 for net, df in networks.items():
                                     for _, row in df.iterrows():
                                         panel_id = str(row['رقم اللوحة'])
                                         for period in periods_for_quote:
-                                            insert_data = {
-                                                'رقم اللوحة': panel_id,
-                                                'اسم الزبون': customer_name,
-                                                'فترة الحجز': period,
-                                                'العام': str(start_date.year),
-                                                'تاريخ_البداية': start_date.strftime('%Y-%m-%d'),
-                                                'تاريخ_النهاية': end_date.strftime('%Y-%m-%d')
-                                            }
-                                            resp = supabase_execute('حجوزات1', 'insert', data=insert_data)
-                                            if resp and resp.error:
-                                                st.error(f"فشل إدخال الحجز: {resp.error}")
-                                                break
+                                            cursor.execute('''
+                                                INSERT INTO "حجوزات1" 
+                                                ("رقم اللوحة", "اسم الزبون", "فترة الحجز", "العام", "تاريخ_البداية", "تاريخ_النهاية") 
+                                                VALUES (%s, %s, %s, %s, %s, %s)
+                                            ''', (panel_id, customer_name, period, str(start_date.year), start_date, end_date))
                             
                             # تحديث حالة العرض إلى Confirmed
-                            # نبحث عن أحدث عرض للعميل بنفس التواريخ
-                            search_resp = client.table('offers_history')\
-                                .select('id')\
-                                .eq('client_name', customer_name)\
-                                .eq('start_date', start_date.strftime('%Y-%m-%d'))\
-                                .eq('end_date', end_date.strftime('%Y-%m-%d'))\
-                                .eq('status', 'Pending')\
-                                .order('id', desc=True)\
-                                .limit(1)\
-                                .execute()
-                            
-                            if search_resp.data:
-                                offer_id = search_resp.data[0]['id']
-                                update_resp = supabase_execute('offers_history', 'update', 
-                                    data={'status': 'Confirmed'},
-                                    filters={'id': offer_id}
+                            cursor.execute('''
+                                UPDATE offers_history 
+                                SET status = 'Confirmed' 
+                                WHERE id = (
+                                    SELECT id 
+                                    FROM offers_history 
+                                    WHERE client_name = %s 
+                                    AND start_date = %s 
+                                    AND end_date = %s 
+                                    AND status = 'Pending'
+                                    ORDER BY id DESC 
+                                    LIMIT 1
                                 )
-                                if update_resp and not update_resp.error:
-                                    st.session_state.cart = {}
-                                    st.success("✅ تم تثبيت الحجز بنجاح! يمكنك الآن بدء عرض جديد.")
-                                else:
-                                    st.error("فشل تحديث حالة العرض")
-                            else:
-                                st.warning("لم يتم العثور على العرض لتحديث حالته")
+                            ''', (customer_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+                            
+                            conn.commit()
+                            cursor.close()
+                            conn.close()
+                            
+                            st.session_state.cart = {}
+                            st.success("✅ تم تثبيت الحجز بنجاح! يمكنك الآن بدء عرض جديد.")
                             
                         except Exception as e:
+                            conn.rollback()
                             st.error(f"❌ حدث خطأ: {str(e)}")
         
         with col_btn4:
@@ -3008,24 +2792,30 @@ if selected_page == "📄 عرض سعر":
                             doc = Document()
                             st.warning("⚠️ لم يتم العثور على قالب template.docx، سيتم إنشاء مستند افتراضي")
                         
-                        PURPLE_COLOR = "660099"
+                        # حساب الخصومات والإجماليات
                         discount = discount_percent if apply_discount else 0
                         discount_amount = grand_total_display * (discount / 100)
                         grand_total_display_after = grand_total_display - discount_amount
                         final_total = grand_total_print + grand_total_display_after
-                        date_range = format_date_range_arabic(start_date, end_date)
                         
+                        date_range = format_date_range_arabic(start_date, end_date)  # استخدم الدالة العامة
+                        
+                        # التاريخ
                         today_date = datetime.now().strftime("%d / %m / %Y")
                         p_date = doc.add_paragraph()
                         p_date.add_run(f"التاريخ: {today_date}")
-                        _force_rtl_style(p_date)
+                        _force_rtl_style(p_date)  # استخدم الدالة العامة
+                        
                         doc.add_paragraph()
                         
+                        # اسم العميل
                         p_cust = doc.add_paragraph()
                         p_cust.add_run(f"السادة شركة {customer_name} المحترمين").bold = True
                         _force_rtl_style(p_cust)
+                        
                         doc.add_paragraph()
                         
+                        # عنوان العرض
                         p_stat = doc.add_paragraph()
                         if ad_type == "وطني":
                             header_text = f"نقدم لكم المواقع المتاحة لعرض إعلانكم الوطني {date_range}"
@@ -3035,8 +2825,10 @@ if selected_page == "📄 عرض سعر":
                             header_text = f"نقدم لكم المواقع المتاحة لعرض إعلانكم الأجنبي تصنيع محلي {date_range}"
                         p_stat.add_run(header_text)
                         _force_rtl_style(p_stat)
+                        
                         doc.add_paragraph()
                         
+                        # عرض تفاصيل السلة حسب المحافظة
                         for city, networks in st.session_state.cart.items():
                             p_city = doc.add_paragraph()
                             p_city.add_run(f"■ محافظة {city}").bold = True
@@ -3051,10 +2843,12 @@ if selected_page == "📄 عرض سعر":
                                     p_size.add_run(f"الشبكة: {net} | القياس: {size_info}").bold = True
                                     _force_rtl_style(p_size)
                                     
+                                    # إنشاء الجدول
                                     table = doc.add_table(rows=1, cols=2)
                                     table.columns[0].width = Cm(12)
                                     table.columns[1].width = Cm(4)
                                     
+                                    # رأس الجدول
                                     hdr = table.rows[0].cells
                                     hdr[0].text = "اسم الموقع (العمود)"
                                     hdr[1].text = "العدد"
@@ -3070,12 +2864,14 @@ if selected_page == "📄 عرض سعر":
                                         shd.set(qn('w:fill'), '660099')
                                         tc_pr.append(shd)
                                     
+                                    # صفوف البيانات
                                     for _, row_data in group_df.iterrows():
                                         row_cells = table.add_row().cells
                                         row_cells[0].text = str(row_data['الموقع'])
                                         row_cells[1].text = str(row_data['العدد'])
                                         row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                                     
+                                    # تطبيق الحدود على كل خلية
                                     for row in table.rows:
                                         for cell in row.cells:
                                             tc = cell._element
@@ -3091,16 +2887,10 @@ if selected_page == "📄 عرض سعر":
                                                 border.set(qn('w:color'), '660099')
                                                 tcPr.append(border)
                                     
-                                    tbl = table._element
-                                    tblPr = tbl.find(qn('w:tblPr'))
-                                    if tblPr is None:
-                                        tblPr = OxmlElement('w:tblPr')
-                                        tbl.insert(0, tblPr)
-                                    for bidi in tblPr.findall(qn('w:bidiVisual')):
-                                        tblPr.remove(bidi)
-                                    bidi = OxmlElement('w:bidiVisual')
-                                    tblPr.append(bidi)
+                                    # تطبيق RTL على الجدول
+                                    set_table_rtl(table)  # استخدم الدالة العامة
                                     
+                                    # إجماليات المجموعة
                                     total_q = pd.to_numeric(group_df['العدد']).sum()
                                     fp = float(group_df['fee_print'].iloc[0])
                                     fd = float(group_df['fee_display'].iloc[0])
@@ -3113,26 +2903,35 @@ if selected_page == "📄 عرض سعر":
                             
                             doc.add_paragraph()
                         
+                        # الإجماليات النهائية
                         if discount > 0:
-                            for label, val in [
-                                (f"إجمالي أجور الطباعة: {grand_total_print:,.0f} $", True),
-                                (f"إجمالي أجور العرض قبل الحسم: {grand_total_display:,.0f} $", True),
-                                (f"حسم {discount}% على أجور العرض: - {discount_amount:,.0f} $", True),
-                                (f"إجمالي أجور العرض بعد الحسم: {grand_total_display_after:,.0f} $", True)
-                            ]:
-                                p = doc.add_paragraph()
-                                p.add_run(label).bold = True
-                                _force_rtl_style(p)
+                            p_discount = doc.add_paragraph()
+                            p_discount.add_run(f"إجمالي أجور الطباعة: {grand_total_print:,.0f} $").bold = True
+                            _force_rtl_style(p_discount)
+                            
+                            p_discount = doc.add_paragraph()
+                            p_discount.add_run(f"إجمالي أجور العرض قبل الحسم: {grand_total_display:,.0f} $").bold = True
+                            _force_rtl_style(p_discount)
+                            
+                            p_discount = doc.add_paragraph()
+                            p_discount.add_run(f"حسم {discount}% على أجور العرض: - {discount_amount:,.0f} $").bold = True
+                            _force_rtl_style(p_discount)
+                            
+                            p_discount = doc.add_paragraph()
+                            p_discount.add_run(f"إجمالي أجور العرض بعد الحسم: {grand_total_display_after:,.0f} $").bold = True
+                            _force_rtl_style(p_discount)
                         else:
-                            for label in [
-                                f"إجمالي أجور الطباعة: {grand_total_print:,.0f} $",
-                                f"إجمالي أجور العرض: {grand_total_display:,.0f} $"
-                            ]:
-                                p = doc.add_paragraph()
-                                p.add_run(label).bold = True
-                                _force_rtl_style(p)
+                            p_total_print = doc.add_paragraph()
+                            p_total_print.add_run(f"إجمالي أجور الطباعة: {grand_total_print:,.0f} $").bold = True
+                            _force_rtl_style(p_total_print)
+                            
+                            p_total_display = doc.add_paragraph()
+                            p_total_display.add_run(f"إجمالي أجور العرض: {grand_total_display:,.0f} $").bold = True
+                            _force_rtl_style(p_total_display)
                         
                         doc.add_paragraph()
+                        
+                        # الإجمالي النهائي
                         p_grand = doc.add_paragraph()
                         run_g = p_grand.add_run(f"الإجمالي النهائي للعرض: {final_total:,.0f} $")
                         run_g.bold = True
@@ -3141,11 +2940,14 @@ if selected_page == "📄 عرض سعر":
                         _force_rtl_style(p_grand)
                         
                         doc.add_paragraph()
+                        
+                        # ملاحظة
                         p_note = doc.add_paragraph()
                         run_note = p_note.add_run("• ملاحظة: هذه المواقع متاحة لمدة 48 ساعة.")
                         run_note.bold = True
                         _force_rtl_style(p_note)
                         
+                        # حفظ المستند
                         target = io.BytesIO()
                         doc.save(target)
                         target.seek(0)
@@ -3165,8 +2967,8 @@ if selected_page == "📄 عرض سعر":
                         st.code(traceback.format_exc())
 
 # ============================================================
-# نهاية الكود
-# ============================================================
+# نهاية صفحة عرض السعر
+# ============================================================ 
 
 
 
