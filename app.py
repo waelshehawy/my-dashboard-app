@@ -1289,6 +1289,7 @@ elif page == "📍 الأعمدة المتاحة":
                 """, (start_no, end_no))
                 
                 periods = [row[0] for row in cursor.fetchall()]
+                cursor.close()
                 
                 if not periods:
                     st.warning("⚠️ لا توجد فترات في النطاق المحدد")
@@ -1297,7 +1298,7 @@ elif page == "📍 الأعمدة المتاحة":
                 
                 placeholders = ','.join(['%s'] * len(periods))
                 current_year = '2026'
-                next_year = str(int(current_year) + 1)
+                next_year = '2027'
                 
                 query = f"""
                 SELECT 
@@ -1345,40 +1346,11 @@ elif page == "📍 الأعمدة المتاحة":
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
                 
-                # ✅ بناء params بتسلسل واضح
-                params_list = []
+                # ✅ استخدام run_query الموجودة في الكود
+                params = (current_year, next_year) + tuple(periods) + (current_year, next_year) + (current_year, next_year) + tuple(periods) + (current_year, next_year)
                 
-                # أول فترة حجز قادمة (العام IN)
-                params_list.append(current_year)
-                params_list.append(next_year)
-                
-                # أول فترة حجز قادمة (NOT IN)
-                for p in periods:
-                    params_list.append(p)
-                
-                # آخر فترة حجز (العام IN)
-                params_list.append(current_year)
-                params_list.append(next_year)
-                
-                # جميع فترات الحجز (العام IN)
-                params_list.append(current_year)
-                params_list.append(next_year)
-                
-                # LEFT JOIN (الفترات)
-                for p in periods:
-                    params_list.append(p)
-                
-                # LEFT JOIN (العام)
-                params_list.append(current_year)
-                params_list.append(next_year)
-                
-                params = tuple(params_list)
-                
-                # ✅ للتصحيح: اطبع عدد المعاملات
-                print(f"عدد %s في الاستعلام: {query.count('%s')}")
-                print(f"عدد params: {len(params)}")
-                
-                df = pd.read_sql_query(query, conn, params=params)
+                # ✅ استخدم run_query بدل pd.read_sql_query
+                df = run_query(query, params)
                 conn.close()
                 return df, periods
             
