@@ -1387,35 +1387,46 @@ elif page == "📍 الأعمدة المتاحة":
                 )
         
         # ===== تصدير Excel =====
-        import io
-        from datetime import datetime
-        
-        output1 = io.BytesIO()
-        with pd.ExcelWriter(output1, engine='openpyxl') as writer:
-            export_df = df.copy()
-            export_df['أول فترة حجز قادمة'] = export_df['أول فترة حجز قادمة (رقم)'].apply(period_no_to_name)
-            export_df['آخر فترة حجز'] = export_df['آخر فترة حجز (رقم)'].apply(period_no_to_name)
+        if not df.empty:
+            import io
+            from datetime import datetime
             
-            columns_to_export = [
-                'رقم اللوحة', 'اسم العمود', 'توصيف العمود',
-                'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status',
-                'أول فترة حجز قادمة', 'آخر فترة حجز', 'جميع فترات الحجز'
-            ]
-            export_df[columns_to_export].to_excel(writer, sheet_name='الأعمدة المتاحة', index=False)
-            periods_df = pd.DataFrame({'الفترات المشمولة': periods})
-            periods_df.to_excel(writer, sheet_name='الفترات المشمولة', index=False)
-        
-        output1.seek(0)
-        
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            st.download_button(
-                "📥 تحميل تقرير الحالة (Excel)",
-                output1,
-                f"available_boards_{start_period.replace(' ', '_')}_{end_period.replace(' ', '_')}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+            output1 = io.BytesIO()
+            with pd.ExcelWriter(output1, engine='openpyxl') as writer:
+                export_df = df.copy()
+                
+                # تحويل الأعمدة إذا كانت موجودة
+                if 'أول فترة حجز قادمة (رقم)' in export_df.columns:
+                    export_df['أول فترة حجز قادمة'] = export_df['أول فترة حجز قادمة (رقم)'].apply(period_no_to_name)
+                if 'آخر فترة حجز (رقم)' in export_df.columns:
+                    export_df['آخر فترة حجز'] = export_df['آخر فترة حجز (رقم)'].apply(period_no_to_name)
+                
+                # الأعمدة المطلوبة للتصدير
+                cols_to_export = ['رقم اللوحة', 'اسم العمود', 'توصيف العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status']
+                
+                if 'أول فترة حجز قادمة' in export_df.columns:
+                    cols_to_export.append('أول فترة حجز قادمة')
+                if 'آخر فترة حجز' in export_df.columns:
+                    cols_to_export.append('آخر فترة حجز')
+                if 'جميع فترات الحجز' in export_df.columns:
+                    cols_to_export.append('جميع فترات الحجز')
+                
+                export_df[cols_to_export].to_excel(writer, sheet_name='الأعمدة المتاحة', index=False)
+                
+                periods_df = pd.DataFrame({'الفترات المشمولة': periods})
+                periods_df.to_excel(writer, sheet_name='الفترات المشمولة', index=False)
+            
+            output1.seek(0)
+            
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                st.download_button(
+                    "📥 تحميل تقرير الحالة (Excel)",
+                    output1,
+                    f"available_boards_{start_period.replace(' ', '_')}_{end_period.replace(' ', '_')}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
         
         # ===== تقرير الفترات (Pivot) =====
         with col_btn2:
