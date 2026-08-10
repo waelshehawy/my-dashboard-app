@@ -1322,7 +1322,8 @@ elif page == "📍 الأعمدة المتاحة":
                 
                 params = (current_year, next_year) + tuple(periods) + (current_year, next_year) + (current_year, next_year) + tuple(periods) + (current_year, next_year)
                 
-                df = pd.read_sql_query(query, conn, params=params)
+                # ✅ استخدم run_query بدل pd.read_sql_query
+                df = run_query(query, params)
                 conn.close()
                 return df, periods
             
