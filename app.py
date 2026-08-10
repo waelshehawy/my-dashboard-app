@@ -1359,7 +1359,7 @@ elif page == "📍 الأعمدة المتاحة":
                 conn.close()
                 return df, periods
             
-            df, periods = load_data(start_period, end_period, start_period_no, end_period_no)
+            df, periods = load_data(start_period_no, end_period_no)
             
             # حفظ في session_state
             st.session_state.df = df
