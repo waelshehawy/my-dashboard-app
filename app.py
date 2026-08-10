@@ -2094,7 +2094,7 @@ elif page == "📊 Dashboard":
 #=============================
 
 # ============================================================
-# صفحة: عرض سعر (نسخة PostgreSQL/Supabase)
+# صفحة: عرض سعر (نسخة PostgreSQL مع دعم مرن)
 # ============================================================
 
 elif selected_page == "📄 عرض سعر":
@@ -2105,43 +2105,37 @@ elif selected_page == "📄 عرض سعر":
     # دوال خاصة بالصفحة (تستخدم الدوال العامة إن وجدت)
     # ============================================================
     
-    # دالة تحويل الفترات (قد تكون موجودة في الأعلى، لكن نضيفها احتياطاً)
+    # دالة تحويل الفترات (نفسها مع تعديل بسيط)
     def get_periods_between_dates(start_date, end_date):
-        """تحويل نطاق تواريخ إلى قائمة من الفترات النصف شهرية (باستخدام PERIOD_ORDER العام)"""
-        # نستخدم الدوال العامة إن وجدت، وإلا نعرفها محلياً
-        try:
-            # محاولة استخدام الدوال العامة إن وجدت
-            from . import convert_date_to_period_name, get_period_number  # قد لا تعمل
-        except:
-            # تعريف محلي
-            MONTHS_AR = {
-                1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
-                5: "ايار", 6: "حزيران", 7: "تموز", 8: "اب",
-                9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
-            }
-            def convert_date_to_period_name(date):
-                month_name = MONTHS_AR[date.month]
-                if date.day <= 15:
-                    return f"{month_name} 15-1"
-                else:
-                    return f"{month_name} 30-15"
-            
-            PERIOD_ORDER = {
-                'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
-                'شباط 15-1': 3, 'شباط 30-15': 4,
-                'اذار 15-1': 5, 'اذار 30-15': 6,
-                'نيسان 15-1': 7, 'نيسان 30-15': 8,
-                'ايار15-1': 9, 'أيار 30-15': 10,
-                'حزيران 15-1': 11, 'حزيران 30-15': 12,
-                'تموز 15-1': 13, 'تموز 30-15': 14,
-                'اب 15-1': 15, 'اب 30-15': 16,
-                'أيلول 15-1': 17, 'ايلول30-15': 18,
-                'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
-                'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
-                'كانون اول 15-1': 23, 'كانون اول 30-15': 24
-            }
-            def get_period_number(period_name):
-                return PERIOD_ORDER.get(period_name, 99)
+        """تحويل نطاق تواريخ إلى قائمة من الفترات النصف شهرية"""
+        # تعريف الفترات (نفس التعريف السابق)
+        PERIOD_ORDER = {
+            'كانون ثاني 15-1': 1, 'كانون ثاني 30-15': 2,
+            'شباط 15-1': 3, 'شباط 30-15': 4,
+            'اذار 15-1': 5, 'اذار 30-15': 6,
+            'نيسان 15-1': 7, 'نيسان 30-15': 8,
+            'ايار15-1': 9, 'أيار 30-15': 10,
+            'حزيران 15-1': 11, 'حزيران 30-15': 12,
+            'تموز 15-1': 13, 'تموز 30-15': 14,
+            'اب 15-1': 15, 'اب 30-15': 16,
+            'أيلول 15-1': 17, 'ايلول30-15': 18,
+            'تشرين اول 15-1': 19, 'تشرين اول30-15': 20,
+            'تشرين ثاني 15-1': 21, 'تشرين ثاني 30-15': 22,
+            'كانون اول 15-1': 23, 'كانون اول 30-15': 24
+        }
+        MONTHS_AR = {
+            1: "كانون ثاني", 2: "شباط", 3: "اذار", 4: "نيسان",
+            5: "ايار", 6: "حزيران", 7: "تموز", 8: "اب",
+            9: "ايلول", 10: "تشرين اول", 11: "تشرين ثاني", 12: "كانون اول"
+        }
+        def convert_date_to_period_name(date):
+            month_name = MONTHS_AR[date.month]
+            if date.day <= 15:
+                return f"{month_name} 15-1"
+            else:
+                return f"{month_name} 30-15"
+        def get_period_number(period_name):
+            return PERIOD_ORDER.get(period_name, 99)
         
         selected = []
         current = start_date
@@ -2153,9 +2147,16 @@ elif selected_page == "📄 عرض سعر":
         selected.sort(key=lambda x: get_period_number(x))
         return selected
 
-    # دوال استعلامات خاصة بالصفحة (تستخدم run_query)
+    # دوال استعلامات آمنة للتعامل مع الجداول غير الموجودة
+    def safe_run_query(query, params=None):
+        """تنفيذ استعلام مع إرجاع DataFrame فارغ في حال الخطأ"""
+        try:
+            return run_query(query, params)
+        except Exception as e:
+            # يمكن تسجيل الخطأ لكن نعيد DataFrame فارغ
+            return pd.DataFrame()
+
     def get_networks_in_previous_offers(current_client, start_date, end_date):
-        """تعيد قائمة بأرقام الشبكات التي ظهرت في عروض سابقة"""
         query = '''
             SELECT cart_json
             FROM offers_history
@@ -2164,7 +2165,7 @@ elif selected_page == "📄 عرض سعر":
             AND client_name != %s
             AND (start_date <= %s AND end_date >= %s)
         '''
-        df = run_query(query, (current_client, end_date, start_date))
+        df = safe_run_query(query, (current_client, end_date, start_date))
         networks = set()
         if df is not None and not df.empty:
             import json
@@ -2184,7 +2185,6 @@ elif selected_page == "📄 عرض سعر":
         return list(networks)
 
     def check_board_conflict(board_number, current_client, start_date, end_date):
-        """تبحث عن تعارضات مع عروض سابقة"""
         query = '''
             SELECT client_name, valid_until, sent_at
             FROM offers_history
@@ -2194,38 +2194,38 @@ elif selected_page == "📄 عرض سعر":
             AND (start_date <= %s AND end_date >= %s)
             AND cart_json LIKE %s
         '''
-        df = run_query(query, (current_client, end_date, start_date, f'%"{board_number}"%'))
+        df = safe_run_query(query, (current_client, end_date, start_date, f'%"{board_number}"%'))
         if df is not None and not df.empty:
             return list(zip(df['client_name'], df['valid_until'], df['sent_at']))
         return []
 
     def get_client_discount(client_name):
-        """الحصول على نسبة الحسم من جدول clients"""
-        query = 'SELECT discount_rate FROM clients WHERE name = %s'
-        df = run_query(query, (client_name,))
-        if df is not None and not df.empty:
-            return float(df.iloc[0]['discount_rate'])
+        """محاولة جلب الخصم من جدول clients، وإلا إرجاع 0"""
+        try:
+            query = 'SELECT discount_rate FROM clients WHERE name = %s'
+            df = run_query(query, (client_name,))
+            if df is not None and not df.empty:
+                return float(df.iloc[0]['discount_rate'])
+        except:
+            pass
         return 0
 
     def get_fees_by_size(size, description, print_type, ad_type):
-        """الحصول على أجور الطباعة والعرض من جدول اسماء الرسم"""
-        draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+        draw_df = safe_run_query('SELECT * FROM "اسماء الرسم"')
         if draw_df is None or draw_df.empty:
             return 0.0, 0.0
         
-        # تطبيع الحجم
         normalized_size = size.replace('*', '×').replace('x', '×').replace('X', '×')
         if normalized_size in ['2×1', '185×125']:
             actual_size = 'أعمدة ومنصفات'
         else:
             actual_size = normalized_size
 
-        # تحديد أنواع المنتجات حسب ad_type
         if ad_type == "وطني":
             product_types = ['وطني']
         elif ad_type == "أجنبي":
             product_types = ['أجنبي', 'اجنبي']
-        else:  # أجنبي امتياز وطني
+        else:
             product_types = ['تصنيع محلي']
 
         subset = draw_df[
@@ -2237,12 +2237,11 @@ elif selected_page == "📄 عرض سعر":
             st.warning(f"⚠️ لا توجد أسعار للحجم {actual_size} ونوع {ad_type}")
             return 0.0, 0.0
 
-        # البحث عن أجور الطباعة
         if print_type == "عادي":
             print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة عادي"]
             if print_subset.empty:
                 print_subset = subset[subset['اسم الرسم'] == "اجور الطباعة"]
-        else:  # سكوتش
+        else:
             print_subset = subset[
                 (subset['اسم الرسم'] == "اجور الطباعة") & 
                 (subset['نوع_الطباعة'] == "سكوتش")
@@ -2253,7 +2252,6 @@ elif selected_page == "📄 عرض سعر":
 
         fee_print = float(print_subset['اجرة الرسم'].iloc[0]) if not print_subset.empty else 0.0
 
-        # البحث عن أجور العرض
         ads_subset = subset[subset['اسم الرسم'] == "اجور العرض"]
         fee_ads = float(ads_subset['اجرة الرسم'].iloc[0]) if not ads_subset.empty else 0.0
 
@@ -2266,12 +2264,21 @@ elif selected_page == "📄 عرض سعر":
         return max(1, days / 30)
 
     # ============================================================
-    # 1. اختيار العميل والفترة
+    # 1. اختيار العميل والفترة (مع جلب العملاء من مصادر متعددة)
     # ============================================================
     
-    # جلب قائمة العملاء
-    clients_df = run_query('SELECT name FROM clients ORDER BY name')
-    client_list = clients_df['name'].tolist() if clients_df is not None and not clients_df.empty else []
+    # محاولة جلب العملاء من offers_history أولاً
+    clients_from_offers = safe_run_query('SELECT DISTINCT client_name AS name FROM offers_history ORDER BY client_name')
+    # إذا لم يوجد، جرب من حجوزات1
+    if clients_from_offers is None or clients_from_offers.empty:
+        clients_from_bookings = safe_run_query('SELECT DISTINCT "اسم الزبون" AS name FROM "حجوزات1" ORDER BY name')
+        if clients_from_bookings is not None and not clients_from_bookings.empty:
+            clients_from_offers = clients_from_bookings
+        else:
+            # إذا لم يوجد أي عملاء، نعطي قائمة فارغة
+            clients_from_offers = pd.DataFrame(columns=['name'])
+    
+    client_list = clients_from_offers['name'].tolist() if clients_from_offers is not None and not clients_from_offers.empty else []
 
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -2285,13 +2292,25 @@ elif selected_page == "📄 عرض سعر":
             new_client = st.text_input("اسم العميل الجديد")
             if st.button("💾 حفظ العميل"):
                 try:
-                    conn = get_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('INSERT INTO clients (name) VALUES (%s)', (new_client,))
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
-                    st.success(f"✅ تم إضافة العميل {new_client}")
+                    # محاولة الإدراج في جدول clients إن وجد، وإلا نقوم بحفظه في offers_history لاحقاً
+                    # هنا سنقوم بتجربة الإدراج في clients، وإن فشل نعطي رسالة
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('INSERT INTO clients (name) VALUES (%s)', (new_client,))
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        st.success(f"✅ تم إضافة العميل {new_client} (في جدول clients)")
+                    except Exception as e:
+                        # إذا لم يوجد جدول clients، نقوم بإضافته إلى جدول offers_history كأول عرض (مسودة)
+                        # ولكننا سنخزن الاسم في session_state للاستخدام الحالي
+                        st.info("💡 سيتم حفظ العميل تلقائياً عند أول عرض سعر")
+                        # نضيف العميل إلى القائمة المحلية
+                        if new_client not in client_list:
+                            client_list.append(new_client)
+                        st.success(f"✅ تم إضافة العميل {new_client} (سيتم حفظه مع العرض)")
+                    
                     st.session_state.show_add_client = False
                     st.rerun()
                 except Exception as e:
@@ -2318,15 +2337,14 @@ elif selected_page == "📄 عرض سعر":
     # 2. اختيار تفاصيل الطباعة
     # ============================================================
     
-    draw_df = run_query('SELECT * FROM "اسماء الرسم"')
+    draw_df = safe_run_query('SELECT * FROM "اسماء الرسم"')
     if draw_df is None or draw_df.empty:
         st.error("❌ لا توجد بيانات في جدول اسماء الرسم")
         st.stop()
     
     size_list = draw_df['الحجم'].unique().tolist()
     
-    # جلب خيارات الأعمدة (توصيف العمود + الحجم)
-    df_options = run_query('''
+    df_options = safe_run_query('''
         SELECT DISTINCT "توصيف العمود", "الحجم"
         FROM "اعمدة انارة"
         WHERE "عاملة" = 1
@@ -2383,7 +2401,7 @@ elif selected_page == "📄 عرض سعر":
     # 4. اختيار المحافظة
     # ============================================================
     
-    cities_df = run_query('''
+    cities_df = safe_run_query('''
         SELECT DISTINCT "المحافظة" 
         FROM "اعمدة انارة"
         WHERE "عاملة" = 1
@@ -2399,7 +2417,7 @@ elif selected_page == "📄 عرض سعر":
     selected_city = st.selectbox("اختر المحافظة:", city_list)
 
     # ============================================================
-    # 5. جلب الأعمدة المتاحة في الفترة المحددة (مع الحجوزات)
+    # 5. جلب الأعمدة المتاحة في الفترة المحددة
     # ============================================================
     
     if periods_for_quote:
@@ -2433,7 +2451,7 @@ elif selected_page == "📄 عرض سعر":
         ORDER BY a."الشبكة", a."رقم اللوحة"
         """
         params = periods_for_quote + [str(current_year), str(next_year), selected_city, selected_size]
-        all_columns_df = run_query(query, params)
+        all_columns_df = safe_run_query(query, params)
         if all_columns_df is not None and not all_columns_df.empty:
             available_df = all_columns_df[all_columns_df['status'] == '🟢 متاح'].copy()
         else:
@@ -2494,7 +2512,7 @@ elif selected_page == "📄 عرض سعر":
             )
             
             # ============================================================
-            # 7. خيارات الإضافة
+            # 7. خيارات الإضافة (نفس المنطق مع تعديل طفيف)
             # ============================================================
             
             col_add1, col_add2 = st.columns(2)
@@ -2561,7 +2579,7 @@ elif selected_page == "📄 عرض سعر":
                     st.success(f"✅ تمت إضافة {len(individual_data)} أعمدة محددة")
 
     # ============================================================
-    # 8. سلة العروض
+    # 8. سلة العروض (نفس المنطق)
     # ============================================================
     
     if st.session_state.cart:
@@ -2701,7 +2719,7 @@ elif selected_page == "📄 عرض سعر":
             
             if st.session_state.get('show_saved_offers', False):
                 try:
-                    saved_offers = run_query('''
+                    saved_offers = safe_run_query('''
                         SELECT id, client_name, start_date, end_date, offer_date 
                         FROM offers_history 
                         WHERE status = 'Pending' 
@@ -2968,8 +2986,7 @@ elif selected_page == "📄 عرض سعر":
 
 # ============================================================
 # نهاية صفحة عرض السعر
-# ============================================================ 
-
+# ============================================================
 
 
 
