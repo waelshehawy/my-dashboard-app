@@ -1250,18 +1250,25 @@ elif page == "📍 الأعمدة المتاحة":
             
             @st.cache_data(ttl=300)
             def load_data(start_no, end_no):
-                # جلب الفترات باستخدام run_query
-                periods_df = run_query("""
+                conn = get_connection()
+                if conn is None:
+                    return pd.DataFrame(), []
+                
+                cursor = conn.cursor()
+                
+                cursor.execute("""
                     SELECT namee
                     FROM الفترة 
                     WHERE no BETWEEN %s AND %s
                     ORDER BY no
                 """, (start_no, end_no))
                 
-                periods = periods_df['namee'].tolist() if not periods_df.empty else []
+                periods = [row[0] for row in cursor.fetchall()]
+                cursor.close()
                 
                 if not periods:
                     st.warning("⚠️ لا توجد فترات في النطاق المحدد")
+                    conn.close()
                     return pd.DataFrame(), []
                 
                 placeholders = ','.join(['%s'] * len(periods))
@@ -1316,8 +1323,8 @@ elif page == "📍 الأعمدة المتاحة":
                 
                 params = (current_year, next_year) + tuple(periods) + (current_year, next_year) + (current_year, next_year) + tuple(periods) + (current_year, next_year)
                 
-                # ✅ استخدم run_query للاستعلام الكبير
-                df = run_query(query, params)
+                df = pd.read_sql_query(query, conn, params=params)
+                conn.close()
                 return df, periods
             
             df, periods = load_data(start_period_no, end_period_no)
