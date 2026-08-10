@@ -1274,8 +1274,7 @@ elif page == "📍 الأعمدة المتاحة":
         else:
             st.write(f"📅 المدة المطلوبة: **{start_period}** → **{end_period}**")
             
-            @st.cache_data(ttl=300)
-            def load_data(start_no, end_no):
+            def load_data(start_p, end_p, start_no, end_no):
                 conn = get_connection()
                 if conn is None:
                     return pd.DataFrame(), []
@@ -1346,41 +1345,18 @@ elif page == "📍 الأعمدة المتاحة":
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
                 
-                # ✅ بناء params بشكل صحيح
-                params = []
-                
-                # 1. أول فترة حجز قادمة: current_year, next_year (2)
-                params.append(current_year)
-                params.append(next_year)
-                
-                # 2. أول فترة حجز قادمة: NOT IN (periods) (len(periods))
+                params = [current_year, next_year]
                 params.extend(periods)
-                
-                # 3. آخر فترة حجز: current_year, next_year (2)
-                params.append(current_year)
-                params.append(next_year)
-                
-                # 4. جميع فترات الحجز: current_year, next_year (2)
-                params.append(current_year)
-                params.append(next_year)
-                
-                # 5. LEFT JOIN: periods (len(periods))
+                params.extend([current_year, next_year])
+                params.extend([current_year, next_year])
                 params.extend(periods)
+                params.extend([current_year, next_year])
                 
-                # 6. LEFT JOIN: current_year, next_year (2)
-                params.append(current_year)
-                params.append(next_year)
-                
-                # ✅ تحويل إلى tuple
-                params = tuple(params)
-                
-                df = pd.read_sql_query(query, conn, params=params)
-                
-                df = pd.read_sql_query(query, conn, params=params)
+                df = pd.read_sql_query(query, conn, params=tuple(params))
                 conn.close()
                 return df, periods
             
-            df, periods = load_data(start_period_no, end_period_no)
+            df, periods = load_data(start_period, end_period, start_period_no, end_period_no)
             
             # حفظ في session_state
             st.session_state.df = df
