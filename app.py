@@ -1256,7 +1256,6 @@ elif page == "📍 الأعمدة المتاحة":
                 
                 cursor = conn.cursor()
                 
-                # جلب الفترات
                 cursor.execute("""
                     SELECT namee
                     FROM الفترة 
