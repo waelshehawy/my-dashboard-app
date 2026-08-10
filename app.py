@@ -1344,30 +1344,39 @@ elif page == "📍 الأعمدة المتاحة":
                 GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
-                # ✅ بناء params بطريقة صحيحة
-                params = []
                 
-                # 1. أول فترة حجز قادمة (العام IN) - 2 معاملات
-                params.extend([current_year, next_year])
+                # ✅ بناء params بتسلسل واضح
+                params_list = []
                 
-                # 2. أول فترة حجز قادمة (NOT IN) - عدد الفترات
-                params.extend(periods)
+                # أول فترة حجز قادمة (العام IN)
+                params_list.append(current_year)
+                params_list.append(next_year)
                 
-                # 3. آخر فترة حجز (العام IN) - 2 معاملات
-                params.extend([current_year, next_year])
+                # أول فترة حجز قادمة (NOT IN)
+                for p in periods:
+                    params_list.append(p)
                 
-                # 4. جميع فترات الحجز (العام IN) - 2 معاملات
-                params.extend([current_year, next_year])
+                # آخر فترة حجز (العام IN)
+                params_list.append(current_year)
+                params_list.append(next_year)
                 
-                # 5. LEFT JOIN (الفترات) - عدد الفترات
-                params.extend(periods)
+                # جميع فترات الحجز (العام IN)
+                params_list.append(current_year)
+                params_list.append(next_year)
                 
-                # 6. LEFT JOIN (العام) - 2 معاملات
-                params.extend([current_year, next_year])
+                # LEFT JOIN (الفترات)
+                for p in periods:
+                    params_list.append(p)
                 
-                # تحويل إلى tuple
-                params = tuple(params)
+                # LEFT JOIN (العام)
+                params_list.append(current_year)
+                params_list.append(next_year)
                 
+                params = tuple(params_list)
+                
+                # ✅ للتصحيح: اطبع عدد المعاملات
+                print(f"عدد %s في الاستعلام: {query.count('%s')}")
+                print(f"عدد params: {len(params)}")
                 
                 df = pd.read_sql_query(query, conn, params=params)
                 conn.close()
