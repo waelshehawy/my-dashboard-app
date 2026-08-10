@@ -18,8 +18,6 @@ import plotly.express as px
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from supabase import create_client
-from datetime import datetime
-from datetime import datetime, timedelta
 
 #============================================================
 # إعداد الصفحة
@@ -1345,13 +1343,30 @@ elif page == "📍 الأعمدة المتاحة":
                 GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
+                # ✅ بناء params بطريقة صحيحة
+                params = []
                 
-                params = (current_year, next_year)
-                params = params + tuple(periods)
-                params = params + (current_year, next_year)
-                params = params + (current_year, next_year)
-                params = params + tuple(periods)
-                params = params + (current_year, next_year)
+                # 1. أول فترة حجز قادمة (العام IN) - 2 معاملات
+                params.extend([current_year, next_year])
+                
+                # 2. أول فترة حجز قادمة (NOT IN) - عدد الفترات
+                params.extend(periods)
+                
+                # 3. آخر فترة حجز (العام IN) - 2 معاملات
+                params.extend([current_year, next_year])
+                
+                # 4. جميع فترات الحجز (العام IN) - 2 معاملات
+                params.extend([current_year, next_year])
+                
+                # 5. LEFT JOIN (الفترات) - عدد الفترات
+                params.extend(periods)
+                
+                # 6. LEFT JOIN (العام) - 2 معاملات
+                params.extend([current_year, next_year])
+                
+                # تحويل إلى tuple
+                params = tuple(params)
+                
                 
                 df = pd.read_sql_query(query, conn, params=params)
                 conn.close()
