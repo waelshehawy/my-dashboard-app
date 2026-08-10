@@ -1249,60 +1249,59 @@ elif page == "📍 الأعمدة المتاحة":
             st.write(f"📅 المدة المطلوبة: **{start_period}** → **{end_period}**")
             
             # ===== جلب البيانات =====
-@st.cache_data(ttl=300)
-def load_data(start_no, end_no):
-    conn = get_connection()
-    if conn is None:
-        return pd.DataFrame(), []
-    
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT namee
-        FROM الفترة 
-        WHERE no BETWEEN %s AND %s
-        ORDER BY no
-    """, (start_no, end_no))
-    
-    periods = [row[0] for row in cursor.fetchall()]
-    
-    if not periods:
-        st.warning("⚠️ لا توجد فترات في النطاق المحدد")
-        conn.close()
-        return pd.DataFrame(), []
-    
-    placeholders = ','.join(['%s'] * len(periods))
-    current_year = '2026'
-    
-    # ✅ استعلام مبسط (دون استعلامات فرعية معقدة)
-    query = f"""
-    SELECT 
-        a."رقم اللوحة",
-        a."اسم العمود",
-        a."المحافظة",
-        a."الشبكة",
-        a."الحجم",
-        a."العدد",
-        a."توصيف العمود",
-        CASE 
-            WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
-            ELSE '🟢 متاح'
-        END as status
-    FROM "اعمدة انارة" a
-    LEFT JOIN "حجوزات1" h 
-        ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-        AND h."فترة الحجز" IN ({placeholders})
-        AND h."العام" = %s
-    WHERE a."عاملة" = 1
-    AND a."العدد" IS NOT NULL 
-    AND a."العدد" != 0
-    ORDER BY a."المحافظة", a."رقم اللوحة"
-    """
-    
-    params = tuple(periods) + (current_year,)
-    df = pd.read_sql_query(query, conn, params=params)
-    conn.close()
-    return df, periods
+            @st.cache_data(ttl=300)
+            def load_data(start_no, end_no):
+                conn = get_connection()
+                if conn is None:
+                    return pd.DataFrame(), []
+                
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT namee
+                    FROM الفترة 
+                    WHERE no BETWEEN %s AND %s
+                    ORDER BY no
+                """, (start_no, end_no))
+                
+                periods = [row[0] for row in cursor.fetchall()]
+                
+                if not periods:
+                    st.warning("⚠️ لا توجد فترات في النطاق المحدد")
+                    conn.close()
+                    return pd.DataFrame(), []
+                
+                placeholders = ','.join(['%s'] * len(periods))
+                current_year = '2026'
+                
+                query = f"""
+                SELECT 
+                    a."رقم اللوحة",
+                    a."اسم العمود",
+                    a."المحافظة",
+                    a."الشبكة",
+                    a."الحجم",
+                    a."العدد",
+                    a."توصيف العمود",
+                    CASE 
+                        WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                        ELSE '🟢 متاح'
+                    END as status
+                FROM "اعمدة انارة" a
+                LEFT JOIN "حجوزات1" h 
+                    ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                    AND h."فترة الحجز" IN ({placeholders})
+                    AND h."العام" = %s
+                WHERE a."عاملة" = 1
+                AND a."العدد" IS NOT NULL 
+                AND a."العدد" != 0
+                ORDER BY a."المحافظة", a."رقم اللوحة"
+                """
+                
+                params = tuple(periods) + (current_year,)
+                df = pd.read_sql_query(query, conn, params=params)
+                conn.close()
+                return df, periods
             
             df, periods = load_data(start_period_no, end_period_no)
             
