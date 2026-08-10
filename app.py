@@ -1262,14 +1262,15 @@ elif page == "📍 الأعمدة المتاحة":
             end_period = period_mapping[end_period_display]
             end_period_no = int(end_period_display.split(' - ')[0])
         
-        # ✅ الزر خارج الشرط (يظهر دائماً)
+        # ✅ الزر هنا (نفس مستوى الـ with st.form)
         submitted = st.form_submit_button("🔍 بحث")
     
-    # ✅ التحقق بعد الضغط
+    # ✅ التحقق من الصحة بعد الفورم
     if submitted:
         if start_period_no > end_period_no:
             st.error("❌ فترة البداية يجب أن تكون قبل فترة النهاية")
         else:
+            # ... باقي الكود ...
             st.write(f"📅 المدة المطلوبة: **{start_period}** → **{end_period}**")
             
             @st.cache_data(ttl=300)
