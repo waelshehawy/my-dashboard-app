@@ -1351,41 +1351,7 @@ elif page == "📍 الأعمدة المتاحة":
             except:
                 pass
             return None
-        
-        with st.expander("📋 الفترات المشمولة في البحث", expanded=False):
-            st.write(f"عدد الفترات: {len(periods)}")
-            cols = st.columns(4)
-            for i, period in enumerate(periods):
-                cols[i % 4].write(f"• {period}")
-        
-        st.divider()
-        
-        # إحصائيات
-        available_sites = len(df[df['status'] == '🟢 متاح'])
-        available_boards = df[df['status'] == '🟢 متاح']['العدد'].sum()
-        booked_sites = len(df[df['status'] == '🔴 محجوز'])
-        booked_boards = df[df['status'] == '🔴 محجوز']['العدد'].sum()
-        total_sites = len(df)
-        total_boards = df['العدد'].sum()
-        
-        st.subheader("📊 إحصائيات الفترة المطلوبة")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("#### 🟢 متاح")
-            st.markdown(f"📍 **المواقع:** {available_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(available_boards):,}")
-        with col2:
-            st.markdown("#### 🔴 محجوز")
-            st.markdown(f"📍 **المواقع:** {booked_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(booked_boards):,}")
-        with col3:
-            st.markdown("#### 📊 الإجمالي")
-            st.markdown(f"📍 **المواقع:** {total_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(total_boards):,}")
-        
-        st.divider()
-        
+
         # عرض حسب المحافظة
         for city in df['المحافظة'].unique():
             city_data = df[df['المحافظة'] == city]
@@ -1398,22 +1364,24 @@ elif page == "📍 الأعمدة المتاحة":
                 expanded=False
             ):
                 display_df = city_data.copy()
-                display_df['أول فترة حجز قادمة'] = display_df['أول فترة حجز قادمة (رقم)'].apply(period_no_to_name)
-                display_df['آخر فترة حجز'] = display_df['آخر فترة حجز (رقم)'].apply(period_no_to_name)
+                
+                # ✅ الأعمدة الموجودة فعلاً
+                cols_to_show = ['رقم اللوحة', 'اسم العمود', 'توصيف العمود', 'الشبكة', 'الحجم', 'العدد', 'status']
+                
+                # ✅ إذا كان العمود موجود في display_df
+                if 'أول فترة حجز قادمة (رقم)' in display_df.columns:
+                    display_df['أول فترة حجز قادمة'] = display_df['أول فترة حجز قادمة (رقم)'].apply(period_no_to_name)
+                    cols_to_show.append('أول فترة حجز قادمة')
+                
+                if 'آخر فترة حجز (رقم)' in display_df.columns:
+                    display_df['آخر فترة حجز'] = display_df['آخر فترة حجز (رقم)'].apply(period_no_to_name)
+                    cols_to_show.append('آخر فترة حجز')
+                
+                if 'جميع فترات الحجز' in display_df.columns:
+                    cols_to_show.append('جميع فترات الحجز')
                 
                 st.dataframe(
-                    display_df[[
-                        'رقم اللوحة', 
-                        'اسم العمود', 
-                        'توصيف العمود',
-                        'الشبكة', 
-                        'الحجم', 
-                        'العدد', 
-                        'status',
-                        'أول فترة حجز قادمة',
-                        'آخر فترة حجز',
-                        'جميع فترات الحجز'
-                    ]],
+                    display_df[cols_to_show],
                     use_container_width=True,
                     height=300
                 )
