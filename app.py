@@ -1287,41 +1287,19 @@ elif page == "📍 الأعمدة المتاحة":
                     CASE 
                         WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
                         ELSE '🟢 متاح'
-                    END as status,
-                    (
-                        SELECT MIN(p2.no)
-                        FROM "حجوزات1" h2
-                        JOIN "الفترة" p2 ON p2.namee = h2."فترة الحجز"
-                        WHERE CAST(h2."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-                        AND h2."العام" IN (%s, %s)
-                        AND h2."فترة الحجز" NOT IN ({placeholders})
-                    ) as "أول فترة حجز قادمة (رقم)",
-                    (
-                        SELECT MAX(p3.no)
-                        FROM "حجوزات1" h3
-                        JOIN "الفترة" p3 ON p3.namee = h3."فترة الحجز"
-                        WHERE CAST(h3."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-                        AND h3."العام" IN (%s, %s)
-                    ) as "آخر فترة حجز (رقم)",
-                    (
-                        SELECT STRING_AGG(DISTINCT h4."فترة الحجز", ', ')
-                        FROM "حجوزات1" h4
-                        WHERE CAST(h4."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-                        AND h4."العام" IN (%s, %s)
-                    ) as "جميع فترات الحجز"
+                    END as status
                 FROM "اعمدة انارة" a
                 LEFT JOIN "حجوزات1" h 
                     ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
                     AND h."فترة الحجز" IN ({placeholders})
-                    AND h."العام" IN (%s, %s)
+                    AND h."العام" = %s
                 WHERE a."عاملة" = 1
                 AND a."العدد" IS NOT NULL 
                 AND a."العدد" != 0
-                GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
                 
-                params = (current_year, next_year) + tuple(periods) + (current_year, next_year) + (current_year, next_year) + tuple(periods) + (current_year, next_year)
+                params = tuple(periods) + (current_year,)
                 
                 df = pd.read_sql_query(query, conn, params=params)
                 conn.close()
