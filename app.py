@@ -1274,91 +1274,90 @@ elif page == "📍 الأعمدة المتاحة":
         else:
             st.write(f"📅 المدة المطلوبة: **{start_period}** → **{end_period}**")
             
-def load_data(start_p, end_p, start_no, end_no):
-    conn = get_connection()
-    if conn is None:
-        return pd.DataFrame(), []
-    
-    cursor = conn.cursor()
-    
-    # جلب الفترات
-    cursor.execute("""
-        SELECT namee
-        FROM الفترة 
-        WHERE no BETWEEN %s AND %s
-        ORDER BY no
-    """, (start_no, end_no))
-    
-    periods = [row[0] for row in cursor.fetchall()]
-    
-    if not periods:
-        st.warning("⚠️ لا توجد فترات في النطاق المحدد")
-        conn.close()
-        return pd.DataFrame(), []
-    
-    placeholders = ','.join(['%s'] * len(periods))
-    current_year = '2026'
-    next_year = str(int(current_year) + 1)
-    
-    query = f"""
-    SELECT 
-        a."رقم اللوحة",
-        a."اسم العمود",
-        a."المحافظة",
-        a."الشبكة",
-        a."الحجم",
-        a."العدد",
-        a."توصيف العمود",
-        CASE 
-            WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
-            ELSE '🟢 متاح'
-        END as status,
-        (
-            SELECT MIN(p2.no)
-            FROM "حجوزات1" h2
-            JOIN "الفترة" p2 ON p2.namee = h2."فترة الحجز"
-            WHERE CAST(h2."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-            AND h2."العام" IN (%s, %s)
-            AND h2."فترة الحجز" NOT IN ({placeholders})
-        ) as "أول فترة حجز قادمة (رقم)",
-        (
-            SELECT MAX(p3.no)
-            FROM "حجوزات1" h3
-            JOIN "الفترة" p3 ON p3.namee = h3."فترة الحجز"
-            WHERE CAST(h3."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-            AND h3."العام" IN (%s, %s)
-        ) as "آخر فترة حجز (رقم)",
-        (
-            SELECT STRING_AGG(DISTINCT h4."فترة الحجز", ', ')
-            FROM "حجوزات1" h4
-            WHERE CAST(h4."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-            AND h4."العام" IN (%s, %s)
-        ) as "جميع فترات الحجز"
-    FROM "اعمدة انارة" a
-    LEFT JOIN "حجوزات1" h 
-        ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-        AND h."فترة الحجز" IN ({placeholders})
-        AND h."العام" IN (%s, %s)
-    WHERE a."عاملة" = 1
-    AND a."العدد" IS NOT NULL 
-    AND a."العدد" != 0
-    GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
-    ORDER BY a."المحافظة", a."رقم اللوحة"
-    """
-    
-    # ✅ ترتيب المعاملات حسب ظهورها في الاستعلام
-    params = (
-        current_year, next_year,           # أول فترة حجز قادمة (العام IN)
-        *periods,                          # NOT IN (الفترات)
-        current_year, next_year,           # آخر فترة حجز (العام IN)
-        current_year, next_year,           # جميع فترات الحجز (العام IN)
-        *periods,                          # LEFT JOIN (الفترات)
-        current_year, next_year            # LEFT JOIN (العام)
-    )
-    
-    df = pd.read_sql_query(query, conn, params=params)
-    conn.close()
-    return df, periods
+            @st.cache_data(ttl=300)
+            def load_data(start_no, end_no):
+                conn = get_connection()
+                if conn is None:
+                    return pd.DataFrame(), []
+                
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT namee
+                    FROM الفترة 
+                    WHERE no BETWEEN %s AND %s
+                    ORDER BY no
+                """, (start_no, end_no))
+                
+                periods = [row[0] for row in cursor.fetchall()]
+                
+                if not periods:
+                    st.warning("⚠️ لا توجد فترات في النطاق المحدد")
+                    conn.close()
+                    return pd.DataFrame(), []
+                
+                placeholders = ','.join(['%s'] * len(periods))
+                current_year = '2026'
+                next_year = str(int(current_year) + 1)
+                
+                query = f"""
+                SELECT 
+                    a."رقم اللوحة",
+                    a."اسم العمود",
+                    a."المحافظة",
+                    a."الشبكة",
+                    a."الحجم",
+                    a."العدد",
+                    a."توصيف العمود",
+                    CASE 
+                        WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                        ELSE '🟢 متاح'
+                    END as status,
+                    (
+                        SELECT MIN(p2.no)
+                        FROM "حجوزات1" h2
+                        JOIN "الفترة" p2 ON p2.namee = h2."فترة الحجز"
+                        WHERE CAST(h2."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                        AND h2."العام" IN (%s, %s)
+                        AND h2."فترة الحجز" NOT IN ({placeholders})
+                    ) as "أول فترة حجز قادمة (رقم)",
+                    (
+                        SELECT MAX(p3.no)
+                        FROM "حجوزات1" h3
+                        JOIN "الفترة" p3 ON p3.namee = h3."فترة الحجز"
+                        WHERE CAST(h3."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                        AND h3."العام" IN (%s, %s)
+                    ) as "آخر فترة حجز (رقم)",
+                    (
+                        SELECT STRING_AGG(DISTINCT h4."فترة الحجز", ', ')
+                        FROM "حجوزات1" h4
+                        WHERE CAST(h4."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                        AND h4."العام" IN (%s, %s)
+                    ) as "جميع فترات الحجز"
+                FROM "اعمدة انارة" a
+                LEFT JOIN "حجوزات1" h 
+                    ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                    AND h."فترة الحجز" IN ({placeholders})
+                    AND h."العام" IN (%s, %s)
+                WHERE a."عاملة" = 1
+                AND a."العدد" IS NOT NULL 
+                AND a."العدد" != 0
+                GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
+                ORDER BY a."المحافظة", a."رقم اللوحة"
+                """
+                
+                params = (
+                    current_year, next_year,
+                    *periods,
+                    current_year, next_year,
+                    current_year, next_year,
+                    *periods,
+                    current_year, next_year
+                )
+                
+                df = pd.read_sql_query(query, conn, params=params)
+                conn.close()
+                return df, periods
             
             df, periods = load_data(start_period, end_period, start_period_no, end_period_no)
             
