@@ -1177,7 +1177,7 @@ if page == "🏢 لوحات الشركات":
 # ============================================================
 
 # ============================================================
-# صفحة: الأعمدة المتاحة (نسخة مطابقة للمحلي)
+# صفحة: الأعمدة المتاحة 
 # ============================================================
 
 elif page == "📍 الأعمدة المتاحة":
@@ -1200,24 +1200,14 @@ elif page == "📍 الأعمدة المتاحة":
     if 'periods_report_ready' not in st.session_state:
         st.session_state.periods_report_ready = False
     
-    # اتجاه الصفحة من اليمين لليسار
+    # RTL
     st.markdown("""
     <style>
-        .stApp {
-            direction: rtl;
-        }
-        .stDataFrame {
-            direction: rtl;
-        }
-        .stTable {
-            direction: rtl;
-        }
-        div[data-testid="stHorizontalBlock"] {
-            direction: rtl;
-        }
-        div[data-testid="stVerticalBlock"] {
-            direction: rtl;
-        }
+        .stApp { direction: rtl; }
+        .stDataFrame { direction: rtl; }
+        .stTable { direction: rtl; }
+        div[data-testid="stHorizontalBlock"] { direction: rtl; }
+        div[data-testid="stVerticalBlock"] { direction: rtl; }
     </style>
     """, unsafe_allow_html=True)
     
@@ -1230,7 +1220,6 @@ elif page == "📍 الأعمدة المتاحة":
             cursor.execute("SELECT no, namee FROM الفترة ORDER BY no")
             all_periods = cursor.fetchall()
             conn.close()
-            
             period_options = [f"{row[0]} - {row[1]}" for row in all_periods]
             period_mapping = {f"{row[0]} - {row[1]}": row[1] for row in all_periods}
         else:
@@ -1243,22 +1232,11 @@ elif page == "📍 الأعمدة المتاحة":
         
         col1, col2 = st.columns(2)
         with col1:
-            start_period_display = st.selectbox(
-                "📅 فترة البداية:",
-                options=period_options,
-                index=0,
-                help="اختر فترة البداية"
-            )
+            start_period_display = st.selectbox("📅 فترة البداية:", options=period_options, index=0)
             start_period = period_mapping[start_period_display]
             start_period_no = int(start_period_display.split(' - ')[0])
-        
         with col2:
-            end_period_display = st.selectbox(
-                "📅 فترة النهاية:",
-                options=period_options,
-                index=len(period_options) - 1,
-                help="اختر فترة النهاية"
-            )
+            end_period_display = st.selectbox("📅 فترة النهاية:", options=period_options, index=len(period_options)-1)
             end_period = period_mapping[end_period_display]
             end_period_no = int(end_period_display.split(' - ')[0])
         
@@ -1270,64 +1248,82 @@ elif page == "📍 الأعمدة المتاحة":
         else:
             st.write(f"📅 المدة المطلوبة: **{start_period}** → **{end_period}**")
             
-@st.cache_data(ttl=300)
-def load_data(start_no, end_no):
-    conn = get_connection()
-    if conn is None:
-        return pd.DataFrame(), []
-    
-    cursor = conn.cursor()
-    
-    # جلب الفترات
-    cursor.execute("""
-        SELECT namee
-        FROM الفترة 
-        WHERE no BETWEEN %s AND %s
-        ORDER BY no
-    """, (start_no, end_no))
-    
-    periods = [row[0] for row in cursor.fetchall()]
-    
-    if not periods:
-        st.warning("⚠️ لا توجد فترات في النطاق المحدد")
-        conn.close()
-        return pd.DataFrame(), []
-    
-    placeholders = ','.join(['%s'] * len(periods))
-    current_year = '2026'
-    
-    # استعلام رئيسي واحد فقط
-    query = f"""
-    SELECT 
-        a."رقم اللوحة",
-        a."اسم العمود",
-        a."المحافظة",
-        a."الشبكة",
-        a."الحجم",
-        a."العدد",
-        a."توصيف العمود",
-        CASE 
-            WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
-            ELSE '🟢 متاح'
-        END as status
-    FROM "اعمدة انارة" a
-    LEFT JOIN "حجوزات1" h 
-        ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
-        AND h."فترة الحجز" IN ({placeholders})
-        AND h."العام" = %s
-    WHERE a."عاملة" = 1
-    AND a."العدد" IS NOT NULL 
-    AND a."العدد" != 0
-    GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
-    ORDER BY a."المحافظة", a."رقم اللوحة"
-    """
-    
-    # params بسيطة
-    params = tuple(periods) + (current_year,)
-    
-    df = pd.read_sql_query(query, conn, params=params)
-    conn.close()
-    return df, periods
+            # ===== جلب البيانات =====
+            @st.cache_data(ttl=300)
+            def load_data(start_no, end_no):
+                conn = get_connection()
+                if conn is None:
+                    return pd.DataFrame(), []
+                
+                cursor = conn.cursor()
+                
+                # جلب الفترات
+                cursor.execute("""
+                    SELECT namee FROM الفترة 
+                    WHERE no BETWEEN %s AND %s
+                    ORDER BY no
+                """, (start_no, end_no))
+                
+                periods = [row[0] for row in cursor.fetchall()]
+                
+                if not periods:
+                    conn.close()
+                    return pd.DataFrame(), []
+                
+                placeholders = ','.join(['%s'] * len(periods))
+                current_year = '2026'
+                next_year = '2027'
+                
+                query = f"""
+                SELECT 
+                    a."رقم اللوحة",
+                    a."اسم العمود",
+                    a."المحافظة",
+                    a."الشبكة",
+                    a."الحجم",
+                    a."العدد",
+                    a."توصيف العمود",
+                    CASE 
+                        WHEN h."رقم اللوحة" IS NOT NULL THEN '🔴 محجوز'
+                        ELSE '🟢 متاح'
+                    END as status,
+                    (
+                        SELECT MIN(p2.no)
+                        FROM "حجوزات1" h2
+                        JOIN "الفترة" p2 ON p2.namee = h2."فترة الحجز"
+                        WHERE CAST(h2."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                        AND h2."العام" IN (%s, %s)
+                        AND h2."فترة الحجز" NOT IN ({placeholders})
+                    ) as "أول فترة حجز قادمة (رقم)",
+                    (
+                        SELECT MAX(p3.no)
+                        FROM "حجوزات1" h3
+                        JOIN "الفترة" p3 ON p3.namee = h3."فترة الحجز"
+                        WHERE CAST(h3."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                        AND h3."العام" IN (%s, %s)
+                    ) as "آخر فترة حجز (رقم)",
+                    (
+                        SELECT STRING_AGG(DISTINCT h4."فترة الحجز", ', ')
+                        FROM "حجوزات1" h4
+                        WHERE CAST(h4."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                        AND h4."العام" IN (%s, %s)
+                    ) as "جميع فترات الحجز"
+                FROM "اعمدة انارة" a
+                LEFT JOIN "حجوزات1" h 
+                    ON CAST(h."رقم اللوحة" AS TEXT) = CAST(a."رقم اللوحة" AS TEXT)
+                    AND h."فترة الحجز" IN ({placeholders})
+                    AND h."العام" IN (%s, %s)
+                WHERE a."عاملة" = 1
+                AND a."العدد" IS NOT NULL AND a."العدد" != 0
+                GROUP BY a."رقم اللوحة", a."اسم العمود", a."المحافظة", a."الشبكة", a."الحجم", a."العدد", a."توصيف العمود"
+                ORDER BY a."المحافظة", a."رقم اللوحة"
+                """
+                
+                params = (current_year, next_year) + tuple(periods) + (current_year, next_year) + (current_year, next_year) + tuple(periods) + (current_year, next_year)
+                
+                df = pd.read_sql_query(query, conn, params=params)
+                conn.close()
+                return df, periods
             
             df, periods = load_data(start_period_no, end_period_no)
             
@@ -1336,11 +1332,9 @@ def load_data(start_no, end_no):
             st.session_state.start_period = start_period
             st.session_state.end_period = end_period
     
-    # استخدام البيانات من session_state
+    # ===== عرض البيانات =====
     df = st.session_state.df
     periods = st.session_state.periods
-    start_period = st.session_state.start_period
-    end_period = st.session_state.end_period
     
     if not df.empty:
         def period_no_to_name(no):
@@ -1354,192 +1348,68 @@ def load_data(start_no, end_no):
                 pass
             return None
         
-        with st.expander("📋 الفترات المشمولة في البحث", expanded=False):
+        with st.expander("📋 الفترات المشمولة", expanded=False):
             st.write(f"عدد الفترات: {len(periods)}")
             cols = st.columns(4)
-            for i, period in enumerate(periods):
-                cols[i % 4].write(f"• {period}")
+            for i, p in enumerate(periods):
+                cols[i % 4].write(f"• {p}")
         
         st.divider()
         
-        available_sites = len(df[df['status'] == '🟢 متاح'])
-        available_boards = df[df['status'] == '🟢 متاح']['العدد'].sum()
-        booked_sites = len(df[df['status'] == '🔴 محجوز'])
-        booked_boards = df[df['status'] == '🔴 محجوز']['العدد'].sum()
-        total_sites = len(df)
-        total_boards = df['العدد'].sum()
-        
-        st.subheader("📊 إحصائيات الفترة المطلوبة")
+        # إحصائيات
+        av_sites = len(df[df['status'] == '🟢 متاح'])
+        av_boards = df[df['status'] == '🟢 متاح']['العدد'].sum()
+        bk_sites = len(df[df['status'] == '🔴 محجوز'])
+        bk_boards = df[df['status'] == '🔴 محجوز']['العدد'].sum()
         
         col1, col2, col3 = st.columns(3)
         with col1:
             st.markdown("#### 🟢 متاح")
-            st.markdown(f"📍 **المواقع:** {available_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(available_boards):,}")
+            st.markdown(f"📍 **المواقع:** {av_sites}")
+            st.markdown(f"📌 **اللوحات:** {int(av_boards):,}")
         with col2:
             st.markdown("#### 🔴 محجوز")
-            st.markdown(f"📍 **المواقع:** {booked_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(booked_boards):,}")
+            st.markdown(f"📍 **المواقع:** {bk_sites}")
+            st.markdown(f"📌 **اللوحات:** {int(bk_boards):,}")
         with col3:
             st.markdown("#### 📊 الإجمالي")
-            st.markdown(f"📍 **المواقع:** {total_sites}")
-            st.markdown(f"📌 **اللوحات:** {int(total_boards):,}")
+            st.markdown(f"📍 **المواقع:** {len(df)}")
+            st.markdown(f"📌 **اللوحات:** {int(df['العدد'].sum()):,}")
         
         st.divider()
         
+        # عرض حسب المحافظة
         for city in df['المحافظة'].unique():
             city_data = df[df['المحافظة'] == city]
-            city_available_sites = len(city_data[city_data['status'] == '🟢 متاح'])
-            city_available_boards = city_data[city_data['status'] == '🟢 متاح']['العدد'].sum()
-            city_total_boards = city_data['العدد'].sum()
+            city_av_sites = len(city_data[city_data['status'] == '🟢 متاح'])
+            city_av_boards = city_data[city_data['status'] == '🟢 متاح']['العدد'].sum()
             
-            with st.expander(
-                f"🏙️ {city} - 🟢 {city_available_sites} موقع ({int(city_available_boards)} لوحة) / 📊 {len(city_data)} موقع ({int(city_total_boards)} لوحة)",
-                expanded=False
-            ):
+            with st.expander(f"🏙️ {city} - 🟢 {city_av_sites} موقع ({int(city_av_boards)} لوحة)", expanded=False):
                 display_df = city_data.copy()
                 display_df['أول فترة حجز قادمة'] = display_df['أول فترة حجز قادمة (رقم)'].apply(period_no_to_name)
                 display_df['آخر فترة حجز'] = display_df['آخر فترة حجز (رقم)'].apply(period_no_to_name)
-                
-                st.dataframe(
-                    display_df[[
-                        'رقم اللوحة', 'اسم العمود', 'توصيف العمود',
-                        'الشبكة', 'الحجم', 'العدد', 'status',
-                        'أول فترة حجز قادمة', 'آخر فترة حجز', 'جميع فترات الحجز'
-                    ]],
-                    use_container_width=True,
-                    height=300
-                )
+                st.dataframe(display_df[[
+                    'رقم اللوحة', 'اسم العمود', 'توصيف العمود',
+                    'الشبكة', 'الحجم', 'العدد', 'status',
+                    'أول فترة حجز قادمة', 'آخر فترة حجز', 'جميع فترات الحجز'
+                ]], use_container_width=True, height=300)
         
-        # ============================================================
-        # تصدير Excel
-        # ============================================================
+        # ===== تصدير =====
         import io
         from datetime import datetime
         
-        output1 = io.BytesIO()
-        with pd.ExcelWriter(output1, engine='openpyxl') as writer:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             export_df = df.copy()
             export_df['أول فترة حجز قادمة'] = export_df['أول فترة حجز قادمة (رقم)'].apply(period_no_to_name)
             export_df['آخر فترة حجز'] = export_df['آخر فترة حجز (رقم)'].apply(period_no_to_name)
-            
-            columns_to_export = [
-                'رقم اللوحة', 'اسم العمود', 'توصيف العمود',
-                'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status',
-                'أول فترة حجز قادمة', 'آخر فترة حجز', 'جميع فترات الحجز'
-            ]
-            export_df[columns_to_export].to_excel(writer, sheet_name='الأعمدة المتاحة', index=False)
-            periods_df = pd.DataFrame({'الفترات المشمولة': periods})
-            periods_df.to_excel(writer, sheet_name='الفترات المشمولة', index=False)
+            export_df[['رقم اللوحة', 'اسم العمود', 'توصيف العمود', 'المحافظة', 'الشبكة', 'الحجم', 'العدد', 'status', 'أول فترة حجز قادمة', 'آخر فترة حجز', 'جميع فترات الحجز']].to_excel(writer, sheet_name='الأعمدة المتاحة', index=False)
+            pd.DataFrame({'الفترات المشمولة': periods}).to_excel(writer, sheet_name='الفترات المشمولة', index=False)
         
-        output1.seek(0)
-        
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            st.download_button(
-                "📥 تحميل تقرير الحالة (Excel)",
-                output1,
-                f"available_boards_{start_period.replace(' ', '_')}_{end_period.replace(' ', '_')}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
-        with col_btn2:
-            if st.button("📥 تحميل تقرير الفترات (Excel)", use_container_width=True, key="btn_periods_report"):
-                st.session_state.export_periods_trigger = True
-                st.rerun()
-        
-        if st.session_state.export_periods_trigger:
-            with st.spinner("جاري إنشاء تقرير الفترات..."):
-                try:
-                    periods_list = periods
-                    base_cols = ['رقم اللوحة', 'اسم العمود', 'الحجم', 'الشبكة', 'العدد', 'المحافظة', 'توصيف العمود']
-                    
-                    boards_df = df[base_cols].copy()
-                    boards_df['اسم العمود'] = boards_df['اسم العمود'].fillna('').astype(str)
-                    boards_df['الحجم'] = boards_df['الحجم'].fillna('').astype(str)
-                    boards_df = boards_df[~((boards_df['اسم العمود'] == '') & (boards_df['الحجم'] == ''))].copy()
-                    
-                    if boards_df.empty:
-                        st.warning("⚠️ لا توجد لوحات مكتملة البيانات للتصدير")
-                        st.session_state.export_periods_trigger = False
-                    else:
-                        boards_df['رقم اللوحة'] = boards_df['رقم اللوحة'].astype(str)
-                        
-                        conn = get_connection()
-                        placeholders = ','.join(['%s'] * len(periods_list))
-                        query = f"""
-                            SELECT 
-                                CAST("رقم اللوحة" AS TEXT) as "رقم اللوحة",
-                                "فترة الحجز",
-                                "اسم الزبون"
-                            FROM "حجوزات1"
-                            WHERE "العام" = '2026'
-                            AND "فترة الحجز" IN ({placeholders})
-                        """
-                        bookings_df = pd.read_sql_query(query, conn, params=tuple(periods_list))
-                        conn.close()
-                        
-                        pivot_df = bookings_df.pivot_table(
-                            index='رقم اللوحة',
-                            columns='فترة الحجز',
-                            values='اسم الزبون',
-                            aggfunc='first'
-                        ).reset_index()
-                        pivot_df['رقم اللوحة'] = pivot_df['رقم اللوحة'].astype(str)
-                        
-                        result_df = boards_df.merge(pivot_df, on='رقم اللوحة', how='left')
-                        
-                        fixed_columns = base_cols
-                        for period in periods_list:
-                            if period not in result_df.columns:
-                                result_df[period] = None
-                        
-                        final_columns = fixed_columns + periods_list
-                        result_df = result_df[final_columns]
-                        result_df = result_df.where(pd.notna(result_df), None)
-                        
-                        period_cols = [col for col in periods_list if col in result_df.columns]
-                        result_df['عدد الفترات المحجوزة'] = result_df[period_cols].notna().sum(axis=1)
-                        
-                        output2 = io.BytesIO()
-                        with pd.ExcelWriter(output2, engine='openpyxl') as writer:
-                            result_df.to_excel(writer, sheet_name='تقرير الفترات', index=False)
-                            
-                            info_df = pd.DataFrame({
-                                'المعلومات': ['تاريخ التقرير', 'عدد اللوحات', 'عدد الفترات', 'العام', 'الفترة المحددة'],
-                                'القيمة': [
-                                    datetime.now().strftime('%Y-%m-%d %H:%M'),
-                                    len(result_df),
-                                    len(periods_list),
-                                    '2026',
-                                    f"{start_period} → {end_period}"
-                                ]
-                            })
-                            info_df.to_excel(writer, sheet_name='معلومات', index=False)
-                        
-                        output2.seek(0)
-                        st.session_state.periods_report_output = output2
-                        st.session_state.periods_report_ready = True
-                        st.session_state.export_periods_trigger = False
-                    
-                except Exception as e:
-                    st.error(f"❌ خطأ في إنشاء التقرير: {e}")
-                    st.session_state.export_periods_trigger = False
-            
-            if st.session_state.periods_report_ready and st.session_state.periods_report_output is not None:
-                st.download_button(
-                    "📥 تحميل تقرير الفترات",
-                    st.session_state.periods_report_output,
-                    f"تقرير_الفترات_{start_period.replace(' ', '_')}_{end_period.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="download_periods_report"
-                )
-                st.session_state.periods_report_ready = False
-                st.session_state.periods_report_output = None
+        output.seek(0)
+        st.download_button("📥 تحميل التقرير (Excel)", output, f"available_boards_{start_period}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     else:
-        st.info("📋 قم بالبحث أولاً لعرض البيانات")
+        st.info("📋 قم بالبحث أولاً")
 # ============================================================
 # صفحة: لوحة التحكم البصرية للفترات
 # ============================================================
