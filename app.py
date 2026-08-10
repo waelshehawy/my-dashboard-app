@@ -1274,6 +1274,7 @@ elif page == "📍 الأعمدة المتاحة":
         else:
             st.write(f"📅 المدة المطلوبة: **{start_period}** → **{end_period}**")
             
+            @st.cache_data(ttl=300)
             def load_data(start_p, end_p, start_no, end_no):
                 conn = get_connection()
                 if conn is None:
@@ -1345,14 +1346,14 @@ elif page == "📍 الأعمدة المتاحة":
                 ORDER BY a."المحافظة", a."رقم اللوحة"
                 """
                 
-                params = [current_year, next_year]
-                params.extend(periods)
-                params.extend([current_year, next_year])
-                params.extend([current_year, next_year])
-                params.extend(periods)
-                params.extend([current_year, next_year])
+                params = (current_year, next_year)
+                params = params + tuple(periods)
+                params = params + (current_year, next_year)
+                params = params + (current_year, next_year)
+                params = params + tuple(periods)
+                params = params + (current_year, next_year)
                 
-                df = pd.read_sql_query(query, conn, params=tuple(params))
+                df = pd.read_sql_query(query, conn, params=params)
                 conn.close()
                 return df, periods
             
